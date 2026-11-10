@@ -1,0 +1,23 @@
+appId: local.geophotos
+productName: GeoPhotos
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+# Config defaults, schemas and locales stay outside asar:
+# the user config references its schema by a plain file path (make-project.md, п. 3).
+extraResources:
+  - from: config
+    to: config
+    filter: ['**/*.json']
+  - from: schemas
+    to: schemas
+    filter: ['**/*.json']
+  - from: locales
+    to: locales
+    filter: ['**/*.json']
+win:
+  target:
+    - dir
