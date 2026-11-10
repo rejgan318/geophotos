@@ -1,5 +1,6 @@
 {
   "name": "geophotos",
+  "productName": "GeoPhotos",
   "version": "0.1.0",
   "private": true,
   "description": "Manual geotagging of photos on a map",
@@ -13,12 +14,23 @@
     "test:integration": "vitest run --project integration --passWithNoTests"
   },
   "devDependencies": {
+    "@types/leaflet": "1.9.22",
+    "@types/leaflet.markercluster": "1.5.6",
     "@types/node": "24.19.2",
     "electron": "45.2.3",
     "electron-builder": "26.18.0",
     "electron-vite": "6.0.0",
+    "leaflet": "1.9.4",
+    "leaflet.markercluster": "1.5.3",
     "typescript": "7.0.2",
     "vite": "8.3.7",
     "vitest": "5.1.0"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "electron-log": "5.4.4",
+    "heic-decode": "2.1.0",
+    "jsonc-parser": "3.3.1",
+    "sharp": "0.35.5"
   }
 }

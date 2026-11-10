@@ -6,6 +6,10 @@ directories:
 files:
   - out/**/*
   - package.json
+# sharp is a native module: its binaries must be outside asar.
+asarUnpack:
+  - '**/node_modules/sharp/**'
+  - '**/node_modules/@img/**'
 # Config defaults, schemas and locales stay outside asar:
 # the user config references its schema by a plain file path (make-project.md, п. 3).
 extraResources:

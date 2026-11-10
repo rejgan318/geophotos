@@ -1,13 +1,187 @@
+:root {
+  --strip-height: 148px;
+  --thumb-size: 120px;
+  --status-height: 24px;
+  --bg: #2b2b2b;
+  --bg-thumb: #3a3a3a;
+  --fg: #ddd;
+  --fg-dim: #999;
+  --selected: #fff;
+  --error: #e05050;
+}
+
 html,
 body {
   margin: 0;
   height: 100%;
-  font-family: 'Segoe UI', sans-serif;
+  overflow: hidden;
+  font: 12px 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--fg);
 }
 
-#app {
-  height: 100%;
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+#map {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Thumbnail strip */
+#strip {
+  height: var(--strip-height);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  outline: none;
+  border-top: 1px solid #111;
+}
+
+#strip::-webkit-scrollbar {
+  height: 10px;
+}
+
+#strip::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+#strip::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 5px;
+}
+
+#strip::-webkit-scrollbar-thumb:hover {
+  background: #777;
+}
+
+.thumb {
+  position: relative;
+  flex: none;
+  width: var(--thumb-size);
+  height: var(--thumb-size);
+  background: var(--bg-thumb);
+  border: 2px solid transparent;
+  border-radius: 3px;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: default;
+  user-select: none;
+}
+
+.thumb:hover {
+  border-color: #666;
+}
+
+.thumb.selected {
+  border-color: var(--selected);
+}
+
+.thumb img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.thumb .badge-coords {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thumb .badge-coords svg {
+  width: 12px;
+  height: 12px;
+  fill: var(--marker-color);
+}
+
+.thumb.selected .badge-coords svg {
+  fill: var(--marker-selected);
+}
+
+.thumb .placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  color: var(--fg-dim);
+  text-align: center;
+  word-break: break-all;
+  overflow: hidden;
+}
+
+.thumb .placeholder svg {
+  width: 36px;
+  height: 36px;
+}
+
+.thumb.has-error .placeholder svg {
+  color: var(--error);
+}
+
+/* Status bar */
+#status {
+  height: var(--status-height);
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 8px;
+  background: #1e1e1e;
+  color: var(--fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+#status-photo {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Photo markers and groups on the map (tz.md, п. 4.8.1); colors come from the settings. */
+.photo-pin {
+  background: none;
+  border: none;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.7));
+}
+
+.photo-cluster {
+  background: none;
+  border: none;
+}
+
+.photo-cluster div {
+  position: relative;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: var(--marker-color);
+  color: #fff;
+  font: bold 14px 'Segoe UI', sans-serif;
+  text-align: center;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+.photo-cluster.selected div {
+  background: var(--marker-selected);
 }

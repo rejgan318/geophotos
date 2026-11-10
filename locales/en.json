@@ -1,0 +1,43 @@
+{
+  "menu.file": "&File",
+  "menu.openPhoto": "&Open Photo…",
+  "menu.openRecent": "Open &Recent",
+  "menu.clearRecent": "Clear Recent",
+  "menu.noRecent": "(empty)",
+  "menu.openSettings": "Open &Settings File",
+  "menu.exit": "E&xit",
+  "menu.view": "&View",
+  "menu.reload": "Reload",
+  "menu.devTools": "Developer Tools",
+
+  "dialog.openPhoto": "Open Photo — its whole folder will be shown",
+  "dialog.photos": "Photos",
+  "dialog.allFiles": "All files",
+  "dialog.ok": "OK",
+
+  "error.exiftool.title": "exiftool not found",
+  "error.exiftool.message": "exiftool not found: {path}",
+  "error.exiftool.detail": "Install exiftool or set the path to exiftool.exe in the settings (field \"exiftoolPath\"):\n{settings}\n\nThe program will now exit.",
+  "error.defaults.title": "Broken default settings",
+  "error.defaults.message": "The default settings of the program are broken. Reinstall the program.",
+  "error.userSettings.title": "Settings error",
+  "error.userSettings.message": "The settings file has errors, default settings are used instead.",
+  "error.locale": "Language file \"{language}\" not found, English is used.",
+  "error.folder.title": "Cannot open folder",
+  "error.folder.message": "Cannot open folder {folder}",
+  "error.folderMissing": "Folder or file not found:\n{folder}\n\nIt is removed from the recent folders.",
+  "error.read.title": "Some files could not be read",
+  "error.read.message": "{count} of {total} files could not be read. They are shown with a placeholder.",
+  "error.tileSources": "Map sources without \"url\" are skipped: {keys}",
+
+  "status.noFolder": "No folder open — File → Open Photo…, or drop a folder or photo here",
+  "status.loading": "Loading {folder}…",
+  "status.noSelection": "No photo selected",
+  "status.counts": "Total: {total} · With coordinates: {withCoords} · Modified: {modified}",
+
+  "photo.noDate": "no date",
+  "photo.fileDate": "{date} (file date)",
+  "photo.noCoords": "no coordinates",
+  "photo.hasCoords": "Has coordinates",
+  "photo.readError": "Read error: {error}"
+}

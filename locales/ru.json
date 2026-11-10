@@ -1,0 +1,43 @@
+{
+  "menu.file": "&Файл",
+  "menu.openPhoto": "&Открыть фото…",
+  "menu.openRecent": "&Последние папки",
+  "menu.clearRecent": "Очистить список",
+  "menu.noRecent": "(пусто)",
+  "menu.openSettings": "Открыть файл &настроек",
+  "menu.exit": "В&ыход",
+  "menu.view": "&Вид",
+  "menu.reload": "Перезагрузить",
+  "menu.devTools": "Инструменты разработчика",
+
+  "dialog.openPhoto": "Открыть фото — будет показана вся его папка",
+  "dialog.photos": "Фото",
+  "dialog.allFiles": "Все файлы",
+  "dialog.ok": "OK",
+
+  "error.exiftool.title": "exiftool не найден",
+  "error.exiftool.message": "exiftool не найден: {path}",
+  "error.exiftool.detail": "Установите exiftool или укажите путь к exiftool.exe в настройках (поле \"exiftoolPath\"):\n{settings}\n\nПрограмма будет закрыта.",
+  "error.defaults.title": "Повреждены настройки по умолчанию",
+  "error.defaults.message": "Настройки программы по умолчанию повреждены. Переустановите программу.",
+  "error.userSettings.title": "Ошибка в настройках",
+  "error.userSettings.message": "В файле настроек есть ошибки, вместо него используются настройки по умолчанию.",
+  "error.locale": "Файл языка «{language}» не найден, используется английский.",
+  "error.folder.title": "Не удалось открыть папку",
+  "error.folder.message": "Не удалось открыть папку {folder}",
+  "error.folderMissing": "Папка или файл не найдены:\n{folder}\n\nПапка убрана из списка последних.",
+  "error.read.title": "Не все файлы удалось прочитать",
+  "error.read.message": "Не удалось прочитать {count} из {total} файлов. Они показаны заглушкой.",
+  "error.tileSources": "Источники карты без \"url\" пропущены: {keys}",
+
+  "status.noFolder": "Папка не открыта — Файл → Открыть фото… или перетащите сюда папку или фото",
+  "status.loading": "Загрузка {folder}…",
+  "status.noSelection": "Фото не выбрано",
+  "status.counts": "Всего: {total} · С координатами: {withCoords} · Изменено: {modified}",
+
+  "photo.noDate": "нет даты",
+  "photo.fileDate": "{date} (дата файла)",
+  "photo.noCoords": "нет координат",
+  "photo.hasCoords": "Есть координаты",
+  "photo.readError": "Ошибка чтения: {error}"
+}

@@ -1,0 +1,42 @@
+{
+  // Default settings. Do not edit: change the user file instead
+  // (File → Open Settings File). Field descriptions are in the schema.
+  "$schema": "../schemas/settings.schema.json",
+  "language": "en",
+  "exiftoolPath": "exiftool",
+  "map": {
+    "initialView": { "lat": 49.8419, "lon": 24.0315, "zoom": 5 },
+    "defaultSource": "osm",
+    "markers": { "color": "#00E676", "selectedColor": "#FF1744", "size": 40 },
+    "tileSources": {
+      "osm": {
+        "name": "OpenStreetMap",
+        "url": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+        "maxZoom": 19
+      },
+      "esri": {
+        "name": "Esri Satellite",
+        "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        "attribution": "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+        "maxZoom": 19
+      },
+      "google": {
+        // Direct tile access; Google may close it at any time (tz.md, п. 5.1).
+        "name": "Google Satellite",
+        "url": "https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+        "subdomains": "0123",
+        "attribution": "Imagery &copy; Google",
+        "maxZoom": 20
+      }
+    }
+  },
+  "log": {
+    "level": "info",
+    "maxSizeKb": 1024,
+    "maxFiles": 5
+  },
+  "search": {
+    "url": "https://nominatim.openstreetmap.org"
+  }
+}
