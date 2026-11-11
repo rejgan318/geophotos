@@ -68,7 +68,10 @@ export interface UiState {
   view: ViewMode
 }
 
-export type WindowCommand = { type: 'toggleView' } | { type: 'setFilter'; filter: StripFilter }
+export type WindowCommand =
+  | { type: 'toggleView' }
+  | { type: 'setFilter'; filter: StripFilter }
+  | { type: 'toggleHelp' }
 
 /** Saving (tz.md, п. 6.8): n of N while it goes, then the result. */
 export type SaveState =

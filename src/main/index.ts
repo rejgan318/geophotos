@@ -62,6 +62,8 @@ let t: Translate
 let exiftool: ExifTool
 let thumbnails: ThumbnailService
 let placeSearch: PlaceSearch
+/** Version reported by exiftool at start (Help → About). */
+let exiftoolVer = ''
 let win: BrowserWindow | null = null
 let current: OpenFolder | null = null
 let generation = 0
@@ -127,6 +129,7 @@ async function startup(): Promise<boolean> {
 
   try {
     const version = await exiftoolVersion(settings.exiftoolPath)
+    exiftoolVer = version
     log.info(`exiftool ${version}: ${settings.exiftoolPath}`)
   } catch (e) {
     log.error(`exiftool not found (${settings.exiftoolPath}): ${String(e)}`)
@@ -317,7 +320,10 @@ function updateMenu(recent: string[]): void {
         openSettings: () => void openSettingsFile(),
         exit: () => app.quit(),
         toggleView: () => win?.webContents.send(IPC.command, { type: 'toggleView' }),
-        setFilter: (filter: StripFilter) => win?.webContents.send(IPC.command, { type: 'setFilter', filter })
+        setFilter: (filter: StripFilter) => win?.webContents.send(IPC.command, { type: 'setFilter', filter }),
+        shortcuts: () => win?.webContents.send(IPC.command, { type: 'toggleHelp' }),
+        openLogFolder: () => void openLogFolder(),
+        about: () => void showAbout()
       },
       recent,
       dev
@@ -467,6 +473,36 @@ function setCoords(req: unknown): void {
       changed.map((p) => p.name).join(', ')
   )
   applyPhotos(changed)
+}
+
+/** Help → Open Log Folder: the log has old and new coordinates of every write (tz.md, п. 6.9). */
+async function openLogFolder(): Promise<void> {
+  const err = await shell.openPath(paths.logs)
+  if (err) {
+    log.error(`Cannot open log folder ${paths.logs}: ${err}`)
+    if (win) void dialog.showMessageBox(win, { type: 'error', message: err, buttons: [t('dialog.ok')] })
+  }
+}
+
+/** Help → About: versions and where the settings and the log are. */
+async function showAbout(): Promise<void> {
+  if (!win) return
+  await dialog.showMessageBox(win, {
+    type: 'info',
+    title: t('about.title'),
+    message: `GeoPhotos ${app.getVersion()}`,
+    detail: [
+      t('about.description'),
+      '',
+      t('about.exiftool', { version: exiftoolVer, path: settings.exiftoolPath }),
+      t('about.settings', { path: paths.user }),
+      t('about.logs', { path: paths.logs }),
+      '',
+      `Electron ${process.versions.electron} · Node.js ${process.versions.node}`
+    ].join('\n'),
+    buttons: [t('dialog.ok')],
+    noLink: true
+  })
 }
 
 async function openSettingsFile(): Promise<void> {

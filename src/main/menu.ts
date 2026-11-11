@@ -12,6 +12,9 @@ export interface MenuHandlers {
   exit(): void
   toggleView(): void
   setFilter(filter: StripFilter): void
+  shortcuts(): void
+  openLogFolder(): void
+  about(): void
 }
 
 /** Ids of menu items that are enabled and disabled while the program runs. */
@@ -81,6 +84,15 @@ export function buildMenu(t: Translate, h: MenuHandlers, recent: string[], dev: 
       filterItem('coords', 'menu.filterCoords'),
       filterItem('modified', 'menu.filterModified'),
       ...devItems
+    ]
+  })
+  template.push({
+    label: t('menu.help'),
+    submenu: [
+      { label: t('menu.shortcuts'), accelerator: 'F1', click: h.shortcuts },
+      { label: t('menu.openLogs'), click: h.openLogFolder },
+      { type: 'separator' },
+      { label: t('menu.about'), click: h.about }
     ]
   })
   return Menu.buildFromTemplate(template)

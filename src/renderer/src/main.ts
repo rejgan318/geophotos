@@ -6,6 +6,7 @@ import type { FolderData, LatLon } from '@shared/photo'
 import { photoCoords, photoDate } from './describe'
 import { MapView } from './map'
 import { PhotoView } from './viewer'
+import { HelpView } from './help'
 import { effectiveFilter, matchesFilter, toggleFilter, visibleIds, type StripFilter } from './filter'
 import { PENCIL_SVG, PHOTO_SVG, PIN_SVG } from './icons'
 import { isNavKey, navigateShown } from './navigation'
@@ -198,6 +199,7 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   })
   addSearchBox(map, t)
   const viewer = new PhotoView(byId('viewer'), t)
+  const help = new HelpView(t)
   new ResizeObserver(() => map.invalidateSize()).observe(byId('map'))
 
   // Keys that work wherever the focus is, except text fields (tz.md, пп. 4.4, 4.4.1):
@@ -206,6 +208,15 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   window.addEventListener(
     'keydown',
     (e) => {
+      // Help is on top: Esc closes it, other keys do nothing behind it.
+      if (help.visible) {
+        if (e.key === 'Escape') help.hide()
+        if (e.key !== 'F1') {
+          e.preventDefault()
+          e.stopPropagation()
+        }
+        return
+      }
       if (isTextInput(e.target)) return
       // Space switches map / photo; it must not press a focused button.
       if (e.key === ' ' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
@@ -248,6 +259,8 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
       if (folder) toggleView()
     } else if (cmd.type === 'setFilter') {
       setFilter(cmd.filter)
+    } else if (cmd.type === 'toggleHelp') {
+      help.toggle()
     }
   })
 

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { makeTranslate } from '@shared/i18n'
 import { mapSources, mergeSettings, type Settings } from '@shared/settings'
 import { ensureUserSettingsFile, loadSettings } from '../../src/main/settings'
+import { helpTextKeys } from '../../src/renderer/src/help-content'
 
 const root = resolve(import.meta.dirname, '../..')
 const defaultsPath = join(root, 'config', 'settings.json')
@@ -138,6 +139,13 @@ describe('localization (tz.md, п. 2.3)', () => {
       const errors: ParseError[] = []
       parse(readFileSync(join(dir, f), 'utf8'), errors)
       expect(errors, f).toEqual([])
+    }
+  })
+
+  it('every text of Help → Keyboard Shortcuts is in every language', () => {
+    for (const f of files) {
+      const strings = parse(readFileSync(join(dir, f), 'utf8')) as Record<string, string>
+      for (const key of helpTextKeys()) expect(strings[key], `${f}: ${key}`).toBeTruthy()
     }
   })
 
