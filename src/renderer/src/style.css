@@ -565,6 +565,93 @@ body {
   background: var(--marker-selected);
 }
 
+/* Thumbnails on the map (tz.md, п. 4.8.3): the icon has no size, the picture stands above the
+   point with the tip of its tail on it. --thumb-size comes from the settings. */
+.photo-thumb {
+  background: none;
+  border: none;
+}
+
+.photo-thumb .pt {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
+  cursor: pointer;
+}
+
+.photo-thumb .pt-frame {
+  border: 2px solid #fff;
+  border-radius: 2px;
+  background: var(--bg-thumb);
+  line-height: 0;
+}
+
+/* Leaflet lifts max sizes of images in the marker pane with !important: set them back. */
+.leaflet-container .leaflet-marker-pane .photo-thumb .pt-frame img {
+  display: block;
+  max-width: var(--thumb-size) !important;
+  max-height: var(--thumb-size) !important;
+  user-select: none;
+}
+
+.photo-thumb .pt-placeholder {
+  width: var(--thumb-size);
+  height: calc(var(--thumb-size) * 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-dim);
+}
+
+.photo-thumb .pt-placeholder svg {
+  width: 45%;
+  height: 45%;
+}
+
+.photo-thumb .pt-tail {
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 7px solid #fff;
+}
+
+/* Selected photos and groups with them: the frame in the color of the selected marker. */
+.photo-thumb.selected .pt-frame {
+  border-color: var(--marker-selected);
+}
+
+.photo-thumb.selected .pt-tail {
+  border-top-color: var(--marker-selected);
+}
+
+/* A group: the count in the corner, like the round groups of markers. */
+.photo-thumb .pt-count {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 11px;
+  border: 2px solid #fff;
+  background: var(--marker-color);
+  color: #fff;
+  font: bold 12px/18px 'Segoe UI', sans-serif;
+  text-align: center;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+}
+
+.photo-thumb.selected .pt-count {
+  background: var(--marker-selected);
+}
+
 /* Windows over the program: Help → Keyboard Shortcuts (F1) and Help → About. */
 .overlay {
   position: fixed;

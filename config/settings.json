@@ -9,6 +9,7 @@
     "defaultSource": "osm",
     "markers": { "color": "#00E676", "selectedColor": "#FF1744", "size": 40 },
     "hoverThumbSize": 80,
+    "thumbnails": { "size": 64 },
     "tileSources": {
       "osm": {
         "name": "OpenStreetMap",

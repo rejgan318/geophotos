@@ -2,7 +2,7 @@ import './style.css'
 import { clipboardText, parseCoords } from '@shared/coords-parse'
 import { photoCounts, photosAt } from '@shared/edits'
 import { makeTranslate } from '@shared/i18n'
-import type { ViewMode } from '@shared/ipc'
+import type { MapMode, ViewMode } from '@shared/ipc'
 import type { FolderData, LatLon } from '@shared/photo'
 import { photoCoords, photoDate } from './describe'
 import { MapView } from './map'
@@ -55,6 +55,8 @@ async function start(): Promise<void> {
   let order: number[] = []
   /** Map or photo in the main area (Space, View menu). */
   let view: ViewMode = 'map'
+  /** Markers or thumbnails on the map (T, View menu; tz.md, п. 4.8.3). */
+  let mapMode: MapMode = 'pins'
 
   const showStatus = (): void => {
     const p = sel.current === null ? undefined : folder?.photos[sel.current]
@@ -179,7 +181,7 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
 
   /** Main keeps the selection (Save Selected, last session) and the View menu state. */
   const reportState = (): void => {
-    window.geophotos.reportState({ ids: [...sel.ids], current: sel.current, filter, view })
+    window.geophotos.reportState({ ids: [...sel.ids], current: sel.current, filter, view, mapMode })
   }
 
   const showPhoto = (): void => {
@@ -192,6 +194,13 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     if (sel.current === null || !folder?.photos[sel.current]?.coords) return
     if (view === 'photo') toggleView()
     map.showOnMap(sel.current)
+  }
+
+  /** T and View menu: markers or thumbnails on the map. */
+  const toggleThumbnails = (): void => {
+    mapMode = mapMode === 'pins' ? 'thumbs' : 'pins'
+    map.setThumbnails(mapMode === 'thumbs')
+    reportState()
   }
 
   /** Space and View menu: the map or the current photo (tz.md, п. 9.3). */
@@ -289,6 +298,13 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
         if (!e.repeat) showOnMap()
         return
       }
+      // T: markers / thumbnails on the map, by the physical key (also «Е» in the Russian layout).
+      if (e.code === 'KeyT' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!e.repeat) toggleThumbnails()
+        return
+      }
       // Ctrl+C / Ctrl+V of coordinates, by the physical key (any layout). Text fields keep
       // their own copy and paste: they returned above.
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.code === 'KeyC' || e.code === 'KeyV')) {
@@ -334,6 +350,8 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
       if (folder) toggleView()
     } else if (cmd.type === 'showOnMap') {
       showOnMap()
+    } else if (cmd.type === 'toggleThumbnails') {
+      toggleThumbnails()
     } else if (cmd.type === 'setFilter') {
       setFilter(cmd.filter)
     } else if (cmd.type === 'toggleHelp') {

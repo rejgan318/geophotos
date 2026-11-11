@@ -43,6 +43,8 @@ export interface InitData {
     initialView: { lat: number; lon: number; zoom: number }
     markers: MarkerStyle
     hoverThumbSize: number
+    /** Longer side of a thumbnail on the map, px (tz.md, п. 4.8.3). */
+    thumbSize: number
   }
   /** Scheme of thumbnail URLs: `${thumbScheme}://f<generation>/<photo id>`. */
   thumbScheme: string
@@ -69,17 +71,22 @@ export type StripFilter = 'all' | 'coords' | 'noCoords' | 'modified'
 /** What the main area shows: the map or the current photo (Space, View menu). */
 export type ViewMode = 'map' | 'photo'
 
+/** What stands for a photo on the map: a marker or its thumbnail (T, View menu; tz.md, п. 4.8.3). */
+export type MapMode = 'pins' | 'thumbs'
+
 export interface UiState {
   ids: number[]
   /** The photo of the status bar, followed by the map and the photo view. */
   current: number | null
   filter: StripFilter
   view: ViewMode
+  mapMode: MapMode
 }
 
 export type WindowCommand =
   | { type: 'toggleView' }
   | { type: 'showOnMap' }
+  | { type: 'toggleThumbnails' }
   | { type: 'setFilter'; filter: StripFilter }
   | { type: 'toggleHelp' }
   | { type: 'showAbout' }
@@ -148,5 +155,12 @@ export function validUiState(v: unknown): UiState | null {
   if (current !== null && !(Number.isInteger(current) && (current as number) >= 0)) return null
   if (!FILTERS.includes(r['filter'] as StripFilter)) return null
   if (r['view'] !== 'map' && r['view'] !== 'photo') return null
-  return { ids: ids as number[], current: current as number | null, filter: r['filter'] as StripFilter, view: r['view'] }
+  if (r['mapMode'] !== 'pins' && r['mapMode'] !== 'thumbs') return null
+  return {
+    ids: ids as number[],
+    current: current as number | null,
+    filter: r['filter'] as StripFilter,
+    view: r['view'],
+    mapMode: r['mapMode']
+  }
 }

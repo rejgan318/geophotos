@@ -31,6 +31,23 @@ function pinIcon(style: MarkerStyle, selected: boolean): L.DivIcon {
   })
 }
 
+/**
+ * A photo's thumbnail standing on its point (tz.md, п. 4.8.3): a frame with the picture and a tail
+ * whose tip is the point. The icon element has no size: the content sits above it, so any
+ * proportions of the picture keep the tip on the point. A group shows its count in the corner.
+ */
+function thumbIcon(src: string, size: number, selected: boolean, count?: number): L.DivIcon {
+  const badge = count === undefined ? '' : `<span class="pt-count">${count}</span>`
+  return L.divIcon({
+    className: `photo-thumb${count === undefined ? '' : ' photo-group'}${selected ? ' selected' : ''}`,
+    html:
+      `<div class="pt" style="--thumb-size:${size}px"><div class="pt-frame">` +
+      `<img src="${src}" alt="" draggable="false"></div><div class="pt-tail"></div>${badge}</div>`,
+    iconSize: null as unknown as L.PointExpression,
+    iconAnchor: [0, 0]
+  })
+}
+
 /** Mark of a found place (tz.md, п. 5.3): a ring, unlike the photo pins. */
 function placeIcon(): L.DivIcon {
   return L.divIcon({ className: 'place-mark', html: '<div></div>', iconSize: [26, 26], iconAnchor: [13, 13] })
@@ -78,6 +95,11 @@ export class MapView {
   /** Generation of the open folder, part of thumbnail URLs. */
   private generation = 0
   private readonly hoverSize: number
+  private readonly thumbSize: number
+  /** Thumbnails instead of markers (T, View menu; tz.md, п. 4.8.3). */
+  private thumbs = false
+  /** The photo of each marker: a group shows its earliest photo. */
+  private readonly photoOf = new WeakMap<L.Marker, number>()
   private markers = new Map<number, L.Marker>()
   private selected: ReadonlySet<number> = new Set()
   private current: number | null = null
@@ -94,6 +116,7 @@ export class MapView {
     this.initialView = config.initialView
     this.style = config.markers
     this.hoverSize = config.hoverThumbSize
+    this.thumbSize = config.thumbSize
     this.icon = pinIcon(this.style, false)
     this.selectedIcon = pinIcon(this.style, true)
 
@@ -137,6 +160,11 @@ export class MapView {
       spiderfyOnMaxZoom: true,
       iconCreateFunction: (c) => {
         const n = c.getChildCount()
+        if (this.thumbs) {
+          // The earliest photo of the group: ids follow the strip, which is in time order.
+          const ids = c.getAllChildMarkers().map((m) => this.photoOf.get(m) ?? Infinity)
+          return thumbIcon(thumbUrl(this.generation, Math.min(...ids)), this.thumbSize, false, n)
+        }
         const d = Math.round(base * 0.8 + Math.log2(n) * 6)
         return L.divIcon({
           className: 'photo-cluster',
@@ -155,6 +183,46 @@ export class MapView {
 
     this.acceptDrops()
     this.showInitialView()
+
+    // A thumbnail without a preview becomes a placeholder (load errors do not bubble: capture).
+    el.addEventListener(
+      'error',
+      (e) => {
+        const img = e.target
+        if (!(img instanceof HTMLImageElement) || !img.parentElement?.classList.contains('pt-frame')) return
+        const ph = document.createElement('div')
+        ph.className = 'pt-placeholder'
+        ph.innerHTML = FILE_SVG
+        img.replaceWith(ph)
+      },
+      true
+    )
+  }
+
+  /** Markers or thumbnails on the map (tz.md, п. 4.8.3); the view stays. */
+  setThumbnails(on: boolean): void {
+    if (on === this.thumbs) return
+    this.thumbs = on
+    this.cluster.clearLayers()
+    this.markers.clear()
+    this.highlighted = []
+    for (const p of this.photos) {
+      const m = this.makeMarker(p)
+      if (m) this.markers.set(p.id, m)
+    }
+    this.cluster.addLayers([...this.markers.values()])
+    this.highlightGroups()
+  }
+
+  /** The look of a photo on the map: a pin, or its thumbnail in the thumbnail mode. */
+  private iconFor(id: number, selected: boolean): L.DivIcon {
+    if (!this.thumbs) return selected ? this.selectedIcon : this.icon
+    return thumbIcon(thumbUrl(this.generation, id), this.thumbSize, selected)
+  }
+
+  /** Selected photos are drawn over the others, the current one over all (п. 4.4.2). */
+  private zFor(id: number): number {
+    return id === this.current ? 20000 : this.selected.has(id) ? 10000 : 0
   }
 
   /** The Leaflet map, for controls placed on it (search box). */
@@ -244,18 +312,21 @@ export class MapView {
 
   private makeMarker(p: Photo): L.Marker | null {
     if (!p.coords || (this.shown && !this.shown.has(p.id))) return null
-    const selected = this.selected.has(p.id)
     const m = L.marker(L.latLng(p.coords.lat, p.coords.lon), {
-      icon: selected ? this.selectedIcon : this.icon,
-      zIndexOffset: selected ? 10000 : 0,
+      icon: this.iconFor(p.id, this.selected.has(p.id)),
+      zIndexOffset: this.zFor(p.id),
       draggable: true,
       autoPan: true
     })
-    // The photo's thumbnail over the pin while the mouse is on it, not while it is dragged.
-    // Made on the first hover and kept: Leaflet asks for the content again on every update.
-    let thumb: HTMLElement | null = null
-    m.bindTooltip(() => (thumb ??= this.hoverThumb(p.id, m)), { direction: 'top', className: 'hover-thumb', opacity: 1 })
-    m.on('dragstart', () => m.closeTooltip())
+    this.photoOf.set(m, p.id)
+    // The photo's thumbnail over the pin while the mouse is on it, not while it is dragged
+    // (п. 4.8.2); thumbnails on the map need none. Made on the first hover and kept: Leaflet
+    // asks for the content again on every update.
+    if (!this.thumbs) {
+      let thumb: HTMLElement | null = null
+      m.bindTooltip(() => (thumb ??= this.hoverThumb(p.id, m)), { direction: 'top', className: 'hover-thumb', opacity: 1 })
+      m.on('dragstart', () => m.closeTooltip())
+    }
     m.on('click', (e: L.LeafletMouseEvent) =>
       this.h.onMarkerClick(p.id, { ctrl: e.originalEvent.ctrlKey, shift: e.originalEvent.shiftKey })
     )
@@ -336,15 +407,20 @@ export class MapView {
    * the current photo or its group is off screen, the map pans to it without changing the zoom.
    */
   setSelection(ids: ReadonlySet<number>, current: number | null): void {
-    for (const id of this.selected) {
-      if (!ids.has(id)) this.markers.get(id)?.setIcon(this.icon).setZIndexOffset(0)
+    const before = this.selected
+    const moved = current !== this.current
+    const previous = this.current
+    this.selected = new Set(ids)
+    this.current = current
+    for (const id of before) {
+      if (!ids.has(id)) this.markers.get(id)?.setIcon(this.iconFor(id, false))
     }
     for (const id of ids) {
-      if (!this.selected.has(id)) this.markers.get(id)?.setIcon(this.selectedIcon).setZIndexOffset(10000)
+      if (!before.has(id)) this.markers.get(id)?.setIcon(this.iconFor(id, true))
     }
-    this.selected = new Set(ids)
-    const moved = current !== this.current
-    this.current = current
+    for (const id of new Set([...before, ...ids, previous, current])) {
+      if (id !== null) this.markers.get(id)?.setZIndexOffset(this.zFor(id))
+    }
     const marker = current === null ? undefined : this.markers.get(current)
     if (marker && moved) {
       const target = this.shownAt(marker)

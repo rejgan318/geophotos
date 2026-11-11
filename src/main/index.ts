@@ -80,7 +80,7 @@ let recentFolders: string[] = []
 /** Folder and photo of the previous run (tz.md, п. 7.1); replaced at exit. */
 let lastSession: AppState['lastSession'] = null
 /** What the window reports: selection, filter, view mode. */
-let ui: UiState = { ids: [], current: null, filter: 'all', view: 'map' }
+let ui: UiState = { ids: [], current: null, filter: 'all', view: 'map', mapMode: 'pins' }
 let startupPath = pathFromArgv(process.argv.slice(1), (p) => kindOf(p) !== null, app.getAppPath())
 
 function kindOf(p: string): 'dir' | 'file' | null {
@@ -164,7 +164,8 @@ function initData(): InitData {
       defaultSource: settings.map.defaultSource,
       initialView: settings.map.initialView,
       markers: settings.map.markers,
-      hoverThumbSize: settings.map.hoverThumbSize
+      hoverThumbSize: settings.map.hoverThumbSize,
+      thumbSize: settings.map.thumbnails.size
     },
     thumbScheme: THUMB_SCHEME
   }
@@ -323,6 +324,7 @@ function updateMenu(recent: string[]): void {
         exit: () => app.quit(),
         toggleView: () => win?.webContents.send(IPC.command, { type: 'toggleView' }),
         showOnMap: () => win?.webContents.send(IPC.command, { type: 'showOnMap' }),
+        toggleThumbnails: () => win?.webContents.send(IPC.command, { type: 'toggleThumbnails' }),
         setFilter: (filter: StripFilter) => win?.webContents.send(IPC.command, { type: 'setFilter', filter }),
         shortcuts: () => win?.webContents.send(IPC.command, { type: 'toggleHelp' }),
         about: () => win?.webContents.send(IPC.command, { type: 'showAbout' })
@@ -357,6 +359,8 @@ function refreshEditState(): void {
   // Show on Map: the current photo needs coordinates.
   const showItem = menu?.getMenuItemById(MENU_ID.showOnMap)
   if (showItem) showItem.enabled = ui.current !== null && !!photos[ui.current]?.coords
+  const thumbsItem = menu?.getMenuItemById(MENU_ID.thumbnails)
+  if (thumbsItem) thumbsItem.checked = ui.mapMode === 'thumbs'
   const counts = photoCounts(photos)
   const available: Record<StripFilter, boolean> = {
     all: photos.length > 0,

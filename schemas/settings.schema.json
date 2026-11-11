@@ -94,6 +94,20 @@
           "default": 80,
           "description": "Size of the thumbnail shown over a marker when the mouse is on it (the longer side), px."
         },
+        "thumbnails": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Thumbnails on the map instead of markers (View → Thumbnails on Map, key T).",
+          "properties": {
+            "size": {
+              "type": "integer",
+              "minimum": 32,
+              "maximum": 320,
+              "default": 64,
+              "description": "Size of a thumbnail on the map (the longer side), px."
+            }
+          }
+        },
         "tileSources": {
           "type": "object",
           "description": "Map tile sources, by key. The order is the order in the map switcher. A source can be changed field by field or added under a new key.",

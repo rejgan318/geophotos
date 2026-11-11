@@ -12,6 +12,7 @@ export interface MenuHandlers {
   exit(): void
   toggleView(): void
   showOnMap(): void
+  toggleThumbnails(): void
   setFilter(filter: StripFilter): void
   shortcuts(): void
   about(): void
@@ -23,6 +24,7 @@ export const MENU_ID = {
   saveSelected: 'file.saveSelected',
   photoView: 'view.photo',
   showOnMap: 'view.showOnMap',
+  thumbnails: 'view.thumbnails',
   filter: {
     all: 'view.filter.all',
     coords: 'view.filter.coords',
@@ -91,6 +93,14 @@ export function buildMenu(t: Translate, h: MenuHandlers, recent: string[], dev: 
         accelerator: 'C',
         registerAccelerator: false,
         click: h.showOnMap
+      },
+      {
+        id: MENU_ID.thumbnails,
+        label: t('menu.thumbnails'),
+        type: 'checkbox',
+        accelerator: 'T',
+        registerAccelerator: false,
+        click: h.toggleThumbnails
       },
       { type: 'separator' },
       filterItem('all', 'menu.filterAll'),

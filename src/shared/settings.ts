@@ -16,6 +16,8 @@ export interface Settings {
     markers: MarkerStyle
     /** Longer side of the thumbnail over a hovered marker, px (tz.md, п. 4.8.2). */
     hoverThumbSize: number
+    /** Thumbnails on the map instead of markers (tz.md, п. 4.8.3). */
+    thumbnails: { size: number }
     tileSources: Record<string, TileSource>
   }
   log: { level: LogLevel; maxSizeKb: number; maxFiles: number }
