@@ -88,6 +88,8 @@
   "help.marks": "Отметки",
   "help.key.space": "Пробел",
   "help.key.click": "Клик",
+  "help.key.doubleClick": "Двойной клик",
+  "help.doubleClick": "В ленте: показать фото на карте (по центру; группа раскрывается)",
   "help.prevNext": "Предыдущее / следующее фото",
   "help.firstLast": "Первое / последнее фото",
   "help.photoView": "Карта / фото",

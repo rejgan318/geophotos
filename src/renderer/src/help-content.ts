@@ -36,6 +36,7 @@ export const SECTIONS: Section[] = [
       { keys: ['help.key.click'], text: 'help.click' },
       { keys: ['Ctrl+help.key.click'], text: 'help.ctrlClick' },
       { keys: ['Shift+help.key.click'], text: 'help.shiftClick' },
+      { keys: ['help.key.doubleClick'], text: 'help.doubleClick' },
       { action: 'help.action.dragToMap', text: 'help.dragToMap' },
       { action: 'help.action.dragToPhoto', text: 'help.dragToPhoto' },
       { action: 'help.action.dragMarker', text: 'help.dragMarker' },

@@ -188,6 +188,12 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   })
   const strip = new Strip(byId('strip'), t, {
     onClick: (id, mods) => select(clickSelect(sel, id, mods, order)),
+    // Double click: show the photo on the map (from the photo view, back to the map first).
+    onDoubleClick: (id) => {
+      if (sel.current !== id || sel.ids.size !== 1) select(single(id))
+      if (view === 'photo') toggleView()
+      map.showOnMap(id)
+    },
     onDragStart: (id) => {
       const next = dragSelection(sel, id)
       if (next.ids !== sel.ids || next.current !== sel.current) select(next)

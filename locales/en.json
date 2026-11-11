@@ -88,6 +88,8 @@
   "help.marks": "Marks",
   "help.key.space": "Space",
   "help.key.click": "Click",
+  "help.key.doubleClick": "Double-click",
+  "help.doubleClick": "In the strip: show the photo on the map (centred; a group opens up)",
   "help.prevNext": "Previous / next photo",
   "help.firstLast": "First / last photo",
   "help.photoView": "Map / photo",

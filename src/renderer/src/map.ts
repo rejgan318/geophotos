@@ -290,6 +290,20 @@ export class MapView {
     this.highlightGroups()
   }
 
+  /**
+   * Shows a photo on the map (double click in the strip): the map zooms in only as far as needed
+   * for the marker to come out of its group (or fans the group out when photos stand at one
+   * point), then centres on the marker. Nothing for a photo without a marker.
+   */
+  showOnMap(photoId: number): void {
+    const marker = this.markers.get(photoId)
+    if (!marker) return
+    this.cluster.zoomToShowLayer(marker, () => {
+      this.map.panTo(marker.getLatLng())
+      this.highlightGroups()
+    })
+  }
+
   /** Where the marker is shown at the current zoom: itself, or the group it is hidden in. */
   private shownAt(marker: L.Marker): L.LatLng {
     return this.groupOf(marker)?.getLatLng() ?? marker.getLatLng()

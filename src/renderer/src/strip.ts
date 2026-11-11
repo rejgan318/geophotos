@@ -11,6 +11,8 @@ export const PHOTO_DRAG_TYPE = 'application/x-geophotos-photos'
 export interface StripHandlers {
   /** A click on a photo, with the modifier keys. */
   onClick(id: number, mods: { ctrl: boolean; shift: boolean }): void
+  /** A double click on a photo: show it on the map. */
+  onDoubleClick(id: number): void
   /** A drag starts on a photo: returns the photos it carries (п. 4.5). */
   onDragStart(id: number): number[]
   onDragEnd(): void
@@ -104,6 +106,9 @@ export class Strip {
     this.decorate(item, p)
 
     item.addEventListener('click', (e) => this.h.onClick(p.id, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey }))
+    item.addEventListener('dblclick', (e) => {
+      if (!e.ctrlKey && !e.shiftKey && !e.metaKey) this.h.onDoubleClick(p.id)
+    })
     item.addEventListener('dragstart', (e) => this.dragStart(e, p.id))
     item.addEventListener('dragend', () => {
       this.clearDropTarget()
