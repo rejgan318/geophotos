@@ -42,6 +42,13 @@ export function xmpArgs(c: LatLon): string[] {
   return [`-XMP-exif:GPSLatitude=${deg(c.lat)}`, `-XMP-exif:GPSLongitude=${deg(c.lon)}`]
 }
 
+/** Altitude in metres: unsigned value, Ref 1 below sea level (tz.md, п. 5.6); null removes it. */
+function altitudeArgs(group: 'EXIF' | 'XMP-exif', a: number | null): string[] {
+  if (a === null) return [`-${group}:GPSAltitude=`, `-${group}:GPSAltitudeRef=`]
+  const v = Math.round(Math.abs(a) * 100) / 100
+  return [`-${group}:GPSAltitude=${v}`, `-${group}:GPSAltitudeRef=${a < 0 ? 1 : 0}`]
+}
+
 /**
  * Removing the coordinates (Del, tz.md, п. 6.6) removes with them the altitude and the address,
  * which would be wrong without them: the whole GPS block of EXIF, the GPS fields of XMP, and the
@@ -72,23 +79,35 @@ const COMMON = ['-overwrite_original', '-n']
  *   get the same values if they already have coordinates, so that reading by п. 3.7 gives the new
  *   ones. The address goes to the XMP of the file and of an existing sidecar (read first, п. 3.7).
  * - Other RAW: only the sidecar; an existing one is updated, a missing one is created.
+ * The altitude goes wherever the coordinates go (п. 5.6); none removes an old one.
  * No coordinates: everything is removed (Del, п. 6.6).
  */
-export function writePlan(info: WriteInfo, c: LatLon | null, address: Address | null = null): WriteStep[] {
+export function writePlan(
+  info: WriteInfo,
+  c: LatLon | null,
+  address: Address | null = null,
+  altitude: number | null = null
+): WriteStep[] {
   if (!c) return deletePlan(info)
   const addr = xmpAddressArgs(address)
+  const xmpGps = [...xmpArgs(c), ...altitudeArgs('XMP-exif', altitude)]
   if (info.write === 'xmp') {
     if (!info.sidecar) throw new Error(`No sidecar for ${info.path}`)
-    return [
-      { path: info.sidecar.path, kind: 'sidecar', create: !info.sidecar.exists, args: [...COMMON, ...xmpArgs(c), ...addr] }
-    ]
+    return [{ path: info.sidecar.path, kind: 'sidecar', create: !info.sidecar.exists, args: [...COMMON, ...xmpGps, ...addr] }]
   }
   const steps: WriteStep[] = [
     {
       path: info.path,
       kind: 'file',
       create: false,
-      args: [...COMMON, ...exifArgs(c), ...(info.xmpCoords ? xmpArgs(c) : []), ...addr, ...iptcAddressDelete()]
+      args: [
+        ...COMMON,
+        ...exifArgs(c),
+        ...altitudeArgs('EXIF', altitude),
+        ...(info.xmpCoords ? xmpGps : []),
+        ...addr,
+        ...iptcAddressDelete()
+      ]
     }
   ]
   if (info.sidecar?.exists) {
@@ -96,7 +115,7 @@ export function writePlan(info: WriteInfo, c: LatLon | null, address: Address | 
       path: info.sidecar.path,
       kind: 'sidecar',
       create: false,
-      args: [...COMMON, ...(info.sidecar.coords ? xmpArgs(c) : []), ...addr]
+      args: [...COMMON, ...(info.sidecar.coords ? xmpGps : []), ...addr]
     })
   }
   return steps

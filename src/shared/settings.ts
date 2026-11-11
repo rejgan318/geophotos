@@ -24,6 +24,8 @@ export interface Settings {
   search: { url: string }
   /** Addresses by coordinates (tz.md, п. 5.5). */
   geocode: { url: string; minIntervalMs: number }
+  /** Altitudes by coordinates (tz.md, п. 5.6). */
+  elevation: { url: string }
   /** Photos from subfolders (tz.md, п. 3.2). */
   folders: { subfolders: 'ask' | 'yes' | 'no' }
 }

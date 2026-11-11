@@ -31,7 +31,7 @@ describe('recent folders (tz.md, п. 3.1)', () => {
 })
 
 describe('state between runs (tz.md, п. 7.5)', () => {
-  const NONE = { lastSession: null, window: null, map: null, tools: { address: false } }
+  const NONE = { lastSession: null, window: null, map: null, tools: { address: false, altitude: false } }
 
   it('recent folders survive a restart, including non-Latin paths', () => {
     const file = stateFile()
@@ -71,7 +71,7 @@ describe('state between runs (tz.md, п. 7.5)', () => {
     const file = stateFile()
     const window = { x: -1200, y: 40, width: 1100, height: 700, maximized: true }
     const map = { lat: -33.85, lon: 151.21, zoom: 13, source: 'topo', thumbnails: true }
-    const tools = { address: true }
+    const tools = { address: true, altitude: true }
     writeState(file, { recentFolders: [], lastSession: null, window, map, tools })
     expect(readState(file)).toEqual({ recentFolders: [], lastSession: null, window, map, tools })
   })

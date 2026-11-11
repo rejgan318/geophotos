@@ -23,6 +23,10 @@ export const PHOTO_SVG =
 export const ADDRESS_SVG =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 8h-2.5v9h-5v-6h-3v6h-5v-9H3z"/></svg>'
 
+/** Has an altitude (tz.md, п. 5.6): a mountain. */
+export const ALTITUDE_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 20L9 7l4 7 2.5-4L22 20z"/></svg>'
+
 /** File placeholder of a photo that cannot be shown. */
 export const FILE_SVG =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h8l6 6v14H6zM14 2v6h6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>'

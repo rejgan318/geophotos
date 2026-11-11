@@ -1,7 +1,7 @@
 import type { Translate } from '@shared/i18n'
 import { thumbUrl } from '@shared/ipc'
 import type { Photo } from '@shared/photo'
-import { addressText } from '@shared/photo'
+import { addressText, altitudeText } from '@shared/photo'
 import { photoCoords, photoDate } from './describe'
 import { FILE_SVG } from './icons'
 
@@ -56,8 +56,9 @@ export class PhotoView {
       this.placeholder.hidden = true
       return
     }
-    // Name and date; under them the coordinates and the address, if any (п. 4.14).
-    const lines = [`${photo.name} · ${photoDate(photo, this.t)}`, photoCoords(photo, this.t)]
+    // Name and date; under them the coordinates with the altitude and the address, if any (п. 4.14).
+    const coords = photoCoords(photo, this.t) + (photo.altitude === null ? '' : ` · ${altitudeText(photo.altitude)}`)
+    const lines = [`${photo.name} · ${photoDate(photo, this.t)}`, coords]
     if (photo.address) lines.push(addressText(photo.address))
     this.caption.replaceChildren(
       ...lines.map((text) => {

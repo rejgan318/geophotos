@@ -85,12 +85,13 @@ export async function savePhotos(
       if (!photo.coords && source.write === 'xmp' && photo.coordSource !== 'sidecar') {
         throw new Error('The coordinates are inside the RAW file, which the program never changes')
       }
-      const steps = writePlan(source, photo.coords, photo.address)
+      const steps = writePlan(source, photo.coords, photo.address, photo.altitude)
       for (const step of steps) await runStep(exiftool, step)
       written.push(item)
       log.info(
         `${photo.coords ? 'Coordinates written' : 'Coordinates removed'}: ${photo.path}; old: ${coordsText(item.old)}; new: ${coordsText(photo.coords)}; ` +
           `address: ${photo.address ? addressText(photo.address) || '(empty)' : 'none'}; ` +
+          `altitude: ${photo.altitude === null ? 'none' : `${photo.altitude} m`}; ` +
           `to: ${steps.map((s) => (s.create ? `${s.path} (created)` : s.path)).join(', ')}`
       )
     } catch (e) {
@@ -109,7 +110,7 @@ export async function savePhotos(
       xmpCoords: r.xmpCoords,
       sidecar: w.source.sidecar ? { ...w.source.sidecar, exists: r.sidecarExists, coords: r.sidecarCoords } : null
     }
-    const photo: Photo = { ...w.photo, coords: r.coords, coordSource: r.coordSource, address: r.address, modified: false }
+    const photo: Photo = { ...w.photo, coords: r.coords, coordSource: r.coordSource, address: r.address, altitude: r.altitude, modified: false }
     return { id: w.photo.id, photo, source }
   })
   return { saved, failed }

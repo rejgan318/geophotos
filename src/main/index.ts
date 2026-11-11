@@ -4,7 +4,8 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, protocol, screen,
 import { windowTitle } from '@shared/app-info'
 import { pathFromArgv } from '@shared/argv'
 import { SUPPORTED_EXTENSIONS } from '@shared/formats'
-import { assignAddress, assignCoords, photoCounts, photosAt, photosToSave } from '@shared/edits'
+import { assignAddress, assignAltitude, assignCoords, pastePhotoData, photoCounts, photosAt, photosToSave } from '@shared/edits'
+import { ELEVATION_BATCH, pointsWithoutAltitude } from '@shared/elevation'
 import { formatDuration } from '@shared/duration'
 import { pointsWithoutAddress } from '@shared/geocode'
 import { makeTranslate, type Strings, type Translate } from '@shared/i18n'
@@ -37,6 +38,7 @@ import { savePhotos, type SaveFailure } from './save'
 import { PlaceSearch } from './search'
 import { DefaultSettingsError, ensureUserSettingsFile, formatProblem, loadSettings, setUserSetting } from './settings'
 import { readState, writeState, type AppState, type ToolsState } from './state'
+import { ElevationService } from './elevation'
 import { Geocoder } from './geocode'
 import { ThumbnailService } from './thumbnails'
 
@@ -72,8 +74,9 @@ let exiftool: ExifTool
 let thumbnails: ThumbnailService
 let placeSearch: PlaceSearch
 let geocoder: Geocoder
-/** Modes of the Tools menu (tz.md, п. 5.5); kept between runs. */
-let tools: ToolsState = { address: false }
+let elevation: ElevationService
+/** Modes of the Tools menu (tz.md, пп. 5.5, 5.6); kept between runs. */
+let tools: ToolsState = { address: false, altitude: false }
 /** Version reported by exiftool at start (Help → About). */
 let exiftoolVer = ''
 let win: BrowserWindow | null = null
@@ -163,6 +166,7 @@ async function startup(): Promise<boolean> {
   thumbnails = new ThumbnailService(exiftool)
   placeSearch = new PlaceSearch(settings.search.url, userAgent(), settings.language)
   geocoder = new Geocoder(settings.geocode.url, userAgent(), settings.language, settings.geocode.minIntervalMs)
+  elevation = new ElevationService(settings.elevation.url, userAgent())
   return true
 }
 
@@ -347,17 +351,18 @@ async function openFolder(
   current = {
     data: { folder, photos: scanned.photos, generation, selected: chosen?.id ?? null },
     sources: scanned.sources,
-    fileMeta: scanned.photos.map((p) => ({ coords: p.coords, address: p.address })),
+    fileMeta: scanned.photos.map((p) => ({ coords: p.coords, address: p.address, altitude: p.altitude })),
     subfolders
   }
   for (const dir of scanned.unreadable) log.warn(`Subfolder skipped, cannot be read: ${dir}`)
   // A new folder: every point may be asked again (tz.md, п. 5.5).
   addressFailed.clear()
+  altitudeFailed.clear()
   selection = new Set(chosen ? [chosen.id] : [])
   win.webContents.send(IPC.folderLoaded, restored ? { ...current.data, restored: { scroll: restored.scroll } } : current.data)
   setRecent((list) => addRecent(list, folder))
   refreshEditState()
-  kickAddresses()
+  kickQueues()
 
   const withCoords = scanned.photos.filter((p) => p.coords).length
   log.info(
@@ -418,6 +423,7 @@ function updateMenu(recent: string[]): void {
         toggleView: () => win?.webContents.send(IPC.command, { type: 'toggleView' }),
         showOnMap: () => win?.webContents.send(IPC.command, { type: 'showOnMap' }),
         toggleAddress: () => toggleAddress(),
+        toggleAltitude: () => toggleAltitude(),
         toggleThumbnails: () => win?.webContents.send(IPC.command, { type: 'toggleThumbnails' }),
         setFilter: (filter: StripFilter) => win?.webContents.send(IPC.command, { type: 'setFilter', filter }),
         shortcuts: () => win?.webContents.send(IPC.command, { type: 'toggleHelp' }),
@@ -455,6 +461,8 @@ function refreshEditState(): void {
   if (showItem) showItem.enabled = ui.current !== null && !!photos[ui.current]?.coords
   const addressItem = menu?.getMenuItemById(MENU_ID.address)
   if (addressItem) addressItem.checked = tools.address
+  const altitudeItem = menu?.getMenuItemById(MENU_ID.altitude)
+  if (altitudeItem) altitudeItem.checked = tools.altitude
   const thumbsItem = menu?.getMenuItemById(MENU_ID.thumbnails)
   if (thumbsItem) thumbsItem.checked = ui.mapMode === 'thumbs'
   const counts = photoCounts(photos)
@@ -480,8 +488,8 @@ function applyPhotos(changed: Photo[]): void {
   const msg: PhotosChanged = { generation: current.data.generation, photos: changed }
   win?.webContents.send(IPC.photosChanged, msg)
   refreshEditState()
-  // New coordinates may need an address (tz.md, п. 5.5).
-  kickAddresses()
+  // New coordinates may need an address and an altitude (tz.md, пп. 5.5, 5.6).
+  kickQueues()
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -495,20 +503,87 @@ function addressLeft(): number {
   return tools.address && current ? pointsWithoutAddress(current.data.photos, addressFailed).size : 0
 }
 
-/** About how long the rest takes, seconds: a request at most once per interval. */
-function addressSeconds(left: number): number {
-  return Math.ceil((left * Math.max(geocoder.intervalMs, 500)) / 1000)
+/** Points that got no altitude in this folder: not asked again (п. 5.6). */
+const altitudeFailed = new Set<string>()
+let altitudeRunning = false
+
+/** Points of the open folder still waiting for their altitude; 0 when the mode is off. */
+function altitudeLeft(): number {
+  return tools.altitude && current ? pointsWithoutAltitude(current.data.photos, altitudeFailed).size : 0
+}
+
+/**
+ * About how long the rest takes, seconds: an address request at most once per interval, the
+ * altitudes a request per 100 points; the two go side by side.
+ */
+function pendingSeconds(addresses: number, altitudes: number): number {
+  const a = (addresses * Math.max(geocoder.intervalMs, 500)) / 1000
+  const h = Math.ceil(altitudes / ELEVATION_BATCH)
+  return Math.ceil(Math.max(a, h))
 }
 
 function reportQueue(): void {
-  const left = addressLeft()
-  win?.webContents.send(IPC.queueState, { address: left, seconds: addressSeconds(left) })
+  const address = addressLeft()
+  const altitude = altitudeLeft()
+  win?.webContents.send(IPC.queueState, { address, altitude, seconds: pendingSeconds(address, altitude) })
 }
 
-/** Starts getting addresses if the mode is on and some photos need one. */
-function kickAddresses(): void {
+/** Starts getting addresses and altitudes if their modes are on and some photos need them. */
+function kickQueues(): void {
   reportQueue()
   if (!addressRunning && addressLeft() > 0) void runAddresses()
+  if (!altitudeRunning && altitudeLeft() > 0) void runAltitudes()
+}
+
+/**
+ * Get Altitude (п. 5.6): up to 100 points per request, the altitude for every photo at a point
+ * that has none. Waits while saving; stops when the mode is turned off or the folder closes.
+ */
+async function runAltitudes(): Promise<void> {
+  altitudeRunning = true
+  try {
+    for (;;) {
+      while (saving) await sleep(200)
+      const folder = current
+      if (!tools.altitude || !folder) break
+      const batch = [...pointsWithoutAltitude(folder.data.photos, altitudeFailed)].slice(0, ELEVATION_BATCH)
+      if (!batch.length) break
+      const res = await elevation.get(batch.map(([, c]) => c))
+      if (current !== folder || !tools.altitude) continue
+      if (!res.ok) {
+        for (const [key] of batch) altitudeFailed.add(key)
+        log.warn(`Altitudes for ${batch.length} point(s) not received: ${res.error}`)
+        reportQueue()
+        continue
+      }
+      const changed: Photo[] = []
+      batch.forEach(([key, point], i) => {
+        const alt = res.values[i]
+        if (alt === null || alt === undefined) {
+          altitudeFailed.add(key)
+          return
+        }
+        const ids = photosAt(folder.data.photos, point).filter((id) => folder.data.photos[id]!.altitude === null)
+        changed.push(...assignAltitude(folder.data.photos, folder.fileMeta, ids, alt))
+      })
+      log.verbose(`Altitudes found (not saved): ${batch.length} point(s), ${changed.length} photo(s)`)
+      if (changed.length) applyPhotos(changed)
+      else reportQueue()
+    }
+  } finally {
+    altitudeRunning = false
+    reportQueue()
+  }
+}
+
+/** Tools → Get Altitude (п. 5.6): on — altitudes for all photos of the folder that need one. */
+function toggleAltitude(): void {
+  tools = { ...tools, altitude: !tools.altitude }
+  log.info(`Get Altitude: ${tools.altitude ? 'on' : 'off'}`)
+  saveAppState()
+  refreshEditState()
+  if (tools.altitude) altitudeFailed.clear()
+  kickQueues()
 }
 
 /**
@@ -553,30 +628,35 @@ function toggleAddress(): void {
   saveAppState()
   refreshEditState()
   if (tools.address) addressFailed.clear()
-  kickAddresses()
+  kickQueues()
 }
 
 
 /**
- * Saving while addresses are still being found (п. 5.5): wait for them, save without them, or
- * cancel (false).
+ * Saving while addresses or altitudes are still being found (пп. 5.5, 5.6): wait for them, save
+ * without them, or cancel (false).
  */
-async function askAddressesBeforeSave(): Promise<boolean> {
-  const left = addressLeft()
-  if (!left || !win) return true
+async function askPendingBeforeSave(): Promise<boolean> {
+  const addresses = addressLeft()
+  const altitudes = altitudeLeft()
+  if ((!addresses && !altitudes) || !win) return true
+  const list = [
+    ...(addresses ? [t('pending.addresses', { count: addresses })] : []),
+    ...(altitudes ? [t('pending.altitudes', { count: altitudes })] : [])
+  ].join(', ')
   const { response } = await dialog.showMessageBox(win, {
     type: 'question',
-    title: t('addressWait.title'),
-    message: t('addressWait.message', { count: left, time: formatDuration(addressSeconds(left), t) }),
-    buttons: [t('addressWait.wait'), t('addressWait.skip'), t('unsaved.cancel')],
+    title: t('pending.title'),
+    message: t('pending.message', { list, time: formatDuration(pendingSeconds(addresses, altitudes), t) }),
+    buttons: [t('pending.wait'), t('pending.skip'), t('unsaved.cancel')],
     defaultId: 0,
     cancelId: 2,
     noLink: true
   })
   if (response === 2) return false
   if (response === 0) {
-    log.info(`Saving waits for ${left} address(es)`)
-    for (let n = addressLeft(); n > 0; n = addressLeft()) {
+    log.info(`Saving waits for ${addresses} address(es), ${altitudes} altitude(s)`)
+    for (let n = addressLeft() + altitudeLeft(); n > 0; n = addressLeft() + altitudeLeft()) {
       sendSaveState({ phase: 'waiting', left: n })
       await sleep(300)
     }
@@ -595,7 +675,7 @@ function sendSaveState(state: SaveState): void {
  */
 async function save(only?: ReadonlySet<number>): Promise<SaveFailure[] | null> {
   if (!current || saving) return []
-  if (!(await askAddressesBeforeSave())) return null
+  if (!(await askPendingBeforeSave())) return null
   if (!current || saving) return []
   const folder = current
   const toSave = photosToSave(folder.data.photos, only)
@@ -615,7 +695,7 @@ async function save(only?: ReadonlySet<number>): Promise<SaveFailure[] | null> {
     failed = outcome.failed
     for (const s of outcome.saved) {
       folder.sources[s.id] = s.source
-      folder.fileMeta[s.id] = { coords: s.photo.coords, address: s.photo.address }
+      folder.fileMeta[s.id] = { coords: s.photo.coords, address: s.photo.address, altitude: s.photo.altitude }
     }
     saving = false
     if (current === folder) applyPhotos(outcome.saved.map((s) => s.photo))
@@ -678,7 +758,10 @@ async function confirmDiscard(): Promise<boolean> {
 
 function setCoords(req: unknown): void {
   if (!current || saving || !validSetCoords(req)) return
-  const changed = assignCoords(current.data.photos, current.fileMeta, req.ids, req.coords)
+  const changed =
+    req.copied && req.coords
+      ? pastePhotoData(current.data.photos, current.fileMeta, req.ids, req.coords, req.copied.address, req.copied.altitude)
+      : assignCoords(current.data.photos, current.fileMeta, req.ids, req.coords)
   if (!changed.length) return
   const to = req.coords ? formatCoords(changed[0]!.coords!) : 'none'
   log.verbose(

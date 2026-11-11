@@ -32,6 +32,18 @@ export function addressText(a: Address): string {
 export interface FileMeta {
   coords: LatLon | null
   address: Address | null
+  altitude: number | null
+}
+
+/** Altitudes are the same to a centimetre: more is noise of the number format. */
+export function sameAltitude(a: number | null, b: number | null): boolean {
+  if (a === null || b === null) return a === b
+  return Math.abs(a - b) < 0.005
+}
+
+/** "290 m" (whole metres: the elevation data are about that exact, tz.md, п. 5.6). */
+export function altitudeText(a: number): string {
+  return `${Math.round(a)} m`
 }
 
 /** Where the shown coordinates were read from (tz.md, п. 3.7). */
@@ -50,6 +62,8 @@ export interface Photo {
   coordSource: CoordSource | null
   /** Place names (tz.md, п. 5.5); null — none. Removed together with changed coordinates. */
   address: Address | null
+  /** Altitude above sea level, metres (tz.md, п. 5.6); null — none. Removed with changed coordinates. */
+  altitude: number | null
   /** Coordinates or address changed in the program and not saved yet (tz.md, п. 4.3). */
   modified: boolean
   /** Read error reported by exiftool (broken file etc.). */

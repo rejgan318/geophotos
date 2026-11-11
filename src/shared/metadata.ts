@@ -52,6 +52,18 @@ export function xmpCoords(rec: ExifRecord): LatLon | null {
   return valid(num(tagValue(rec, 'GPSLatitude', 'XMP')), num(tagValue(rec, 'GPSLongitude', 'XMP')))
 }
 
+/** Altitude in one group: with -n the value is unsigned, Ref 1 means below sea level. */
+function altitudeIn(rec: ExifRecord, group: 'EXIF' | 'XMP'): number | null {
+  const v = num(tagValue(rec, 'GPSAltitude', group))
+  if (v === null) return null
+  return Number(tagValue(rec, 'GPSAltitudeRef', group)) === 1 ? -Math.abs(v) : v
+}
+
+/** Altitude by the same priority as the coordinates (tz.md, пп. 3.7, 5.6): sidecar, XMP, EXIF. */
+export function pickAltitude(rec: ExifRecord, sidecar: ExifRecord | undefined): number | null {
+  return (sidecar ? altitudeIn(sidecar, 'XMP') : null) ?? altitudeIn(rec, 'XMP') ?? altitudeIn(rec, 'EXIF')
+}
+
 /** Coordinates by priority: sidecar XMP, then embedded XMP, then EXIF (tz.md, п. 3.7). */
 export function pickCoords(
   rec: ExifRecord,
@@ -139,7 +151,8 @@ export function toPhoto(
 ): Omit<Photo, 'id'> {
   if (!rec) {
     return {
-      name, path, date: null, dateSource: 'file', coords: null, coordSource: null, address: null, modified: false,
+      name, path, date: null, dateSource: 'file', coords: null, coordSource: null, address: null, altitude: null,
+      modified: false,
       error: 'no metadata'
     }
   }
@@ -147,7 +160,8 @@ export function toPhoto(
   const { coords, source: coordSource } = pickCoords(rec, sidecar)
   const error = readError(rec)
   const address = pickAddress(rec, sidecar)
-  return { name, path, date, dateSource, coords, coordSource, address, modified: false, ...(error ? { error } : {}) }
+  const altitude = pickAltitude(rec, sidecar)
+  return { name, path, date, dateSource, coords, coordSource, address, altitude, modified: false, ...(error ? { error } : {}) }
 }
 
 /** Order of the strip: by date (shooting or file), then by name; photos without date go last. */

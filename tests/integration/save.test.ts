@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { assignAddress, assignCoords } from '@shared/edits'
+import { assignAddress, assignAltitude, assignCoords } from '@shared/edits'
 import type { LatLon, Photo } from '@shared/photo'
 import { scanFolder, type ScannedFolder } from '../../src/main/folder'
 import { savePhotos, type SaveLog, type SaveOutcome } from '../../src/main/save'
@@ -36,7 +36,7 @@ async function assignAndSave(
   log: SaveLog
 ): Promise<SaveOutcome> {
   const photos = [...folder.photos]
-  const file = photos.map((p) => ({ coords: p.coords, address: p.address }))
+  const file = photos.map((p) => ({ coords: p.coords, address: p.address, altitude: p.altitude }))
   for (const [name, c] of Object.entries(targets)) {
     const p = photos.find((x) => x.name === name)
     if (!p) throw new Error(`no photo ${name}`)
@@ -226,7 +226,7 @@ describe('saving generated cases', () => {
     const folder = await scanFolder(dir, et)
     expect(folder.photos.every((p) => p.coords)).toBe(true)
     const photos = [...folder.photos]
-    for (const ch of assignCoords(photos, photos.map((p) => ({ coords: p.coords, address: p.address })), photos.map((p) => p.id), null)) photos[ch.id] = ch
+    for (const ch of assignCoords(photos, photos.map((p) => ({ coords: p.coords, address: p.address, altitude: p.altitude })), photos.map((p) => p.id), null)) photos[ch.id] = ch
     const items = photos.map((p) => ({ photo: p, source: folder.sources[p.id]!, old: folder.photos[p.id]!.coords }))
     const log = memoryLog()
     const outcome = await savePhotos(et, items, log)
@@ -254,7 +254,7 @@ describe('saving generated cases', () => {
 
     const LVIV = { country: 'Україна', countryCode: 'UA', state: 'Львівська область', city: 'Львів', location: 'площа Ринок, 1' }
     const photos = [...folder.photos]
-    const meta = photos.map((p) => ({ coords: p.coords, address: p.address }))
+    const meta = photos.map((p) => ({ coords: p.coords, address: p.address, altitude: p.altitude }))
     for (const ch of assignCoords(photos, meta, [0], { lat: 49.8419, lon: 24.0315 })) photos[ch.id] = ch
     for (const ch of assignAddress(photos, meta, [0], LVIV)) photos[ch.id] = ch
     const outcome = await savePhotos(et, [{ photo: photos[0]!, source: folder.sources[0]!, old: null }], memoryLog())
@@ -263,6 +263,25 @@ describe('saving generated cases', () => {
     const [rec] = await et.json(['-G0', '-IPTC:all', file])
     expect(Object.keys(rec!).filter((k) => k.startsWith('IPTC:'))).toEqual([])
     expect((await scanFolder(dir, et)).photos[0]!.address).toEqual(LVIV)
+  })
+
+  it('the altitude is written with the coordinates and read back; below sea level too (п. 5.6)', async () => {
+    const dir = join(tmp.dir, 'altitude')
+    mkdirSync(dir)
+    await makeJpeg(join(dir, 'a.jpg'))
+    await makeJpeg(join(dir, 'b.jpg'))
+    const folder = await scanFolder(dir, et)
+    const photos = [...folder.photos]
+    const meta = photos.map((p) => ({ coords: p.coords, address: p.address, altitude: p.altitude }))
+    for (const ch of assignCoords(photos, meta, [0, 1], { lat: 31.5, lon: 35.5 })) photos[ch.id] = ch
+    for (const ch of assignAltitude(photos, meta, [0], 1801)) photos[ch.id] = ch
+    for (const ch of assignAltitude(photos, meta, [1], -430.5)) photos[ch.id] = ch
+    const items = photos.map((p) => ({ photo: p, source: folder.sources[p.id]!, old: null }))
+    const outcome = await savePhotos(et, items, memoryLog())
+    expect(outcome.failed).toEqual([])
+    expect(outcome.saved.map((s) => s.photo.altitude).sort()).toEqual([-430.5, 1801].sort())
+    const again = await scanFolder(dir, et)
+    expect(again.photos.map((p) => p.altitude).sort()).toEqual([-430.5, 1801].sort())
   })
 
   it('a leftover exiftool temp file does not block writing and is removed', async () => {

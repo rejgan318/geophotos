@@ -5,6 +5,7 @@ import {
   exifCoords,
   parseExifDate,
   pickAddress,
+  pickAltitude,
   pickCoords,
   pickDate,
   readError,
@@ -97,8 +98,18 @@ describe('address (tz.md, п. 5.5)', () => {
   })
 })
 
+describe('altitude (tz.md, п. 5.6)', () => {
+  it('sidecar first, then XMP, then EXIF; Ref 1 is below sea level', () => {
+    expect(pickAltitude({ 'EXIF:GPSAltitude': 290, 'EXIF:GPSAltitudeRef': 0 }, undefined)).toBe(290)
+    expect(pickAltitude({ 'EXIF:GPSAltitude': 430, 'EXIF:GPSAltitudeRef': 1 }, undefined)).toBe(-430)
+    expect(pickAltitude({ 'EXIF:GPSAltitude': 1, 'XMP:GPSAltitude': 2 }, undefined)).toBe(2)
+    expect(pickAltitude({ 'XMP:GPSAltitude': 2 }, { 'XMP:GPSAltitude': 3 })).toBe(3)
+    expect(pickAltitude({ 'EXIF:Make': 'Canon' }, undefined)).toBeNull()
+  })
+})
+
 describe('photos', () => {
-  const base = { path: 'x', coords: null, coordSource: null, address: null, dateSource: 'shot' as const, modified: false }
+  const base = { path: 'x', coords: null, coordSource: null, address: null, altitude: null, dateSource: 'shot' as const, modified: false }
 
   it('order: by date, then by name; no date last', () => {
     const list = [

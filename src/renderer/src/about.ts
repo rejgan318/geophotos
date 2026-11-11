@@ -70,6 +70,8 @@ export class AboutView {
       line(t('about.description')),
       line(t('about.exiftool', { version: info.exiftoolVersion, path: info.exiftoolPath })),
       line(`${t('about.license')} `, link('license', 'MIT'), ' · ', link('notices', t('about.notices'))),
+      // Attribution asked by the elevation service (tz.md, п. 5.6).
+      line(t('about.elevation')),
       line(`Electron ${info.electron} · Node.js ${info.node}`)
     )
     this.el.hidden = false

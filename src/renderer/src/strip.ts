@@ -1,8 +1,9 @@
 import type { Translate } from '@shared/i18n'
 import { thumbUrl } from '@shared/ipc'
+import { dropOnPhoto } from '@shared/edits'
 import type { FolderData, LatLon, Photo } from '@shared/photo'
 import { photoTooltip } from './describe'
-import { ADDRESS_SVG, FILE_SVG, PENCIL_SVG, PIN_SVG } from './icons'
+import { ADDRESS_SVG, ALTITUDE_SVG, FILE_SVG, PENCIL_SVG, PIN_SVG } from './icons'
 import type { Selection } from './selection'
 
 /** Type of the data carried by a drag of photos out of the strip. */
@@ -16,7 +17,7 @@ export interface StripHandlers {
   /** A drag starts on a photo: returns the photos it carries (п. 4.5). */
   onDragStart(id: number): number[]
   onDragEnd(): void
-  /** The dragged photos are dropped onto a photo with coordinates: they get its coordinates. */
+  /** A drop onto a photo (п. 4.5): these photos get these coordinates. */
   onDropOnPhoto(ids: number[], coords: LatLon): void
   /** The photos being dragged right now (drag data cannot be read before the drop). */
   dragged(): number[] | null
@@ -114,7 +115,8 @@ export class Strip {
       this.clearDropTarget()
       this.h.onDragEnd()
     })
-    // Dropping onto a photo with coordinates gives them to the dragged photos (п. 4.5).
+    // Dropping onto a photo with coordinates gives them to the dragged photos; onto one without,
+    // it gets the common coordinates of the dragged photos (п. 4.5).
     item.addEventListener('dragover', (e) => {
       if (!this.canDropOn(p.id)) return
       e.preventDefault()
@@ -126,22 +128,24 @@ export class Strip {
       if (!item.contains(e.relatedTarget as Node | null)) item.classList.remove('drop-target')
     })
     item.addEventListener('drop', (e) => {
-      const ids = this.h.dragged()
-      const target = this.photos[p.id]
+      const drop = this.dropOn(p.id)
       this.clearDropTarget()
-      if (!ids || !target?.coords || !this.canDropOn(p.id)) return
+      if (!drop) return
       e.preventDefault()
       e.stopPropagation()
-      this.h.onDropOnPhoto(ids, target.coords)
+      this.h.onDropOnPhoto(drop.ids, drop.coords)
     })
     return item
   }
 
-  /** A target needs coordinates; dropping a photo onto itself does nothing. */
-  private canDropOn(id: number): boolean {
+  /** What a drop onto this photo would do; null — it cannot be dropped here. */
+  private dropOn(id: number): { ids: number[]; coords: LatLon } | null {
     const ids = this.h.dragged()
-    if (!ids || !this.photos[id]?.coords) return false
-    return !(ids.length === 1 && ids[0] === id)
+    return ids ? dropOnPhoto(this.photos, ids, id) : null
+  }
+
+  private canDropOn(id: number): boolean {
+    return this.dropOn(id) !== null
   }
 
   private dragStart(e: DragEvent, id: number): void {
@@ -195,6 +199,16 @@ export class Strip {
       item.append(addr)
     } else if (!p.address && addr) {
       addr.remove()
+    }
+    let alt = item.querySelector<HTMLElement>('.badge-altitude')
+    if (p.altitude !== null && !alt) {
+      alt = document.createElement('div')
+      alt.className = 'badge-altitude'
+      alt.title = this.t('photo.hasAltitude')
+      alt.innerHTML = ALTITUDE_SVG
+      item.append(alt)
+    } else if (p.altitude === null && alt) {
+      alt.remove()
     }
     let mod = item.querySelector<HTMLElement>('.badge-modified')
     if (p.modified && !mod) {

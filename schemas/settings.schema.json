@@ -174,6 +174,19 @@
         }
       }
     },
+    "elevation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Altitudes of photos by their coordinates (Tools → Get Altitude): the Open-Meteo Elevation API.",
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^https?://",
+          "default": "https://api.open-meteo.com/v1/elevation",
+          "description": "Address of the elevation service (Open-Meteo Elevation API or one that answers the same way)."
+        }
+      }
+    },
     "folders": {
       "type": "object",
       "additionalProperties": false,

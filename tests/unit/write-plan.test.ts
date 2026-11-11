@@ -11,6 +11,7 @@ const NO_ADDRESS = [
   '-XMP-photoshop:City=',
   '-XMP-iptcCore:Location='
 ]
+const NO_XMP_ALTITUDE = ['-XMP-exif:GPSAltitude=', '-XMP-exif:GPSAltitudeRef=']
 const NO_IPTC = [
   '-IPTC:Country-PrimaryLocationName=',
   '-IPTC:Country-PrimaryLocationCode=',
@@ -32,10 +33,22 @@ describe('where coordinates are written (tz.md, пп. 6.2–6.4)', () => {
       '-EXIF:GPSLatitudeRef=S',
       '-EXIF:GPSLongitude=151.2153',
       '-EXIF:GPSLongitudeRef=W',
-      // No address: an old one goes with the old coordinates (п. 6.2), from XMP and IPTC.
+      // No altitude and no address: old ones go with the old coordinates (п. 6.2).
+      '-EXIF:GPSAltitude=',
+      '-EXIF:GPSAltitudeRef=',
       ...NO_ADDRESS,
       ...NO_IPTC
     ])
+  })
+
+  it('the altitude goes with the coordinates: EXIF, and XMP where the coordinates go (п. 5.6)', () => {
+    const jpeg = writePlan({ path: 'a.jpg', write: 'file', xmpCoords: true, sidecar: null }, SW, null, 290.04)
+    expect(jpeg[0]!.args).toEqual(
+      expect.arrayContaining(['-EXIF:GPSAltitude=290.04', '-EXIF:GPSAltitudeRef=0', '-XMP-exif:GPSAltitude=290.04', '-XMP-exif:GPSAltitudeRef=0'])
+    )
+    // Below sea level: the value is unsigned, Ref 1.
+    const dead = writePlan({ path: 'r.cr2', write: 'xmp', xmpCoords: false, sidecar: { path: 'r.xmp', exists: true, coords: true } }, SW, null, -430)
+    expect(dead[0]!.args).toEqual(expect.arrayContaining(['-XMP-exif:GPSAltitude=430', '-XMP-exif:GPSAltitudeRef=1']))
   })
 
   it('the address goes to the XMP of the file; IPTC place names are removed (п. 5.5)', () => {
@@ -86,6 +99,7 @@ describe('where coordinates are written (tz.md, пп. 6.2–6.4)', () => {
       '-n',
       '-XMP-exif:GPSLatitude=-33.8568',
       '-XMP-exif:GPSLongitude=-151.2153',
+      ...NO_XMP_ALTITUDE,
       ...xmpAddressArgs(LVIV)
     ])
     const noCoords = writePlan({ ...base, sidecar: { path: 'h.xmp', exists: true, coords: false } }, SW, LVIV)
@@ -103,7 +117,7 @@ describe('where coordinates are written (tz.md, пп. 6.2–6.4)', () => {
         path: 'IMG.xmp',
         kind: 'sidecar',
         create: true,
-        args: ['-overwrite_original', '-n', '-XMP-exif:GPSLatitude=-33.8568', '-XMP-exif:GPSLongitude=-151.2153', ...NO_ADDRESS]
+        args: ['-overwrite_original', '-n', '-XMP-exif:GPSLatitude=-33.8568', '-XMP-exif:GPSLongitude=-151.2153', ...NO_XMP_ALTITUDE, ...NO_ADDRESS]
       }
     ])
     const existing = writePlan(

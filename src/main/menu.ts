@@ -16,6 +16,7 @@ export interface MenuHandlers {
   toggleThumbnails(): void
   setFilter(filter: StripFilter): void
   toggleAddress(): void
+  toggleAltitude(): void
   shortcuts(): void
   about(): void
 }
@@ -28,6 +29,7 @@ export const MENU_ID = {
   showOnMap: 'view.showOnMap',
   thumbnails: 'view.thumbnails',
   address: 'tools.address',
+  altitude: 'tools.altitude',
   filter: {
     all: 'view.filter.all',
     coords: 'view.filter.coords',
@@ -117,6 +119,7 @@ export function buildMenu(t: Translate, h: MenuHandlers, recent: string[], dev: 
     label: t('menu.tools'),
     submenu: [
       { id: MENU_ID.address, label: t('menu.getAddress'), type: 'checkbox', click: h.toggleAddress },
+      { id: MENU_ID.altitude, label: t('menu.getAltitude'), type: 'checkbox', click: h.toggleAltitude },
       { type: 'separator' },
       { label: t('menu.openSettings'), click: h.openSettings },
       { label: t('menu.openLogs'), click: h.openLogs }

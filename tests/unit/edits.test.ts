@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { assignAddress, assignCoords, normalizeCoords, photoCounts, photosAt, photosToSave } from '@shared/edits'
+import { assignAddress, assignAltitude, assignCoords, dropOnPhoto, normalizeCoords, pastePhotoData, photoCounts, photosAt, photosToSave } from '@shared/edits'
 import { validSetCoords } from '@shared/ipc'
 import type { Address, LatLon, Photo } from '@shared/photo'
 
 function photo(id: number, coords: LatLon | null, modified = false): Photo {
   return {
     id, name: `p${id}.jpg`, path: `C:\\f\\p${id}.jpg`, date: null, dateSource: 'file',
-    coords, coordSource: coords ? 'exif' : null, address: null, modified
+    coords, coordSource: coords ? 'exif' : null, address: null, altitude: null, modified
   }
 }
 
@@ -15,7 +15,7 @@ const B = { lat: -33.8568, lon: 151.2153 }
 
 describe('assigning coordinates (tz.md, пп. 4.5, 4.7)', () => {
   const photos = [photo(0, A), photo(1, null), photo(2, A), photo(3, B)]
-  const file = photos.map((p) => ({ coords: p.coords, address: p.address }))
+  const file = photos.map((p) => ({ coords: p.coords, address: p.address, altitude: p.altitude }))
 
   it('all given photos get the point and are marked modified', () => {
     const changed = assignCoords(photos, file, [1, 3], A)
@@ -55,7 +55,7 @@ describe('assigning coordinates (tz.md, пп. 4.5, 4.7)', () => {
   it('the address goes with the old coordinates; a found address is a change too (пп. 5.5, 6.2)', () => {
     const LVIV: Address = { country: 'Україна', countryCode: 'UA', state: 'Львівська область', city: 'Львів', location: 'площа Ринок, 1' }
     const withAddress = [{ ...photo(0, A), address: LVIV }, photo(1, A)]
-    const fileMeta = withAddress.map((p) => ({ coords: p.coords, address: p.address }))
+    const fileMeta = withAddress.map((p) => ({ coords: p.coords, address: p.address, altitude: p.altitude }))
     // Moving drops the address.
     const [moved] = assignCoords(withAddress, fileMeta, [0], B)
     expect(moved).toMatchObject({ coords: B, address: null, modified: true })
@@ -68,6 +68,54 @@ describe('assigning coordinates (tz.md, пп. 4.5, 4.7)', () => {
     const [got] = assignAddress(withAddress, fileMeta, [1], LVIV)
     expect(got).toMatchObject({ address: LVIV, modified: true })
     expect(assignAddress([withAddress[0]!, got!], fileMeta, [1], LVIV)).toEqual([])
+  })
+
+  it('the altitude goes with the old coordinates too; a found altitude is a change (пп. 5.6, 6.2)', () => {
+    const high = [{ ...photo(0, A), altitude: 290 }, photo(1, A)]
+    const fileMeta = high.map((p) => ({ coords: p.coords, address: p.address, altitude: p.altitude }))
+    expect(assignCoords(high, fileMeta, [0], B)[0]).toMatchObject({ altitude: null, modified: true })
+    const [got] = assignAltitude(high, fileMeta, [1], 290)
+    expect(got).toMatchObject({ altitude: 290, modified: true })
+    // The same altitude again (to a centimetre): nothing changes.
+    expect(assignAltitude([high[0]!, got!], fileMeta, [0, 1], 290.001)).toEqual([])
+  })
+
+  it('drop in the strip works both ways (п. 4.5)', () => {
+    // photos: 0 A, 1 none, 2 A, 3 B
+    // Onto a photo with coordinates: the dragged ones get them.
+    expect(dropOnPhoto(photos, [1], 3)).toEqual({ ids: [1], coords: B })
+    expect(dropOnPhoto(photos, [0, 1], 3)).toEqual({ ids: [0, 1], coords: B })
+    // Onto a photo without coordinates: it gets the common coordinates of the dragged ones.
+    expect(dropOnPhoto(photos, [0], 1)).toEqual({ ids: [1], coords: A })
+    expect(dropOnPhoto(photos, [0, 2], 1)).toEqual({ ids: [1], coords: A })
+    // Different points, or a dragged photo without coordinates: nothing to give.
+    expect(dropOnPhoto(photos, [0, 3], 1)).toBeNull()
+    expect(dropOnPhoto([...photos, photo(4, null)], [4], 1)).toBeNull()
+    // Onto itself: nothing.
+    expect(dropOnPhoto(photos, [3], 3)).toBeNull()
+  })
+
+  it('Ctrl+V of a copied photo: coordinates, address and altitude go together (п. 4.10)', () => {
+    const LVIV: Address = { country: 'Україна', countryCode: 'UA', state: '', city: 'Львів', location: '' }
+    // 0: elsewhere with its own address and altitude; 1: none; 2: already at A with other data.
+    const list = [
+      { ...photo(0, B), address: { ...LVIV, city: 'Sydney' }, altitude: 50 },
+      photo(1, null),
+      { ...photo(2, A), altitude: 999 }
+    ]
+    const meta = list.map((p) => ({ coords: p.coords, address: p.address, altitude: p.altitude }))
+    const changed = pastePhotoData(list, meta, [0, 1, 2], A, LVIV, 290)
+    expect(changed.map((p) => [p.id, p.coords, p.address?.city, p.altitude, p.modified])).toEqual([
+      [0, A, 'Львів', 290, true],
+      [1, A, 'Львів', 290, true],
+      [2, A, 'Львів', 290, true]
+    ])
+    // Copied without address and altitude: the pasted photos have none either.
+    const bare = pastePhotoData(list, meta, [2], A, null, null)
+    expect(bare.map((p) => [p.id, p.address, p.altitude])).toEqual([[2, null, null]])
+    expect(validSetCoords({ ids: [0], coords: A, copied: { address: LVIV, altitude: 290 } })).toBe(true)
+    expect(validSetCoords({ ids: [0], coords: A, copied: { address: { city: 1 }, altitude: 290 } })).toBe(false)
+    expect(validSetCoords({ ids: [0], coords: null, copied: { address: null, altitude: null } })).toBe(false)
   })
 
   it('unknown ids and duplicates are ignored', () => {

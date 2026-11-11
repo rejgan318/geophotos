@@ -49,6 +49,9 @@
     "url": "https://nominatim.openstreetmap.org",
     "minIntervalMs": 1000
   },
+  "elevation": {
+    "url": "https://api.open-meteo.com/v1/elevation"
+  },
   "folders": {
     "subfolders": "ask"
   },

@@ -1,5 +1,5 @@
 import type { Strings } from './i18n'
-import type { FolderData, LatLon, Photo } from './photo'
+import type { Address, FolderData, LatLon, Photo } from './photo'
 import type { SearchResult } from './search'
 import type { MapSource, MarkerStyle } from './settings'
 
@@ -23,7 +23,7 @@ export const IPC = {
   viewState: 'ui:viewState',
   /** event, main → window: a command from the menu (View). */
   command: 'ui:command',
-  /** event, main → window: how many points still wait for their address (tz.md, п. 5.5). */
+  /** event, main → window: how many points still wait for their address and altitude (пп. 5.5, 5.6). */
   queueState: 'queue:state',
   /** event, main → window: progress and result of saving. */
   saveState: 'save:state',
@@ -88,6 +88,21 @@ export interface SetCoordsRequest {
   ids: number[]
   /** null removes the coordinates (Del, tz.md, п. 6.6). */
   coords: LatLon | null
+  /** Ctrl+V of what Ctrl+C took from a photo (п. 4.10): its address and altitude go along. */
+  copied?: { address: Address | null; altitude: number | null }
+}
+
+const ADDRESS_KEYS = ['country', 'countryCode', 'state', 'city', 'location'] as const
+
+function validCopied(v: unknown): boolean {
+  if (!v || typeof v !== 'object') return false
+  const r = v as Record<string, unknown>
+  const alt = r['altitude']
+  if (alt !== null && !(typeof alt === 'number' && Number.isFinite(alt))) return false
+  const a = r['address']
+  if (a === null) return true
+  if (!a || typeof a !== 'object') return false
+  return ADDRESS_KEYS.every((k) => typeof (a as Record<string, unknown>)[k] === 'string')
 }
 
 export interface PhotosChanged {
@@ -137,13 +152,14 @@ export type AboutTarget = 'license' | 'notices'
 /** Saving (tz.md, п. 6.8): n of N while it goes, then the result. */
 export type SaveState =
   | { phase: 'progress'; done: number; total: number }
-  /** Saving waits until the addresses are found (п. 5.5): how many points are left. */
+  /** Saving waits until the addresses and altitudes are found (пп. 5.5, 5.6): how many are left. */
   | { phase: 'waiting'; left: number }
   | { phase: 'done'; saved: number; failed: number }
 
-/** Addresses still to find: points left and about how long it takes, seconds (п. 5.5). */
+/** Addresses and altitudes still to find: points left and about how long, seconds (пп. 5.5, 5.6). */
 export interface QueueState {
   address: number
+  altitude: number
   seconds: number
 }
 
@@ -169,6 +185,7 @@ export function validSetCoords(v: unknown): v is SetCoordsRequest {
   const c = r['coords'] as Record<string, unknown> | null | undefined
   const ids = r['ids']
   if (!Array.isArray(ids) || !ids.every((id) => Number.isInteger(id) && (id as number) >= 0)) return false
+  if (r['copied'] !== undefined && (c === null || !validCopied(r['copied']))) return false
   if (c === null) return true
   return (
     !!c &&

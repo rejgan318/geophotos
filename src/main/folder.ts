@@ -5,6 +5,7 @@ import {
   ADDRESS_READ_ARGS,
   comparePhotos,
   pickAddress,
+  pickAltitude,
   embeddedPreviewTag,
   pickCoords,
   tagValue,
@@ -36,6 +37,10 @@ export interface ScannedFolder {
 }
 
 const COORD_TAGS = [
+  '-EXIF:GPSAltitude',
+  '-EXIF:GPSAltitudeRef',
+  '-XMP:GPSAltitude',
+  '-XMP:GPSAltitudeRef',
   '-EXIF:GPSLatitude',
   '-EXIF:GPSLatitudeRef',
   '-EXIF:GPSLongitude',
@@ -61,7 +66,14 @@ const TAGS = [
   '-ExifTool:Error'
 ]
 
-const SIDECAR_TAGS = ['-File:FileName', '-XMP:GPSLatitude', '-XMP:GPSLongitude', ...ADDRESS_READ_ARGS]
+const SIDECAR_TAGS = [
+  '-File:FileName',
+  '-XMP:GPSLatitude',
+  '-XMP:GPSLongitude',
+  '-XMP:GPSAltitude',
+  '-XMP:GPSAltitudeRef',
+  ...ADDRESS_READ_ARGS
+]
 
 /** Whether a folder has folders inside it (tz.md, п. 3.2). */
 export async function hasSubfolders(folder: string): Promise<boolean> {
@@ -176,6 +188,7 @@ export interface RereadCoords {
   coords: LatLon | null
   coordSource: CoordSource | null
   address: Address | null
+  altitude: number | null
   xmpCoords: boolean
   sidecarExists: boolean
   sidecarCoords: boolean
@@ -200,6 +213,7 @@ export async function rereadCoords(exiftool: ExifTool, sources: readonly PhotoSo
       coords,
       coordSource: source,
       address: pickAddress(rec, side),
+      altitude: pickAltitude(rec, side),
       xmpCoords: xmpCoords(rec) !== null,
       sidecarExists: !!side,
       sidecarCoords: !!side && xmpCoords(side) !== null

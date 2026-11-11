@@ -11,6 +11,7 @@
   --modified: #ffb300;
   --no-coords: #9e9e9e;
   --address: #64b5f6;
+  --altitude: #bcaaa4;
 }
 
 html,
@@ -217,6 +218,26 @@ body {
   width: 11px;
   height: 11px;
   fill: var(--address);
+}
+
+/* Has an altitude (tz.md, п. 5.6): the next place of the top row. */
+.thumb .badge-altitude {
+  position: absolute;
+  top: 3px;
+  right: 39px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thumb .badge-altitude svg {
+  width: 11px;
+  height: 11px;
+  fill: var(--altitude);
 }
 
 /* A photo with coordinates under photos dragged within the strip (tz.md, п. 4.5). */

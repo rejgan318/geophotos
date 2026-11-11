@@ -4,8 +4,8 @@ import { photoCounts, photosAt } from '@shared/edits'
 import { formatDuration } from '@shared/duration'
 import { makeTranslate } from '@shared/i18n'
 import type { MapMode, ViewMode } from '@shared/ipc'
-import type { FolderData, LatLon } from '@shared/photo'
-import { photoCoords, photoDate } from './describe'
+import type { Address, FolderData, LatLon } from '@shared/photo'
+import { photoDate } from './describe'
 import { MapView } from './map'
 import { PhotoView } from './viewer'
 import { HelpView } from './help'
@@ -65,10 +65,9 @@ async function start(): Promise<void> {
     const many = sel.ids.size > 1 ? `${t('status.selected', { count: sel.ids.size })} · ` : ''
     if (!folder) statusPhoto.textContent = t('status.noFolder')
     else if (!p) statusPhoto.textContent = t('status.noSelection')
-    else {
-      const mod = p.modified ? ` · ${t('photo.modified')}` : ''
-      statusPhoto.textContent = `${many}${p.name} · ${photoDate(p, t)} · ${photoCoords(p, t)}${mod}`
-    }
+    // Name and date only (tz.md, п. 4.13): the coordinates are copied by Ctrl+C, "modified" is
+    // the pencil badge in the strip.
+    else statusPhoto.textContent = `${many}${p.name} · ${photoDate(p, t)}`
   }
 
   // The counter is three buttons that filter the strip; a second click on the active one
@@ -151,12 +150,18 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     }, 3000)
   }
 
-  /** Ctrl+C: the current photo's coordinates into the clipboard (tz.md, п. 4.10). */
+  /** What the last Ctrl+C took from a photo: the clipboard text and the data that goes with it. */
+  let copied: { text: string; address: Address | null; altitude: number | null } | null = null
+
+  /** Ctrl+C: the current photo's coordinates, address and altitude (tz.md, п. 4.10). */
   const copyCoords = (): void => {
     const p = sel.current === null ? undefined : folder?.photos[sel.current]
     if (!p) return
     if (!p.coords) return shortNote(t('clipboard.noCoords'))
-    void window.geophotos.writeClipboard(clipboardText(p.coords))
+    const text = clipboardText(p.coords)
+    void window.geophotos.writeClipboard(text)
+    // The address and altitude go along while the clipboard still holds this text (п. 4.10).
+    copied = { text, address: p.address, altitude: p.altitude }
   }
 
   /**
@@ -165,9 +170,13 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
    */
   const pasteCoords = async (): Promise<void> => {
     if (!folder || saving || !sel.ids.size) return
-    const coords = parseCoords(await window.geophotos.readClipboard())
+    const text = await window.geophotos.readClipboard()
+    const coords = parseCoords(text)
     if (!coords) return shortNote(t('clipboard.nothing'))
-    await setCoords([...sel.ids], coords)
+    // Copied from a photo here (the clipboard was not changed since): its address and altitude
+    // too; from elsewhere: only the coordinates.
+    const extra = copied && copied.text === text.trim() ? { address: copied.address, altitude: copied.altitude } : undefined
+    await setCoords([...sel.ids], coords, extra)
     if (view === 'map') map.reveal(coords)
   }
 
@@ -228,10 +237,14 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   }
 
   /** New coordinates for the photos; null removes them (Del, tz.md, п. 6.6). */
-  const setCoords = async (ids: number[], coords: LatLon | null): Promise<void> => {
+  const setCoords = async (
+    ids: number[],
+    coords: LatLon | null,
+    copiedData?: { address: Address | null; altitude: number | null }
+  ): Promise<void> => {
     if (!folder || saving || !ids.length) return
     note('')
-    await window.geophotos.setCoords({ ids, coords })
+    await window.geophotos.setCoords({ ids, coords, ...(copiedData ? { copied: copiedData } : {}) })
   }
 
   // Photo ids are their positions in the strip, so they double as indexes.
@@ -421,17 +434,21 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     showPhoto()
   })
 
-  // Addresses still to find (tz.md, п. 5.5): how many points and about how long.
+  // Addresses and altitudes still to find (tz.md, пп. 5.5, 5.6): how many points, about how long.
   window.geophotos.onQueueState((q) => {
-    statusQueue.textContent = q.address ? t('queue.address', { count: q.address, time: formatDuration(q.seconds, t) }) : ''
+    const list = [
+      ...(q.address ? [t('queue.addresses', { count: q.address })] : []),
+      ...(q.altitude ? [t('queue.altitudes', { count: q.altitude })] : [])
+    ].join(', ')
+    statusQueue.textContent = list ? t('queue.left', { list, time: formatDuration(q.seconds, t) }) : ''
   })
 
   // Saving (tz.md, п. 6.8): n of N over the window; the window waits until it ends.
   let progressTimer: number | undefined
   window.geophotos.onSaveState((s) => {
-    // Saving waits for the addresses (п. 5.5): the overlay says how many are left.
+    // Saving waits for the addresses and altitudes (пп. 5.5, 5.6): the overlay says how many are left.
     if (s.phase === 'waiting') {
-      progressText.textContent = t('save.waitingAddress', { count: s.left })
+      progressText.textContent = t('save.waiting', { count: s.left })
       progress.hidden = s.left === 0
       return
     }

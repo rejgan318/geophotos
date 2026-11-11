@@ -72,7 +72,7 @@ describe('selection in the strip (tz.md, п. 4.4)', () => {
 })
 
 function photo(id: number, coords: LatLon | null, modified = false): Photo {
-  return { id, name: `${id}`, path: `${id}`, date: null, dateSource: 'file', coords, coordSource: null, address: null, modified }
+  return { id, name: `${id}`, path: `${id}`, date: null, dateSource: 'file', coords, coordSource: null, address: null, altitude: null, modified }
 }
 
 describe('strip filter by the status bar counter (tz.md, п. 4.13)', () => {

@@ -25,6 +25,7 @@ export interface AppState {
 
 export interface ToolsState {
   address: boolean
+  altitude: boolean
 }
 
 export interface WindowState {
@@ -44,7 +45,7 @@ export interface MapState {
   thumbnails: boolean
 }
 
-const EMPTY: AppState = { recentFolders: [], lastSession: null, window: null, map: null, tools: { address: false } }
+const EMPTY: AppState = { recentFolders: [], lastSession: null, window: null, map: null, tools: { address: false, altitude: false } }
 
 type Obj = Record<string, unknown>
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -93,7 +94,10 @@ export function readState(file: string): AppState {
       lastSession: readSession(v['lastSession']),
       window: readWindow(v['window']),
       map: readMap(v['map']),
-      tools: { address: isObj(v['tools']) && v['tools']['address'] === true }
+      tools: {
+        address: isObj(v['tools']) && v['tools']['address'] === true,
+        altitude: isObj(v['tools']) && v['tools']['altitude'] === true
+      }
     }
   } catch {
     return { ...EMPTY }

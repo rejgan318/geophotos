@@ -53,7 +53,7 @@ describe('address by coordinates (tz.md, п. 5.5)', () => {
     const B = { lat: 3, lon: 4 }
     const photo = (id: number, coords: LatLon | null, address = false): Photo => ({
       id, name: `${id}`, path: `${id}`, date: null, dateSource: 'file', coords, coordSource: null,
-      address: address ? { country: 'X', countryCode: '', state: '', city: '', location: '' } : null, modified: false
+      address: address ? { country: 'X', countryCode: '', state: '', city: '', location: '' } : null, altitude: null, modified: false
     })
     const photos = [photo(0, A), photo(1, A), photo(2, null), photo(3, B, true), photo(4, B)]
     expect([...pointsWithoutAddress(photos, new Set()).values()]).toEqual([A, B])
