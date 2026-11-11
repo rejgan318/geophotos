@@ -42,6 +42,7 @@ export interface InitData {
     defaultSource: string
     initialView: { lat: number; lon: number; zoom: number }
     markers: MarkerStyle
+    hoverThumbSize: number
   }
   /** Scheme of thumbnail URLs: `${thumbScheme}://f<generation>/<photo id>`. */
   thumbScheme: string

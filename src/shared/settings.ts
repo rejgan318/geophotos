@@ -14,6 +14,8 @@ export interface Settings {
     initialView: { lat: number; lon: number; zoom: number }
     defaultSource: string
     markers: MarkerStyle
+    /** Longer side of the thumbnail over a hovered marker, px (tz.md, п. 4.8.2). */
+    hoverThumbSize: number
     tileSources: Record<string, TileSource>
   }
   log: { level: LogLevel; maxSizeKb: number; maxFiles: number }

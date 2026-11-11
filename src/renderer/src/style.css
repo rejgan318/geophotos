@@ -492,6 +492,48 @@ body {
   box-shadow: 0 0 0 2px #fff, 0 1px 6px rgba(0, 0, 0, 0.7);
 }
 
+/* Thumbnail over a hovered marker (tz.md, п. 4.8.2); --hover-size comes from the settings. */
+.leaflet-tooltip.hover-thumb {
+  padding: 3px;
+  border: none;
+  border-radius: 4px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+
+.hover-thumb img {
+  display: block;
+  max-width: var(--hover-size);
+  max-height: var(--hover-size);
+  margin: 0 auto;
+}
+
+.hover-thumb .hover-placeholder {
+  width: var(--hover-size);
+  height: var(--hover-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-thumb);
+  color: var(--fg-dim);
+}
+
+.hover-thumb .hover-placeholder svg {
+  width: 40%;
+  height: 40%;
+}
+
+.hover-thumb .hover-name {
+  max-width: var(--hover-size);
+  margin: 2px auto 0;
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+  color: #222;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Photo markers and groups on the map (tz.md, п. 4.8.1); colors come from the settings. */
 .photo-pin {
   background: none;

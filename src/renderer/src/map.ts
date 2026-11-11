@@ -2,10 +2,11 @@ import L from './leaflet-global'
 import 'leaflet.markercluster'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
-import type { InitData } from '@shared/ipc'
+import { thumbUrl, type InitData } from '@shared/ipc'
 import type { LatLon, Photo } from '@shared/photo'
 import type { Place } from '@shared/search'
 import type { MarkerStyle } from '@shared/settings'
+import { FILE_SVG } from './icons'
 
 /** Pin with a white dot; the tip is at the bottom centre (viewBox 24×34). */
 function pinSvg(fill: string, stroke: string): string {
@@ -24,7 +25,9 @@ function pinIcon(style: MarkerStyle, selected: boolean): L.DivIcon {
     className: selected ? 'photo-pin selected' : 'photo-pin',
     html: pinSvg(selected ? style.selectedColor : style.color, '#fff'),
     iconSize: [w, h],
-    iconAnchor: [w / 2, h]
+    iconAnchor: [w / 2, h],
+    // The thumbnail on hover sits right above the pin (tz.md, п. 4.8.2).
+    tooltipAnchor: [0, -h]
   })
 }
 
@@ -72,6 +75,9 @@ export class MapView {
   private readonly icon: L.DivIcon
   private readonly selectedIcon: L.DivIcon
   private photos: Photo[] = []
+  /** Generation of the open folder, part of thumbnail URLs. */
+  private generation = 0
+  private readonly hoverSize: number
   private markers = new Map<number, L.Marker>()
   private selected: ReadonlySet<number> = new Set()
   private current: number | null = null
@@ -87,6 +93,7 @@ export class MapView {
   ) {
     this.initialView = config.initialView
     this.style = config.markers
+    this.hoverSize = config.hoverThumbSize
     this.icon = pinIcon(this.style, false)
     this.selectedIcon = pinIcon(this.style, true)
 
@@ -161,7 +168,8 @@ export class MapView {
   }
 
   /** Markers of photos with coordinates; the view fits them, or the initial view if none (п. 5.2). */
-  setPhotos(photos: Photo[]): void {
+  setPhotos(photos: Photo[], generation: number): void {
+    this.generation = generation
     this.cluster.clearLayers()
     this.markers.clear()
     this.photos = [...photos]
@@ -240,10 +248,14 @@ export class MapView {
     const m = L.marker(L.latLng(p.coords.lat, p.coords.lon), {
       icon: selected ? this.selectedIcon : this.icon,
       zIndexOffset: selected ? 10000 : 0,
-      title: p.name,
       draggable: true,
       autoPan: true
     })
+    // The photo's thumbnail over the pin while the mouse is on it, not while it is dragged.
+    // Made on the first hover and kept: Leaflet asks for the content again on every update.
+    let thumb: HTMLElement | null = null
+    m.bindTooltip(() => (thumb ??= this.hoverThumb(p.id, m)), { direction: 'top', className: 'hover-thumb', opacity: 1 })
+    m.on('dragstart', () => m.closeTooltip())
     m.on('click', (e: L.LeafletMouseEvent) =>
       this.h.onMarkerClick(p.id, { ctrl: e.originalEvent.ctrlKey, shift: e.originalEvent.shiftKey })
     )
@@ -256,6 +268,37 @@ export class MapView {
       })
     })
     return m
+  }
+
+  /**
+   * Thumbnail with the file name shown over a hovered marker (tz.md, п. 4.8.2): the strip's
+   * thumbnail with its proportions, or a placeholder if the photo has no preview.
+   */
+  private hoverThumb(id: number, marker: L.Marker): HTMLElement {
+    const box = document.createElement('div')
+    box.style.setProperty('--hover-size', `${this.hoverSize}px`)
+    const img = document.createElement('img')
+    img.alt = ''
+    img.draggable = false
+    // The tooltip is placed by its size: place it again once the image has one.
+    img.addEventListener('load', () => marker.getTooltip()?.update(), { once: true })
+    img.addEventListener(
+      'error',
+      () => {
+        const ph = document.createElement('div')
+        ph.className = 'hover-placeholder'
+        ph.innerHTML = FILE_SVG
+        img.replaceWith(ph)
+        marker.getTooltip()?.update()
+      },
+      { once: true }
+    )
+    img.src = thumbUrl(this.generation, id)
+    const name = document.createElement('div')
+    name.className = 'hover-name'
+    name.textContent = this.photos[id]?.name ?? ''
+    box.append(img, name)
+    return box
   }
 
   /** Photos from the strip can be dropped anywhere on the map (п. 4.5). */

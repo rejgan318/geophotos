@@ -356,7 +356,7 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     sel = EMPTY_SELECTION
     filter = 'all'
     strip.setPhotos(data)
-    map.setPhotos(data.photos)
+    map.setPhotos(data.photos, data.generation)
     applyFilter()
     // The photo chosen in the dialog or dropped onto the window becomes selected (tz.md, п. 3.1).
     // Otherwise the first photo already is (a photo is always selected, п. 4.4).

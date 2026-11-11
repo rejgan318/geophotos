@@ -163,7 +163,8 @@ function initData(): InitData {
       sources,
       defaultSource: settings.map.defaultSource,
       initialView: settings.map.initialView,
-      markers: settings.map.markers
+      markers: settings.map.markers,
+      hoverThumbSize: settings.map.hoverThumbSize
     },
     thumbScheme: THUMB_SCHEME
   }
