@@ -1,6 +1,6 @@
 import { statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, protocol, session, shell } from 'electron'
 import { windowTitle } from '@shared/app-info'
 import { pathFromArgv } from '@shared/argv'
 import { SUPPORTED_EXTENSIONS } from '@shared/formats'
@@ -646,6 +646,11 @@ void app.whenReady().then(async () => {
     if (target === 'settings') await openSettingsFile()
     else if (target === 'logs') await openLogFolder()
     else if (target === 'license' || target === 'notices') await openLicenseFile(target)
+  })
+  // Ctrl+C / Ctrl+V of coordinates (tz.md, п. 4.10): plain text only.
+  ipcMain.handle(IPC.clipboardRead, () => clipboard.readText())
+  ipcMain.handle(IPC.clipboardWrite, (_e, text: unknown) => {
+    if (typeof text === 'string') clipboard.writeText(text)
   })
   ipcMain.handle(IPC.search, async (_e, query: unknown) => {
     if (typeof query !== 'string' || !query.trim()) return { ok: true, places: [] }

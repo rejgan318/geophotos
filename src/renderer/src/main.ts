@@ -1,4 +1,5 @@
 import './style.css'
+import { clipboardText, parseCoords } from '@shared/coords-parse'
 import { photoCounts, photosAt } from '@shared/edits'
 import { makeTranslate } from '@shared/i18n'
 import type { ViewMode } from '@shared/ipc'
@@ -133,8 +134,37 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     map.fitMarkers()
   }
 
+  let noteTimer: number | undefined
   const note = (text: string): void => {
+    window.clearTimeout(noteTimer)
     statusNote.textContent = text
+  }
+  /** A message that goes away by itself after a few seconds. */
+  const shortNote = (text: string): void => {
+    note(text)
+    noteTimer = window.setTimeout(() => {
+      if (statusNote.textContent === text) statusNote.textContent = ''
+    }, 3000)
+  }
+
+  /** Ctrl+C: the current photo's coordinates into the clipboard (tz.md, п. 4.10). */
+  const copyCoords = (): void => {
+    const p = sel.current === null ? undefined : folder?.photos[sel.current]
+    if (!p) return
+    if (!p.coords) return shortNote(t('clipboard.noCoords'))
+    void window.geophotos.writeClipboard(clipboardText(p.coords))
+  }
+
+  /**
+   * Ctrl+V: coordinates from the clipboard (copied from a photo or from elsewhere, п. 4.12) for
+   * all selected photos; the map pans to them if they are off screen.
+   */
+  const pasteCoords = async (): Promise<void> => {
+    if (!folder || saving || !sel.ids.size) return
+    const coords = parseCoords(await window.geophotos.readClipboard())
+    if (!coords) return shortNote(t('clipboard.nothing'))
+    await setCoords([...sel.ids], coords)
+    if (view === 'map') map.reveal(coords)
   }
 
   /** The one place where the selection changes: strip, map, status and main follow it. */
@@ -257,6 +287,17 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
         e.preventDefault()
         e.stopPropagation()
         if (!e.repeat) showOnMap()
+        return
+      }
+      // Ctrl+C / Ctrl+V of coordinates, by the physical key (any layout). Text fields keep
+      // their own copy and paste: they returned above.
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.code === 'KeyC' || e.code === 'KeyV')) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!e.repeat) {
+          if (e.code === 'KeyC') copyCoords()
+          else void pasteCoords()
+        }
         return
       }
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'a') {

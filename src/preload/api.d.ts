@@ -33,6 +33,8 @@ export interface GeoPhotosApi {
   aboutInfo(): Promise<AboutInfo>
   /** Opens the settings file (created if missing) or the log folder. */
   openAboutTarget(target: AboutTarget): Promise<void>
+  readClipboard(): Promise<string>
+  writeClipboard(text: string): Promise<void>
 }
 
 declare global {

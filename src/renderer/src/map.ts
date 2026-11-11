@@ -140,8 +140,10 @@ export class MapView {
     })
     this.map.addLayer(this.cluster)
 
-    // Groups are re-created when the map moves or zooms: mark the selected ones again.
-    this.map.on('zoomend moveend', () => this.highlightGroups())
+    // Groups are re-created when the map moves or zooms: mark the selected ones again. The group
+    // layer is added when the map gets its first view, so this waits for it too: otherwise it would
+    // run before the groups are redrawn, and a far move would lose the mark.
+    this.map.whenReady(() => this.map.on('zoomend moveend', () => this.highlightGroups()))
     this.cluster.on('animationend spiderfied unspiderfied', () => this.highlightGroups())
 
     this.acceptDrops()
@@ -320,6 +322,12 @@ export class MapView {
       this.map.panTo(marker.getLatLng())
       this.highlightGroups()
     })
+  }
+
+  /** Pans to a point if it is off screen; the zoom stays (pasted coordinates, п. 4.10). */
+  reveal(at: LatLon): void {
+    const ll = L.latLng(at.lat, at.lon)
+    if (!this.map.getBounds().pad(-0.08).contains(ll)) this.map.panTo(ll)
   }
 
   /** Where the marker is shown at the current zoom: itself, or the group it is hidden in. */

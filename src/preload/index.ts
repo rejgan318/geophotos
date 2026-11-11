@@ -36,7 +36,9 @@ const api: GeoPhotosApi = {
   },
   searchPlaces: (query) => ipcRenderer.invoke(IPC.search, query) as Promise<SearchResult>,
   aboutInfo: () => ipcRenderer.invoke(IPC.aboutInfo) as Promise<AboutInfo>,
-  openAboutTarget: (target) => ipcRenderer.invoke(IPC.aboutOpen, target) as Promise<void>
+  openAboutTarget: (target) => ipcRenderer.invoke(IPC.aboutOpen, target) as Promise<void>,
+  readClipboard: () => ipcRenderer.invoke(IPC.clipboardRead) as Promise<string>,
+  writeClipboard: (text) => ipcRenderer.invoke(IPC.clipboardWrite, text) as Promise<void>
 }
 
 contextBridge.exposeInMainWorld('geophotos', api)

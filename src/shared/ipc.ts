@@ -28,7 +28,11 @@ export const IPC = {
   /** invoke, window → main: data of Help → About. */
   aboutInfo: 'about:info',
   /** invoke, window → main: open the settings file or the log folder (links in About). */
-  aboutOpen: 'about:open'
+  aboutOpen: 'about:open',
+  /** invoke, window → main: text of the clipboard (Ctrl+V). */
+  clipboardRead: 'clipboard:read',
+  /** invoke, window → main: put text into the clipboard (Ctrl+C). */
+  clipboardWrite: 'clipboard:write'
 } as const
 
 export interface InitData {

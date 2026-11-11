@@ -25,6 +25,8 @@ export const SECTIONS: Section[] = [
       { keys: ['help.key.space'], text: 'help.photoView' },
       { keys: ['C'], text: 'help.showOnMap' },
       { keys: ['Ctrl+A'], text: 'help.selectAll' },
+      { keys: ['Ctrl+C'], text: 'help.copy' },
+      { keys: ['Ctrl+V'], text: 'help.paste' },
       { keys: ['Ctrl+S'], text: 'help.save' },
       { keys: ['Ctrl+O'], text: 'help.open' },
       { keys: ['F1'], text: 'help.help' },
