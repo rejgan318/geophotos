@@ -1,5 +1,6 @@
 import type { WriteMode } from './formats'
-import type { LatLon } from './photo'
+import { ADDRESS_TAGS } from './metadata'
+import { ADDRESS_FIELDS, type Address, type LatLon } from './photo'
 
 /** What is known about a photo's files when its coordinates are written. */
 export interface WriteInfo {
@@ -46,49 +47,57 @@ export function xmpArgs(c: LatLon): string[] {
  * which would be wrong without them: the whole GPS block of EXIF, the GPS fields of XMP, and the
  * place names that Lightroom shows (XMP and IPTC).
  */
-const ADDRESS_DELETE = [
-  '-XMP-photoshop:Country=',
-  '-XMP-photoshop:State=',
-  '-XMP-photoshop:City=',
-  '-XMP-iptcCore:Location=',
-  '-XMP-iptcCore:CountryCode='
-]
-const XMP_DELETE = ['-XMP-exif:GPS*=', ...ADDRESS_DELETE]
-const FILE_DELETE = [
-  '-GPS:all=',
-  '-IPTC:Country-PrimaryLocationName=',
-  '-IPTC:Country-PrimaryLocationCode=',
-  '-IPTC:Province-State=',
-  '-IPTC:City=',
-  '-IPTC:Sub-location=',
-  ...XMP_DELETE
-]
+const XMP_DELETE = ['-XMP-exif:GPS*=', ...xmpAddressArgs(null)]
+const FILE_DELETE = ['-GPS:all=', ...iptcAddressDelete(), ...XMP_DELETE]
+
+/**
+ * The address in XMP, as Lightroom keeps it (tz.md, п. 5.5); an empty field (or no address)
+ * removes the tag.
+ */
+export function xmpAddressArgs(a: Address | null): string[] {
+  return ADDRESS_FIELDS.map((f) => `-${ADDRESS_TAGS.xmp[f]}=${a ? a[f] : ''}`)
+}
+
+/** The older IPTC place names go: the address lives in XMP, and the two must not differ. */
+function iptcAddressDelete(): string[] {
+  return ADDRESS_FIELDS.map((f) => `-${ADDRESS_TAGS.iptc[f]}=`)
+}
 
 /** No `*_original` copies (tz.md, п. 6.3); -n: numbers as they are. */
 const COMMON = ['-overwrite_original', '-n']
 
 /**
- * Where and how the coordinates are written (tz.md, пп. 6.2–6.4): only latitude and longitude.
- * - Ordinary formats and DNG: EXIF of the file; the embedded XMP and the sidecar are updated with
- *   the same values if they already have coordinates, so that reading by п. 3.7 gives the new ones.
+ * Where and how the coordinates and the address are written (tz.md, пп. 6.2–6.4, 5.5).
+ * - Ordinary formats and DNG: coordinates in EXIF of the file; the embedded XMP and the sidecar
+ *   get the same values if they already have coordinates, so that reading by п. 3.7 gives the new
+ *   ones. The address goes to the XMP of the file and of an existing sidecar (read first, п. 3.7).
  * - Other RAW: only the sidecar; an existing one is updated, a missing one is created.
+ * No coordinates: everything is removed (Del, п. 6.6).
  */
-export function writePlan(info: WriteInfo, c: LatLon | null): WriteStep[] {
+export function writePlan(info: WriteInfo, c: LatLon | null, address: Address | null = null): WriteStep[] {
   if (!c) return deletePlan(info)
+  const addr = xmpAddressArgs(address)
   if (info.write === 'xmp') {
     if (!info.sidecar) throw new Error(`No sidecar for ${info.path}`)
-    return [{ path: info.sidecar.path, kind: 'sidecar', create: !info.sidecar.exists, args: [...COMMON, ...xmpArgs(c)] }]
+    return [
+      { path: info.sidecar.path, kind: 'sidecar', create: !info.sidecar.exists, args: [...COMMON, ...xmpArgs(c), ...addr] }
+    ]
   }
   const steps: WriteStep[] = [
     {
       path: info.path,
       kind: 'file',
       create: false,
-      args: [...COMMON, ...exifArgs(c), ...(info.xmpCoords ? xmpArgs(c) : [])]
+      args: [...COMMON, ...exifArgs(c), ...(info.xmpCoords ? xmpArgs(c) : []), ...addr, ...iptcAddressDelete()]
     }
   ]
-  if (info.sidecar?.exists && info.sidecar.coords) {
-    steps.push({ path: info.sidecar.path, kind: 'sidecar', create: false, args: [...COMMON, ...xmpArgs(c)] })
+  if (info.sidecar?.exists) {
+    steps.push({
+      path: info.sidecar.path,
+      kind: 'sidecar',
+      create: false,
+      args: [...COMMON, ...(info.sidecar.coords ? xmpArgs(c) : []), ...addr]
+    })
   }
   return steps
 }

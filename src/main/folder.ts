@@ -2,7 +2,9 @@ import { readdir } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { baseNameOf, formatOf, isSidecar, isSupported, sidecarNameOf, type PreviewKind } from '@shared/formats'
 import {
+  ADDRESS_READ_ARGS,
   comparePhotos,
+  pickAddress,
   embeddedPreviewTag,
   pickCoords,
   tagValue,
@@ -10,7 +12,7 @@ import {
   xmpCoords,
   type ExifRecord
 } from '@shared/metadata'
-import type { CoordSource, LatLon, Photo } from '@shared/photo'
+import type { Address, CoordSource, LatLon, Photo } from '@shared/photo'
 import type { WriteInfo } from '@shared/write-plan'
 import type { ExifTool } from './exiftool'
 
@@ -50,6 +52,7 @@ const TAGS = [
   '-EXIF:DateTimeOriginal',
   '-XMP:DateTimeOriginal',
   ...COORD_TAGS,
+  ...ADDRESS_READ_ARGS,
   '-EXIF:Orientation',
   '-PreviewImage',
   '-JpgFromRaw',
@@ -58,7 +61,7 @@ const TAGS = [
   '-ExifTool:Error'
 ]
 
-const SIDECAR_TAGS = ['-File:FileName', '-XMP:GPSLatitude', '-XMP:GPSLongitude']
+const SIDECAR_TAGS = ['-File:FileName', '-XMP:GPSLatitude', '-XMP:GPSLongitude', ...ADDRESS_READ_ARGS]
 
 /** Whether a folder has folders inside it (tz.md, п. 3.2). */
 export async function hasSubfolders(folder: string): Promise<boolean> {
@@ -172,6 +175,7 @@ async function scanOne(root: string, folder: string, exiftool: ExifTool): Promis
 export interface RereadCoords {
   coords: LatLon | null
   coordSource: CoordSource | null
+  address: Address | null
   xmpCoords: boolean
   sidecarExists: boolean
   sidecarCoords: boolean
@@ -183,7 +187,7 @@ export interface RereadCoords {
  */
 export async function rereadCoords(exiftool: ExifTool, sources: readonly PhotoSource[]): Promise<RereadCoords[]> {
   if (!sources.length) return []
-  const files = await recordsByPath(exiftool, sources.map((s) => s.path), ['-File:FileName', ...COORD_TAGS])
+  const files = await recordsByPath(exiftool, sources.map((s) => s.path), ['-File:FileName', ...COORD_TAGS, ...ADDRESS_READ_ARGS])
   const sidecarPaths = sources.flatMap((s) => (s.sidecar ? [s.sidecar.path] : []))
   const sidecars = sidecarPaths.length
     ? await recordsByPath(exiftool, sidecarPaths, SIDECAR_TAGS)
@@ -195,6 +199,7 @@ export async function rereadCoords(exiftool: ExifTool, sources: readonly PhotoSo
     return {
       coords,
       coordSource: source,
+      address: pickAddress(rec, side),
       xmpCoords: xmpCoords(rec) !== null,
       sidecarExists: !!side,
       sidecarCoords: !!side && xmpCoords(side) !== null

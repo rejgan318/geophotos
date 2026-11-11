@@ -2,7 +2,7 @@ import type { Translate } from '@shared/i18n'
 import { thumbUrl } from '@shared/ipc'
 import type { FolderData, LatLon, Photo } from '@shared/photo'
 import { photoTooltip } from './describe'
-import { FILE_SVG, PENCIL_SVG, PIN_SVG } from './icons'
+import { ADDRESS_SVG, FILE_SVG, PENCIL_SVG, PIN_SVG } from './icons'
 import type { Selection } from './selection'
 
 /** Type of the data carried by a drag of photos out of the strip. */
@@ -184,6 +184,17 @@ export class Strip {
       item.append(badge)
     } else if (!p.coords && badge) {
       badge.remove()
+    }
+    // Only the fact that there is an address; the address itself is in the photo view (п. 4.3).
+    let addr = item.querySelector<HTMLElement>('.badge-address')
+    if (p.address && !addr) {
+      addr = document.createElement('div')
+      addr.className = 'badge-address'
+      addr.title = this.t('photo.hasAddress')
+      addr.innerHTML = ADDRESS_SVG
+      item.append(addr)
+    } else if (!p.address && addr) {
+      addr.remove()
     }
     let mod = item.querySelector<HTMLElement>('.badge-modified')
     if (p.modified && !mod) {

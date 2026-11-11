@@ -154,6 +154,26 @@
         }
       }
     },
+    "geocode": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Addresses of photos by their coordinates (Tools → Get Address): a Nominatim service.",
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^https?://",
+          "default": "https://nominatim.openstreetmap.org",
+          "description": "Address of the Nominatim service for addresses by coordinates."
+        },
+        "minIntervalMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000,
+          "default": 1000,
+          "description": "Pause between requests, ms. The public nominatim.openstreetmap.org allows at most one request per second; an own server may allow less."
+        }
+      }
+    },
     "folders": {
       "type": "object",
       "additionalProperties": false,

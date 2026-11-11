@@ -1,4 +1,4 @@
-import type { CoordSource, LatLon, Photo } from './photo'
+import { ADDRESS_FIELDS, type Address, type CoordSource, type LatLon, type Photo } from './photo'
 
 /** One file's record from `exiftool -j -n -G0`: keys like "EXIF:GPSLatitude". */
 export type ExifRecord = Record<string, unknown>
@@ -66,6 +66,50 @@ export function pickCoords(
   return { coords: null, source: null }
 }
 
+/**
+ * Tags of the place names (tz.md, п. 5.5): XMP as Lightroom writes it, and the older IPTC.
+ * With -G0 they come back as "XMP:City", "IPTC:City"…
+ */
+export const ADDRESS_TAGS = {
+  xmp: {
+    country: 'XMP-photoshop:Country',
+    countryCode: 'XMP-iptcCore:CountryCode',
+    state: 'XMP-photoshop:State',
+    city: 'XMP-photoshop:City',
+    location: 'XMP-iptcCore:Location'
+  },
+  iptc: {
+    country: 'IPTC:Country-PrimaryLocationName',
+    countryCode: 'IPTC:Country-PrimaryLocationCode',
+    state: 'IPTC:Province-State',
+    city: 'IPTC:City',
+    location: 'IPTC:Sub-location'
+  }
+} as const satisfies Record<string, Record<keyof Address, string>>
+
+/** Tag arguments for reading the address. */
+export const ADDRESS_READ_ARGS = [...Object.values(ADDRESS_TAGS.xmp), ...Object.values(ADDRESS_TAGS.iptc)].map((t) => `-${t}`)
+
+/** The address in one group of a record; null if none of its fields is there. */
+function addressIn(rec: ExifRecord, kind: 'xmp' | 'iptc'): Address | null {
+  const group = kind === 'xmp' ? 'XMP' : 'IPTC'
+  const a = {} as Address
+  let any = false
+  for (const f of ADDRESS_FIELDS) {
+    const tag = ADDRESS_TAGS[kind][f].split(':')[1]!
+    const v = tagValue(rec, tag, group)
+    a[f] = v === undefined || v === null ? '' : String(v).trim()
+    if (a[f]) any = true
+  }
+  if (a.countryCode) a.countryCode = a.countryCode.toUpperCase()
+  return any ? a : null
+}
+
+/** The address by the same priority as the coordinates (п. 3.7): sidecar, embedded XMP, IPTC. */
+export function pickAddress(rec: ExifRecord, sidecar: ExifRecord | undefined): Address | null {
+  return (sidecar ? addressIn(sidecar, 'xmp') : null) ?? addressIn(rec, 'xmp') ?? addressIn(rec, 'iptc')
+}
+
 /** Shooting date, or file modification time when there is none (tz.md, п. 4.2). */
 export function pickDate(rec: ExifRecord): { date: string | null; source: 'shot' | 'file' } {
   const shot =
@@ -95,14 +139,15 @@ export function toPhoto(
 ): Omit<Photo, 'id'> {
   if (!rec) {
     return {
-      name, path, date: null, dateSource: 'file', coords: null, coordSource: null, modified: false,
+      name, path, date: null, dateSource: 'file', coords: null, coordSource: null, address: null, modified: false,
       error: 'no metadata'
     }
   }
   const { date, source: dateSource } = pickDate(rec)
   const { coords, source: coordSource } = pickCoords(rec, sidecar)
   const error = readError(rec)
-  return { name, path, date, dateSource, coords, coordSource, modified: false, ...(error ? { error } : {}) }
+  const address = pickAddress(rec, sidecar)
+  return { name, path, date, dateSource, coords, coordSource, address, modified: false, ...(error ? { error } : {}) }
 }
 
 /** Order of the strip: by date (shooting or file), then by name; photos without date go last. */

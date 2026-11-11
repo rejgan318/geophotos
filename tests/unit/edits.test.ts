@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { assignCoords, normalizeCoords, photoCounts, photosAt, photosToSave } from '@shared/edits'
+import { assignAddress, assignCoords, normalizeCoords, photoCounts, photosAt, photosToSave } from '@shared/edits'
 import { validSetCoords } from '@shared/ipc'
-import type { LatLon, Photo } from '@shared/photo'
+import type { Address, LatLon, Photo } from '@shared/photo'
 
 function photo(id: number, coords: LatLon | null, modified = false): Photo {
   return {
     id, name: `p${id}.jpg`, path: `C:\\f\\p${id}.jpg`, date: null, dateSource: 'file',
-    coords, coordSource: coords ? 'exif' : null, modified
+    coords, coordSource: coords ? 'exif' : null, address: null, modified
   }
 }
 
@@ -15,7 +15,7 @@ const B = { lat: -33.8568, lon: 151.2153 }
 
 describe('assigning coordinates (tz.md, пп. 4.5, 4.7)', () => {
   const photos = [photo(0, A), photo(1, null), photo(2, A), photo(3, B)]
-  const file = photos.map((p) => p.coords)
+  const file = photos.map((p) => ({ coords: p.coords, address: p.address }))
 
   it('all given photos get the point and are marked modified', () => {
     const changed = assignCoords(photos, file, [1, 3], A)
@@ -50,6 +50,24 @@ describe('assigning coordinates (tz.md, пп. 4.5, 4.7)', () => {
     // Placing a removed photo back at its file point removes the mark.
     expect(assignCoords(changed, file, [0], A)[0]!.modified).toBe(false)
     expect(validSetCoords({ ids: [0], coords: null })).toBe(true)
+  })
+
+  it('the address goes with the old coordinates; a found address is a change too (пп. 5.5, 6.2)', () => {
+    const LVIV: Address = { country: 'Україна', countryCode: 'UA', state: 'Львівська область', city: 'Львів', location: 'площа Ринок, 1' }
+    const withAddress = [{ ...photo(0, A), address: LVIV }, photo(1, A)]
+    const fileMeta = withAddress.map((p) => ({ coords: p.coords, address: p.address }))
+    // Moving drops the address.
+    const [moved] = assignCoords(withAddress, fileMeta, [0], B)
+    expect(moved).toMatchObject({ coords: B, address: null, modified: true })
+    // Back at the file point, but without the file's address: still modified.
+    const [back] = assignCoords([moved!, withAddress[1]!], fileMeta, [0], A)
+    expect(back).toMatchObject({ coords: A, address: null, modified: true })
+    // The same address found again: no longer modified.
+    expect(assignAddress([back!, withAddress[1]!], fileMeta, [0], LVIV)[0]!.modified).toBe(false)
+    // A photo that had none gets one: modified; the same one again changes nothing.
+    const [got] = assignAddress(withAddress, fileMeta, [1], LVIV)
+    expect(got).toMatchObject({ address: LVIV, modified: true })
+    expect(assignAddress([withAddress[0]!, got!], fileMeta, [1], LVIV)).toEqual([])
   })
 
   it('unknown ids and duplicates are ignored', () => {

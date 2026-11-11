@@ -1,7 +1,8 @@
 import type { Translate } from '@shared/i18n'
 import { thumbUrl } from '@shared/ipc'
 import type { Photo } from '@shared/photo'
-import { photoDate } from './describe'
+import { addressText } from '@shared/photo'
+import { photoCoords, photoDate } from './describe'
 import { FILE_SVG } from './icons'
 
 /**
@@ -48,14 +49,23 @@ export class PhotoView {
   /** Shows a photo; the image is asked for only while the view is visible. */
   show(photo: Photo | null, generation: number): void {
     if (!photo) {
-      this.caption.textContent = ''
+      this.caption.replaceChildren()
       this.img.hidden = true
       this.img.removeAttribute('src')
       this.shownUrl = ''
       this.placeholder.hidden = true
       return
     }
-    this.caption.textContent = `${photo.name} · ${photoDate(photo, this.t)}`
+    // Name and date; under them the coordinates and the address, if any (п. 4.14).
+    const lines = [`${photo.name} · ${photoDate(photo, this.t)}`, photoCoords(photo, this.t)]
+    if (photo.address) lines.push(addressText(photo.address))
+    this.caption.replaceChildren(
+      ...lines.map((text) => {
+        const div = document.createElement('div')
+        div.textContent = text
+        return div
+      })
+    )
     this.placeholder.innerHTML = FILE_SVG
     const name = document.createElement('span')
     name.textContent = photo.name

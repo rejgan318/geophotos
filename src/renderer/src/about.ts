@@ -1,4 +1,4 @@
-/** Help → About: versions, and links that open the settings file and the log folder. */
+/** Help → About: versions and links to the licenses. Settings and logs are in Tools (tz.md, п. 4.9). */
 import type { Translate } from '@shared/i18n'
 import type { AboutTarget } from '@shared/ipc'
 
@@ -69,8 +69,6 @@ export class AboutView {
       line(name),
       line(t('about.description')),
       line(t('about.exiftool', { version: info.exiftoolVersion, path: info.exiftoolPath })),
-      line(`${t('about.settings')} `, link('settings', info.settings)),
-      line(`${t('about.logs')} `, link('logs', info.logs)),
       line(`${t('about.license')} `, link('license', 'MIT'), ' · ', link('notices', t('about.notices'))),
       line(`Electron ${info.electron} · Node.js ${info.node}`)
     )

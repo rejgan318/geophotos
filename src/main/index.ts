@@ -4,7 +4,9 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, protocol, screen,
 import { windowTitle } from '@shared/app-info'
 import { pathFromArgv } from '@shared/argv'
 import { SUPPORTED_EXTENSIONS } from '@shared/formats'
-import { assignCoords, photoCounts, photosToSave } from '@shared/edits'
+import { assignAddress, assignCoords, photoCounts, photosAt, photosToSave } from '@shared/edits'
+import { formatDuration } from '@shared/duration'
+import { pointsWithoutAddress } from '@shared/geocode'
 import { makeTranslate, type Strings, type Translate } from '@shared/i18n'
 import {
   IPC,
@@ -22,7 +24,7 @@ import {
   type AboutInfo,
   type ViewState
 } from '@shared/ipc'
-import { formatCoords, type LatLon, type Photo } from '@shared/photo'
+import { addressText, formatCoords, type FileMeta, type Photo } from '@shared/photo'
 import { addRecent, removeRecent, samePath } from '@shared/recent'
 import { mapSources, type Settings } from '@shared/settings'
 import { windowOnScreen } from '@shared/window-place'
@@ -34,7 +36,8 @@ import { buildMenu, MENU_ID } from './menu'
 import { savePhotos, type SaveFailure } from './save'
 import { PlaceSearch } from './search'
 import { DefaultSettingsError, ensureUserSettingsFile, formatProblem, loadSettings, setUserSetting } from './settings'
-import { readState, writeState, type AppState } from './state'
+import { readState, writeState, type AppState, type ToolsState } from './state'
+import { Geocoder } from './geocode'
 import { ThumbnailService } from './thumbnails'
 
 // Must happen before `ready`: thumbnails are served to the window by this scheme.
@@ -56,8 +59,8 @@ const paths = {
 interface OpenFolder {
   data: FolderData
   sources: PhotoSource[]
-  /** Coordinates as they are in the files: what "modified" is compared with, and the log's "old". */
-  fileCoords: (LatLon | null)[]
+  /** Coordinates and address as they are in the files: what "modified" is compared with, the log's "old". */
+  fileMeta: FileMeta[]
   /** Photos from subfolders are loaded too (tz.md, п. 3.2). */
   subfolders: boolean
 }
@@ -68,6 +71,9 @@ let t: Translate
 let exiftool: ExifTool
 let thumbnails: ThumbnailService
 let placeSearch: PlaceSearch
+let geocoder: Geocoder
+/** Modes of the Tools menu (tz.md, п. 5.5); kept between runs. */
+let tools: ToolsState = { address: false }
 /** Version reported by exiftool at start (Help → About). */
 let exiftoolVer = ''
 let win: BrowserWindow | null = null
@@ -156,6 +162,7 @@ async function startup(): Promise<boolean> {
   exiftool = new ExifTool(settings.exiftoolPath)
   thumbnails = new ThumbnailService(exiftool)
   placeSearch = new PlaceSearch(settings.search.url, userAgent(), settings.language)
+  geocoder = new Geocoder(settings.geocode.url, userAgent(), settings.language, settings.geocode.minIntervalMs)
   return true
 }
 
@@ -197,7 +204,7 @@ function setRecent(update: (list: string[]) => string[]): void {
 
 function saveAppState(): void {
   try {
-    writeState(paths.state, { recentFolders, lastSession, window: windowState, map: mapState })
+    writeState(paths.state, { recentFolders, lastSession, window: windowState, map: mapState, tools })
   } catch (e) {
     log.warn(`Cannot save state ${paths.state}: ${String(e)}`)
   }
@@ -340,14 +347,17 @@ async function openFolder(
   current = {
     data: { folder, photos: scanned.photos, generation, selected: chosen?.id ?? null },
     sources: scanned.sources,
-    fileCoords: scanned.photos.map((p) => p.coords),
+    fileMeta: scanned.photos.map((p) => ({ coords: p.coords, address: p.address })),
     subfolders
   }
   for (const dir of scanned.unreadable) log.warn(`Subfolder skipped, cannot be read: ${dir}`)
+  // A new folder: every point may be asked again (tz.md, п. 5.5).
+  addressFailed.clear()
   selection = new Set(chosen ? [chosen.id] : [])
   win.webContents.send(IPC.folderLoaded, restored ? { ...current.data, restored: { scroll: restored.scroll } } : current.data)
   setRecent((list) => addRecent(list, folder))
   refreshEditState()
+  kickAddresses()
 
   const withCoords = scanned.photos.filter((p) => p.coords).length
   log.info(
@@ -403,9 +413,11 @@ function updateMenu(recent: string[]): void {
         save: () => void save(),
         saveSelected: () => void save(selection),
         openSettings: () => void openSettingsFile(),
+        openLogs: () => void openLogFolder(),
         exit: () => app.quit(),
         toggleView: () => win?.webContents.send(IPC.command, { type: 'toggleView' }),
         showOnMap: () => win?.webContents.send(IPC.command, { type: 'showOnMap' }),
+        toggleAddress: () => toggleAddress(),
         toggleThumbnails: () => win?.webContents.send(IPC.command, { type: 'toggleThumbnails' }),
         setFilter: (filter: StripFilter) => win?.webContents.send(IPC.command, { type: 'setFilter', filter }),
         shortcuts: () => win?.webContents.send(IPC.command, { type: 'toggleHelp' }),
@@ -441,6 +453,8 @@ function refreshEditState(): void {
   // Show on Map: the current photo needs coordinates.
   const showItem = menu?.getMenuItemById(MENU_ID.showOnMap)
   if (showItem) showItem.enabled = ui.current !== null && !!photos[ui.current]?.coords
+  const addressItem = menu?.getMenuItemById(MENU_ID.address)
+  if (addressItem) addressItem.checked = tools.address
   const thumbsItem = menu?.getMenuItemById(MENU_ID.thumbnails)
   if (thumbsItem) thumbsItem.checked = ui.mapMode === 'thumbs'
   const counts = photoCounts(photos)
@@ -466,6 +480,109 @@ function applyPhotos(changed: Photo[]): void {
   const msg: PhotosChanged = { generation: current.data.generation, photos: changed }
   win?.webContents.send(IPC.photosChanged, msg)
   refreshEditState()
+  // New coordinates may need an address (tz.md, п. 5.5).
+  kickAddresses()
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+/** Points that got no address in this folder (no answer, or no address there): not asked again. */
+const addressFailed = new Set<string>()
+let addressRunning = false
+
+/** Points of the open folder still waiting for their address (п. 5.5); 0 when the mode is off. */
+function addressLeft(): number {
+  return tools.address && current ? pointsWithoutAddress(current.data.photos, addressFailed).size : 0
+}
+
+/** About how long the rest takes, seconds: a request at most once per interval. */
+function addressSeconds(left: number): number {
+  return Math.ceil((left * Math.max(geocoder.intervalMs, 500)) / 1000)
+}
+
+function reportQueue(): void {
+  const left = addressLeft()
+  win?.webContents.send(IPC.queueState, { address: left, seconds: addressSeconds(left) })
+}
+
+/** Starts getting addresses if the mode is on and some photos need one. */
+function kickAddresses(): void {
+  reportQueue()
+  if (!addressRunning && addressLeft() > 0) void runAddresses()
+}
+
+/**
+ * Gets Get Address done (п. 5.5): one point at a time, the found address for every photo at that
+ * point that has none. Waits while saving; stops when the mode is turned off or the folder closes.
+ */
+async function runAddresses(): Promise<void> {
+  addressRunning = true
+  try {
+    for (;;) {
+      while (saving) await sleep(200)
+      const folder = current
+      if (!tools.address || !folder) break
+      const next = pointsWithoutAddress(folder.data.photos, addressFailed).entries().next()
+      if (next.done) break
+      const [key, point] = next.value
+      const res = await geocoder.reverse(point)
+      if (current !== folder || !tools.address) continue
+      if (!res.ok || !res.address) {
+        addressFailed.add(key)
+        if (res.ok) log.info(`No address at ${formatCoords(point)}`)
+        else log.warn(`Address for ${formatCoords(point)} not received: ${res.error}`)
+        reportQueue()
+        continue
+      }
+      const ids = photosAt(folder.data.photos, point).filter((id) => !folder.data.photos[id]!.address)
+      const changed = assignAddress(folder.data.photos, folder.fileMeta, ids, res.address)
+      log.verbose(`Address found (not saved): ${formatCoords(point)} → ${addressText(res.address)}: ${changed.length} photo(s)`)
+      if (changed.length) applyPhotos(changed)
+      else reportQueue()
+    }
+  } finally {
+    addressRunning = false
+    reportQueue()
+  }
+}
+
+/** Tools → Get Address (п. 5.5): on — addresses for all photos of the folder that need one. */
+function toggleAddress(): void {
+  tools = { ...tools, address: !tools.address }
+  log.info(`Get Address: ${tools.address ? 'on' : 'off'}`)
+  saveAppState()
+  refreshEditState()
+  if (tools.address) addressFailed.clear()
+  kickAddresses()
+}
+
+
+/**
+ * Saving while addresses are still being found (п. 5.5): wait for them, save without them, or
+ * cancel (false).
+ */
+async function askAddressesBeforeSave(): Promise<boolean> {
+  const left = addressLeft()
+  if (!left || !win) return true
+  const { response } = await dialog.showMessageBox(win, {
+    type: 'question',
+    title: t('addressWait.title'),
+    message: t('addressWait.message', { count: left, time: formatDuration(addressSeconds(left), t) }),
+    buttons: [t('addressWait.wait'), t('addressWait.skip'), t('unsaved.cancel')],
+    defaultId: 0,
+    cancelId: 2,
+    noLink: true
+  })
+  if (response === 2) return false
+  if (response === 0) {
+    log.info(`Saving waits for ${left} address(es)`)
+    for (let n = addressLeft(); n > 0; n = addressLeft()) {
+      sendSaveState({ phase: 'waiting', left: n })
+      await sleep(300)
+    }
+    sendSaveState({ phase: 'waiting', left: 0 })
+  }
+  return true
 }
 
 function sendSaveState(state: SaveState): void {
@@ -474,9 +591,11 @@ function sendSaveState(state: SaveState): void {
 
 /**
  * "Save" (all modified photos) or "Save Selected" (tz.md, п. 6). Returns the photos that could
- * not be written; their list is shown in a window (п. 6.8).
+ * not be written (their list is shown in a window, п. 6.8), or null if saving was cancelled.
  */
-async function save(only?: ReadonlySet<number>): Promise<SaveFailure[]> {
+async function save(only?: ReadonlySet<number>): Promise<SaveFailure[] | null> {
+  if (!current || saving) return []
+  if (!(await askAddressesBeforeSave())) return null
   if (!current || saving) return []
   const folder = current
   const toSave = photosToSave(folder.data.photos, only)
@@ -489,14 +608,14 @@ async function save(only?: ReadonlySet<number>): Promise<SaveFailure[]> {
   try {
     const outcome = await savePhotos(
       exiftool,
-      toSave.map((p) => ({ photo: p, source: folder.sources[p.id]!, old: folder.fileCoords[p.id] ?? null })),
+      toSave.map((p) => ({ photo: p, source: folder.sources[p.id]!, old: folder.fileMeta[p.id]?.coords ?? null })),
       log,
       (done, total) => sendSaveState({ phase: 'progress', done, total })
     )
     failed = outcome.failed
     for (const s of outcome.saved) {
       folder.sources[s.id] = s.source
-      folder.fileCoords[s.id] = s.photo.coords
+      folder.fileMeta[s.id] = { coords: s.photo.coords, address: s.photo.address }
     }
     saving = false
     if (current === folder) applyPhotos(outcome.saved.map((s) => s.photo))
@@ -550,7 +669,8 @@ async function confirmDiscard(): Promise<boolean> {
       log.info(`Unsaved changes discarded: ${count} photo(s)`)
       return true
     }
-    return (await save()).length === 0
+    const failed = await save()
+    return failed !== null && failed.length === 0
   } finally {
     asking = false
   }
@@ -558,7 +678,7 @@ async function confirmDiscard(): Promise<boolean> {
 
 function setCoords(req: unknown): void {
   if (!current || saving || !validSetCoords(req)) return
-  const changed = assignCoords(current.data.photos, current.fileCoords, req.ids, req.coords)
+  const changed = assignCoords(current.data.photos, current.fileMeta, req.ids, req.coords)
   if (!changed.length) return
   const to = req.coords ? formatCoords(changed[0]!.coords!) : 'none'
   log.verbose(
@@ -592,14 +712,12 @@ async function openLogFolder(): Promise<void> {
   }
 }
 
-/** Help → About: versions and where the settings and the log are; the window shows links to them. */
+/** Help → About: versions; the window links to the licenses. */
 function aboutInfo(): AboutInfo {
   return {
     version: app.getVersion(),
     exiftoolVersion: exiftoolVer,
     exiftoolPath: settings.exiftoolPath,
-    settings: paths.user,
-    logs: paths.logs,
     electron: process.versions.electron,
     node: process.versions.node
   }
@@ -746,11 +864,9 @@ void app.whenReady().then(async () => {
     viewState = validViewState(v) ?? viewState
   })
   ipcMain.handle(IPC.aboutInfo, () => aboutInfo())
-  // Only the two known places: the window names a target, never a path.
+  // Only known places: the window names a target, never a path.
   ipcMain.handle(IPC.aboutOpen, async (_e, target: unknown) => {
-    if (target === 'settings') await openSettingsFile()
-    else if (target === 'logs') await openLogFolder()
-    else if (target === 'license' || target === 'notices') await openLicenseFile(target)
+    if (target === 'license' || target === 'notices') await openLicenseFile(target)
   })
   // Ctrl+C / Ctrl+V of coordinates (tz.md, п. 4.10): plain text only.
   ipcMain.handle(IPC.clipboardRead, () => clipboard.readText())
@@ -770,6 +886,7 @@ void app.whenReady().then(async () => {
   lastSession = saved.lastSession
   windowState = saved.window
   mapState = saved.map
+  tools = saved.tools
   ui = { ...ui, mapMode: mapState?.thumbnails ? 'thumbs' : 'pins' }
   updateMenu(recentFolders)
   win = createWindow()

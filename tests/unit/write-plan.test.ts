@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { writePlan, writeResult, type WriteInfo } from '@shared/write-plan'
+import type { Address } from '@shared/photo'
+import { writePlan, writeResult, xmpAddressArgs, type WriteInfo } from '@shared/write-plan'
 
 const SW = { lat: -33.8568, lon: -151.2153 }
+const LVIV: Address = { country: 'Україна', countryCode: 'UA', state: 'Львівська область', city: 'Львів', location: '' }
+const NO_ADDRESS = [
+  '-XMP-photoshop:Country=',
+  '-XMP-iptcCore:CountryCode=',
+  '-XMP-photoshop:State=',
+  '-XMP-photoshop:City=',
+  '-XMP-iptcCore:Location='
+]
+const NO_IPTC = [
+  '-IPTC:Country-PrimaryLocationName=',
+  '-IPTC:Country-PrimaryLocationCode=',
+  '-IPTC:Province-State=',
+  '-IPTC:City=',
+  '-IPTC:Sub-location='
+]
 
 describe('where coordinates are written (tz.md, пп. 6.2–6.4)', () => {
   it('JPEG: EXIF of the file with N/S/E/W, no backup copies', () => {
@@ -15,8 +31,26 @@ describe('where coordinates are written (tz.md, пп. 6.2–6.4)', () => {
       '-EXIF:GPSLatitude=33.8568',
       '-EXIF:GPSLatitudeRef=S',
       '-EXIF:GPSLongitude=151.2153',
-      '-EXIF:GPSLongitudeRef=W'
+      '-EXIF:GPSLongitudeRef=W',
+      // No address: an old one goes with the old coordinates (п. 6.2), from XMP and IPTC.
+      ...NO_ADDRESS,
+      ...NO_IPTC
     ])
+  })
+
+  it('the address goes to the XMP of the file; IPTC place names are removed (п. 5.5)', () => {
+    const steps = writePlan({ path: 'a.jpg', write: 'file', xmpCoords: false, sidecar: null }, SW, LVIV)
+    expect(steps[0]!.args).toEqual(
+      expect.arrayContaining([
+        '-XMP-photoshop:Country=Україна',
+        '-XMP-iptcCore:CountryCode=UA',
+        '-XMP-photoshop:State=Львівська область',
+        '-XMP-photoshop:City=Львів',
+        // An unknown field removes the tag.
+        '-XMP-iptcCore:Location=',
+        ...NO_IPTC
+      ])
+    )
   })
 
   it('embedded XMP with coordinates is updated with the same values', () => {
@@ -40,15 +74,22 @@ describe('where coordinates are written (tz.md, пп. 6.2–6.4)', () => {
     expect(writePlan({ path: 'r.cr2', write: 'xmp', xmpCoords: false, sidecar: { path: 'r.xmp', exists: false, coords: false } }, null)).toEqual([])
   })
 
-  it('a sidecar of an ordinary file is updated only if it has coordinates', () => {
+  it('a sidecar of an ordinary file: coordinates only if it has them, the address always (read first, п. 3.7)', () => {
     const base = { path: 'h.heic', write: 'file' as const, xmpCoords: false }
-    const withCoords = writePlan({ ...base, sidecar: { path: 'h.xmp', exists: true, coords: true } }, SW)
+    const withCoords = writePlan({ ...base, sidecar: { path: 'h.xmp', exists: true, coords: true } }, SW, LVIV)
     expect(withCoords.map((s) => [s.path, s.kind])).toEqual([
       ['h.heic', 'file'],
       ['h.xmp', 'sidecar']
     ])
-    expect(withCoords[1]!.args).toEqual(['-overwrite_original', '-n', '-XMP-exif:GPSLatitude=-33.8568', '-XMP-exif:GPSLongitude=-151.2153'])
-    expect(writePlan({ ...base, sidecar: { path: 'h.xmp', exists: true, coords: false } }, SW)).toHaveLength(1)
+    expect(withCoords[1]!.args).toEqual([
+      '-overwrite_original',
+      '-n',
+      '-XMP-exif:GPSLatitude=-33.8568',
+      '-XMP-exif:GPSLongitude=-151.2153',
+      ...xmpAddressArgs(LVIV)
+    ])
+    const noCoords = writePlan({ ...base, sidecar: { path: 'h.xmp', exists: true, coords: false } }, SW, LVIV)
+    expect(noCoords[1]!.args).toEqual(['-overwrite_original', '-n', ...xmpAddressArgs(LVIV)])
     expect(writePlan({ ...base, sidecar: { path: 'h.xmp', exists: false, coords: false } }, SW)).toHaveLength(1)
   })
 
@@ -62,7 +103,7 @@ describe('where coordinates are written (tz.md, пп. 6.2–6.4)', () => {
         path: 'IMG.xmp',
         kind: 'sidecar',
         create: true,
-        args: ['-overwrite_original', '-n', '-XMP-exif:GPSLatitude=-33.8568', '-XMP-exif:GPSLongitude=-151.2153']
+        args: ['-overwrite_original', '-n', '-XMP-exif:GPSLatitude=-33.8568', '-XMP-exif:GPSLongitude=-151.2153', ...NO_ADDRESS]
       }
     ])
     const existing = writePlan(

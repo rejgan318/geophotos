@@ -6,6 +6,7 @@ import {
   type FolderLoading,
   type InitData,
   type PhotosChanged,
+  type QueueState,
   type SaveState,
   type SearchResult,
   type WindowCommand
@@ -34,6 +35,9 @@ const api: GeoPhotosApi = {
   },
   onSaveState: (cb) => {
     ipcRenderer.on(IPC.saveState, (_e, state: SaveState) => cb(state))
+  },
+  onQueueState: (cb) => {
+    ipcRenderer.on(IPC.queueState, (_e, state: QueueState) => cb(state))
   },
   searchPlaces: (query) => ipcRenderer.invoke(IPC.search, query) as Promise<SearchResult>,
   aboutInfo: () => ipcRenderer.invoke(IPC.aboutInfo) as Promise<AboutInfo>,

@@ -1,6 +1,7 @@
 import './style.css'
 import { clipboardText, parseCoords } from '@shared/coords-parse'
 import { photoCounts, photosAt } from '@shared/edits'
+import { formatDuration } from '@shared/duration'
 import { makeTranslate } from '@shared/i18n'
 import type { MapMode, ViewMode } from '@shared/ipc'
 import type { FolderData, LatLon } from '@shared/photo'
@@ -43,6 +44,7 @@ async function start(): Promise<void> {
   const statusPhoto = byId('status-photo')
   const statusNote = byId('status-note')
   const statusCounts = byId('status-counts')
+  const statusQueue = byId('status-queue')
   const progress = byId('progress')
   const progressText = byId('progress-text')
   let folder: FolderData | null = null
@@ -415,11 +417,24 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     // The filter is live: a saved photo leaves "modified", a placed one joins "with coordinates".
     applyFilter()
     showStatus()
+    // A found address shows in the photo view at once.
+    showPhoto()
+  })
+
+  // Addresses still to find (tz.md, п. 5.5): how many points and about how long.
+  window.geophotos.onQueueState((q) => {
+    statusQueue.textContent = q.address ? t('queue.address', { count: q.address, time: formatDuration(q.seconds, t) }) : ''
   })
 
   // Saving (tz.md, п. 6.8): n of N over the window; the window waits until it ends.
   let progressTimer: number | undefined
   window.geophotos.onSaveState((s) => {
+    // Saving waits for the addresses (п. 5.5): the overlay says how many are left.
+    if (s.phase === 'waiting') {
+      progressText.textContent = t('save.waitingAddress', { count: s.left })
+      progress.hidden = s.left === 0
+      return
+    }
     if (s.phase === 'progress') {
       saving = true
       progressText.textContent = t('save.progress', { done: s.done, total: s.total })

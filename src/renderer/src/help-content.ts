@@ -1,4 +1,4 @@
-import { PENCIL_SVG, PHOTO_SVG, PIN_OFF_SVG, PIN_SVG } from './icons'
+import { ADDRESS_SVG, PENCIL_SVG, PHOTO_SVG, PIN_OFF_SVG, PIN_SVG } from './icons'
 
 /**
  * Help → Keyboard Shortcuts (F1): keys, mouse actions and marks of the program.
@@ -55,6 +55,7 @@ export const SECTIONS: Section[] = [
       { icon: PIN_SVG, color: 'var(--marker-color)', text: 'help.markCoords' },
       { icon: PIN_SVG, color: 'var(--marker-selected)', text: 'help.markSelected' },
       { icon: PENCIL_SVG, color: 'var(--modified)', text: 'help.markModified' },
+      { icon: ADDRESS_SVG, color: 'var(--address)', text: 'help.markAddress' },
       { icon: PHOTO_SVG, color: 'var(--selected)', text: 'help.markFilters' },
       { icon: PIN_OFF_SVG, color: 'var(--no-coords)', text: 'help.markNoCoords' }
     ]

@@ -19,6 +19,12 @@ export interface AppState {
   window: WindowState | null
   /** Place and zoom of the map, its tile source, markers or thumbnails. */
   map: MapState | null
+  /** Modes of the Tools menu (tz.md, пп. 5.5, 5.6). */
+  tools: ToolsState
+}
+
+export interface ToolsState {
+  address: boolean
 }
 
 export interface WindowState {
@@ -38,7 +44,7 @@ export interface MapState {
   thumbnails: boolean
 }
 
-const EMPTY: AppState = { recentFolders: [], lastSession: null, window: null, map: null }
+const EMPTY: AppState = { recentFolders: [], lastSession: null, window: null, map: null, tools: { address: false } }
 
 type Obj = Record<string, unknown>
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -86,7 +92,8 @@ export function readState(file: string): AppState {
       recentFolders,
       lastSession: readSession(v['lastSession']),
       window: readWindow(v['window']),
-      map: readMap(v['map'])
+      map: readMap(v['map']),
+      tools: { address: isObj(v['tools']) && v['tools']['address'] === true }
     }
   } catch {
     return { ...EMPTY }

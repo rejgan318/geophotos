@@ -45,6 +45,10 @@
     "maxSizeKb": 1024,
     "maxFiles": 5
   },
+  "geocode": {
+    "url": "https://nominatim.openstreetmap.org",
+    "minIntervalMs": 1000
+  },
   "folders": {
     "subfolders": "ask"
   },

@@ -1,6 +1,6 @@
 import { constants, existsSync, rmSync } from 'node:fs'
 import { access } from 'node:fs/promises'
-import { formatCoords, type LatLon, type Photo } from '@shared/photo'
+import { addressText, formatCoords, type LatLon, type Photo } from '@shared/photo'
 import { writePlan, writeResult, type WriteStep } from '@shared/write-plan'
 import type { ExifTool } from './exiftool'
 import { rereadCoords, type PhotoSource } from './folder'
@@ -85,11 +85,12 @@ export async function savePhotos(
       if (!photo.coords && source.write === 'xmp' && photo.coordSource !== 'sidecar') {
         throw new Error('The coordinates are inside the RAW file, which the program never changes')
       }
-      const steps = writePlan(source, photo.coords)
+      const steps = writePlan(source, photo.coords, photo.address)
       for (const step of steps) await runStep(exiftool, step)
       written.push(item)
       log.info(
         `${photo.coords ? 'Coordinates written' : 'Coordinates removed'}: ${photo.path}; old: ${coordsText(item.old)}; new: ${coordsText(photo.coords)}; ` +
+          `address: ${photo.address ? addressText(photo.address) || '(empty)' : 'none'}; ` +
           `to: ${steps.map((s) => (s.create ? `${s.path} (created)` : s.path)).join(', ')}`
       )
     } catch (e) {
@@ -108,7 +109,7 @@ export async function savePhotos(
       xmpCoords: r.xmpCoords,
       sidecar: w.source.sidecar ? { ...w.source.sidecar, exists: r.sidecarExists, coords: r.sidecarCoords } : null
     }
-    const photo: Photo = { ...w.photo, coords: r.coords, coordSource: r.coordSource, modified: false }
+    const photo: Photo = { ...w.photo, coords: r.coords, coordSource: r.coordSource, address: r.address, modified: false }
     return { id: w.photo.id, photo, source }
   })
   return { saved, failed }

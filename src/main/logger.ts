@@ -2,11 +2,11 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync 
 import { join, parse } from 'node:path'
 import log from 'electron-log/main'
 import type { LogLevel } from '@shared/settings'
-import { staleFallbackLogs } from './log-files'
+import { LOG_NAME, oldNamedLogs, staleFallbackLogs } from './log-files'
 
 export { log }
 
-/** Name of the log file number `n`: main.log, main.1.log, main.2.log… */
+/** Name of the log file number `n`: geophotos.log, geophotos.1.log, geophotos.2.log… */
 function numbered(dir: string, name: string, ext: string, n: number): string {
   return join(dir, n === 0 ? `${name}${ext}` : `${name}.${n}${ext}`)
 }
@@ -21,20 +21,22 @@ function canAppend(file: string): boolean {
 }
 
 /**
- * Log file in <userData>/logs (tz.md, п. 6.9). When the file grows over maxSizeKb it is
- * renamed to main.1.log (older ones shift up); maxFiles files are kept, including the current one.
+ * Log file in <userData>/logs (tz.md, п. 6.9): geophotos.log. When the file grows over maxSizeKb
+ * it is renamed to geophotos.1.log (older ones shift up); maxFiles files are kept, including the
+ * current one.
  *
- * If main.log cannot be written — e.g. it is open in a viewer that denies writing — the log goes
- * to main-<date>-<pid>.log in the same folder instead of being lost (electron-log would drop
- * every line of the session silently).
+ * If geophotos.log cannot be written — e.g. it is open in a viewer that denies writing — the log
+ * goes to geophotos-<date>-<pid>.log in the same folder instead of being lost (electron-log would
+ * drop every line of the session silently).
  */
 export function setupLog(
   logsDir: string,
   opts: { level: LogLevel; maxSizeKb: number; maxFiles: number; console: boolean }
 ): void {
   mkdirSync(logsDir, { recursive: true })
-  const removed = removeStaleFallbackLogs(logsDir, opts.maxFiles)
-  const mainPath = join(logsDir, 'main.log')
+  const removed = removeLogs(logsDir, (names) => staleFallbackLogs(names, opts.maxFiles))
+  const oldRemoved = removeLogs(logsDir, oldNamedLogs)
+  const mainPath = join(logsDir, `${LOG_NAME}.log`)
   let path = mainPath
   let fallbackReason: string | null = null
 
@@ -43,7 +45,7 @@ export function setupLog(
     const d = new Date()
     const p2 = (n: number): string => String(n).padStart(2, '0')
     const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`
-    path = join(logsDir, `main-${stamp}-${process.pid}.log`)
+    path = join(logsDir, `${LOG_NAME}-${stamp}-${process.pid}.log`)
     fallbackReason = reason
   }
 
@@ -68,23 +70,25 @@ export function setupLog(
   }
   log.transports.console.level = opts.console ? 'debug' : false
 
-  // main.log becoming unwritable later: switch to the fallback file for the rest of the session.
+  // geophotos.log becoming unwritable later: switch to the fallback file for the rest of the session.
   if (path === mainPath) {
     file.getFile().on('error', (e: unknown) => {
       useFallback(`${mainPath} became unwritable: ${String(e)}`)
       log.warn(`Log continues here: ${fallbackReason}`)
     })
   } else {
-    log.warn(`Log is written here instead of main.log: ${fallbackReason}`)
+    log.warn(`Log is written here instead of ${LOG_NAME}.log: ${fallbackReason}`)
   }
   if (removed.length) log.info(`Old backup log files removed: ${removed.join(', ')}`)
+  if (oldRemoved.length) log.info(`Log files with the old name removed: ${oldRemoved.join(', ')}`)
 }
 
 /**
- * Backup log files of earlier sessions (main.log was locked then) are not rotated away:
- * only the latest maxFiles sessions are kept. A file that cannot be deleted now stays.
+ * Removes log files picked from the folder: backup files of earlier sessions beyond the latest
+ * maxFiles (they are not rotated away), and files with the old name main.log. A file that cannot
+ * be deleted now (open in another program) stays until the next start.
  */
-function removeStaleFallbackLogs(logsDir: string, maxFiles: number): string[] {
+function removeLogs(logsDir: string, pick: (names: string[]) => string[]): string[] {
   let names: string[]
   try {
     names = readdirSync(logsDir)
@@ -92,7 +96,7 @@ function removeStaleFallbackLogs(logsDir: string, maxFiles: number): string[] {
     return []
   }
   const removed: string[] = []
-  for (const name of staleFallbackLogs(names, maxFiles)) {
+  for (const name of pick(names)) {
     try {
       rmSync(join(logsDir, name))
       removed.push(name)

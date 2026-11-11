@@ -1,4 +1,4 @@
-import { sameCoords, type LatLon, type Photo } from './photo'
+import { sameAddress, sameCoords, type Address, type FileMeta, type LatLon, type Photo } from './photo'
 
 /** Coordinates are kept to 7 decimals (about 1 cm): more is noise from the mouse position. */
 export function roundCoords(c: LatLon): LatLon {
@@ -13,15 +13,21 @@ export function normalizeCoords(c: LatLon): LatLon {
   return roundCoords({ lat: Math.max(-90, Math.min(90, c.lat)), lon })
 }
 
+/** A photo is modified while its coordinates or address differ from those in its files (п. 4.3). */
+function isModified(p: Pick<Photo, 'coords' | 'address'>, file: FileMeta | undefined): boolean {
+  return !sameCoords(p.coords, file?.coords ?? null) || !sameAddress(p.address, file?.address ?? null)
+}
+
 /**
  * Gives the photos new coordinates (tz.md, пп. 4.5, 4.7), or removes them with `null` (Del,
- * п. 6.6). Returns only the photos that changed, as new objects. A photo counts as modified while
- * its coordinates differ from those in its file (`fileCoords`), so moving it back to where it was
- * removes the mark.
+ * п. 6.6). The address goes with the old coordinates: it would be wrong at the new point (п. 6.2).
+ * Returns only the photos that changed, as new objects. A photo counts as modified while it
+ * differs from its files (`file`), so moving it back to where it was removes the mark (unless
+ * its address from the file is gone).
  */
 export function assignCoords(
   photos: readonly Photo[],
-  fileCoords: readonly (LatLon | null)[],
+  file: readonly FileMeta[],
   ids: readonly number[],
   coords: LatLon | null
 ): Photo[] {
@@ -30,7 +36,25 @@ export function assignCoords(
   for (const id of new Set(ids)) {
     const p = photos[id]
     if (!p || sameCoords(p.coords, c)) continue
-    changed.push({ ...p, coords: c, modified: !sameCoords(c, fileCoords[id] ?? null) })
+    const next = { coords: c, address: null }
+    changed.push({ ...p, ...next, modified: isModified(next, file[id]) })
+  }
+  return changed
+}
+
+/** Gives the photos a found address (п. 5.5); those that already have it are left out. */
+export function assignAddress(
+  photos: readonly Photo[],
+  file: readonly FileMeta[],
+  ids: readonly number[],
+  address: Address
+): Photo[] {
+  const changed: Photo[] = []
+  for (const id of new Set(ids)) {
+    const p = photos[id]
+    if (!p || sameAddress(p.address, address)) continue
+    const next = { coords: p.coords, address }
+    changed.push({ ...p, address, modified: isModified(next, file[id]) })
   }
   return changed
 }

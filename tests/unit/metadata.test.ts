@@ -4,6 +4,7 @@ import {
   embeddedPreviewTag,
   exifCoords,
   parseExifDate,
+  pickAddress,
   pickCoords,
   pickDate,
   readError,
@@ -82,8 +83,22 @@ describe('dates', () => {
   })
 })
 
+describe('address (tz.md, п. 5.5)', () => {
+  const xmp = { 'XMP:Country': 'Україна', 'XMP:CountryCode': 'ua', 'XMP:State': 'Львівська', 'XMP:City': 'Львів', 'XMP:Location': 'Ринок, 1' }
+  const iptc = { 'IPTC:Country-PrimaryLocationName': 'Ukraine', 'IPTC:City': 'Lviv' }
+
+  it('sidecar first, then embedded XMP, then IPTC; the code in upper case', () => {
+    expect(pickAddress({ ...xmp, ...iptc }, undefined)).toEqual({
+      country: 'Україна', countryCode: 'UA', state: 'Львівська', city: 'Львів', location: 'Ринок, 1'
+    })
+    expect(pickAddress(iptc, undefined)).toEqual({ country: 'Ukraine', countryCode: '', state: '', city: 'Lviv', location: '' })
+    expect(pickAddress({ ...xmp }, { 'XMP:City': 'Kyiv' })).toMatchObject({ city: 'Kyiv', country: '' })
+    expect(pickAddress({ 'EXIF:Make': 'Canon' }, undefined)).toBeNull()
+  })
+})
+
 describe('photos', () => {
-  const base = { path: 'x', coords: null, coordSource: null, dateSource: 'shot' as const, modified: false }
+  const base = { path: 'x', coords: null, coordSource: null, address: null, dateSource: 'shot' as const, modified: false }
 
   it('order: by date, then by name; no date last', () => {
     const list = [

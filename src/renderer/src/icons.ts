@@ -19,6 +19,10 @@ export const PENCIL_SVG =
 export const PHOTO_SVG =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3zm2 2v9.6l4-4.6 3.5 4 2.5-2.8 4 4.4V6zm11 1.5a2 2 0 1 1 0 4 2 2 0 0 1 0-4z" fill-rule="evenodd"/></svg>'
 
+/** Has an address (tz.md, п. 5.5): a house. */
+export const ADDRESS_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 8h-2.5v9h-5v-6h-3v6h-5v-9H3z"/></svg>'
+
 /** File placeholder of a photo that cannot be shown. */
 export const FILE_SVG =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h8l6 6v14H6zM14 2v6h6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>'

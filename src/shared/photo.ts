@@ -3,6 +3,37 @@ export interface LatLon {
   lon: number
 }
 
+/**
+ * Place names of a photo, the fields Lightroom shows (tz.md, п. 5.5); a field nobody knows is ''.
+ */
+export interface Address {
+  country: string
+  /** ISO 3166 code, upper case ("UA"). */
+  countryCode: string
+  state: string
+  city: string
+  /** Street with the house number. */
+  location: string
+}
+
+export const ADDRESS_FIELDS = ['country', 'countryCode', 'state', 'city', 'location'] as const
+
+export function sameAddress(a: Address | null, b: Address | null): boolean {
+  if (!a || !b) return a === b
+  return ADDRESS_FIELDS.every((f) => a[f] === b[f])
+}
+
+/** "Street 1, City, State, Country": the known parts, from the most exact one. */
+export function addressText(a: Address): string {
+  return [a.location, a.city, a.state, a.country].filter((s) => s).join(', ')
+}
+
+/** What the files of a photo hold: what "modified" is compared with (tz.md, п. 4.3). */
+export interface FileMeta {
+  coords: LatLon | null
+  address: Address | null
+}
+
 /** Where the shown coordinates were read from (tz.md, п. 3.7). */
 export type CoordSource = 'sidecar' | 'xmp' | 'exif'
 
@@ -17,7 +48,9 @@ export interface Photo {
   dateSource: 'shot' | 'file'
   coords: LatLon | null
   coordSource: CoordSource | null
-  /** Coordinates changed in the program and not saved yet (tz.md, п. 4.3). */
+  /** Place names (tz.md, п. 5.5); null — none. Removed together with changed coordinates. */
+  address: Address | null
+  /** Coordinates or address changed in the program and not saved yet (tz.md, п. 4.3). */
   modified: boolean
   /** Read error reported by exiftool (broken file etc.). */
   error?: string

@@ -9,11 +9,13 @@ export interface MenuHandlers {
   save(): void
   saveSelected(): void
   openSettings(): void
+  openLogs(): void
   exit(): void
   toggleView(): void
   showOnMap(): void
   toggleThumbnails(): void
   setFilter(filter: StripFilter): void
+  toggleAddress(): void
   shortcuts(): void
   about(): void
 }
@@ -25,6 +27,7 @@ export const MENU_ID = {
   photoView: 'view.photo',
   showOnMap: 'view.showOnMap',
   thumbnails: 'view.thumbnails',
+  address: 'tools.address',
   filter: {
     all: 'view.filter.all',
     coords: 'view.filter.coords',
@@ -53,8 +56,6 @@ export function buildMenu(t: Translate, h: MenuHandlers, recent: string[], dev: 
         { type: 'separator' },
         { id: MENU_ID.save, label: t('menu.save'), accelerator: 'CmdOrCtrl+S', click: h.save, enabled: false },
         { id: MENU_ID.saveSelected, label: t('menu.saveSelected'), click: h.saveSelected, enabled: false },
-        { type: 'separator' },
-        { label: t('menu.openSettings'), click: h.openSettings },
         { type: 'separator' },
         { label: t('menu.exit'), click: h.exit }
       ]
@@ -108,6 +109,17 @@ export function buildMenu(t: Translate, h: MenuHandlers, recent: string[], dev: 
       filterItem('noCoords', 'menu.filterNoCoords'),
       filterItem('modified', 'menu.filterModified'),
       ...devItems
+    ]
+  })
+  // Tools: modes that fill in data for the photos of the folder (tz.md, пп. 5.5, 5.6), the
+  // settings file and the log folder (пп. 8.2, 6.9).
+  template.push({
+    label: t('menu.tools'),
+    submenu: [
+      { id: MENU_ID.address, label: t('menu.getAddress'), type: 'checkbox', click: h.toggleAddress },
+      { type: 'separator' },
+      { label: t('menu.openSettings'), click: h.openSettings },
+      { label: t('menu.openLogs'), click: h.openLogs }
     ]
   })
   template.push({

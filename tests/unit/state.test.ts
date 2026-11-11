@@ -31,7 +31,7 @@ describe('recent folders (tz.md, п. 3.1)', () => {
 })
 
 describe('state between runs (tz.md, п. 7.5)', () => {
-  const NONE = { lastSession: null, window: null, map: null }
+  const NONE = { lastSession: null, window: null, map: null, tools: { address: false } }
 
   it('recent folders survive a restart, including non-Latin paths', () => {
     const file = stateFile()
@@ -71,8 +71,9 @@ describe('state between runs (tz.md, п. 7.5)', () => {
     const file = stateFile()
     const window = { x: -1200, y: 40, width: 1100, height: 700, maximized: true }
     const map = { lat: -33.85, lon: 151.21, zoom: 13, source: 'topo', thumbnails: true }
-    writeState(file, { recentFolders: [], lastSession: null, window, map })
-    expect(readState(file)).toEqual({ recentFolders: [], lastSession: null, window, map })
+    const tools = { address: true }
+    writeState(file, { recentFolders: [], lastSession: null, window, map, tools })
+    expect(readState(file)).toEqual({ recentFolders: [], lastSession: null, window, map, tools })
   })
 
   it('broken window or map parts are dropped, the rest is kept', () => {

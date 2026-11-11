@@ -22,6 +22,8 @@ export interface Settings {
   }
   log: { level: LogLevel; maxSizeKb: number; maxFiles: number }
   search: { url: string }
+  /** Addresses by coordinates (tz.md, п. 5.5). */
+  geocode: { url: string; minIntervalMs: number }
   /** Photos from subfolders (tz.md, п. 3.2). */
   folders: { subfolders: 'ask' | 'yes' | 'no' }
 }

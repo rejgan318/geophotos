@@ -5,6 +5,7 @@ import type {
   FolderLoading,
   InitData,
   PhotosChanged,
+  QueueState,
   SaveState,
   SearchResult,
   SetCoordsRequest,
@@ -32,6 +33,8 @@ export interface GeoPhotosApi {
   /** Commands of the View menu. */
   onCommand(cb: (cmd: WindowCommand) => void): void
   onSaveState(cb: (state: SaveState) => void): void
+  /** Addresses still to find (tz.md, п. 5.5). */
+  onQueueState(cb: (state: QueueState) => void): void
   searchPlaces(query: string): Promise<SearchResult>
   aboutInfo(): Promise<AboutInfo>
   /** Opens the settings file (created if missing) or the log folder. */
