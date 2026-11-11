@@ -9,7 +9,7 @@ import { PhotoView } from './viewer'
 import { HelpView } from './help'
 import { AboutView } from './about'
 import { effectiveFilter, matchesFilter, toggleFilter, visibleIds, type StripFilter } from './filter'
-import { PENCIL_SVG, PHOTO_SVG, PIN_SVG } from './icons'
+import { PENCIL_SVG, PHOTO_SVG, PIN_OFF_SVG, PIN_SVG } from './icons'
 import { isNavKey, navigateShown } from './navigation'
 import { addSearchBox } from './search'
 import {
@@ -72,6 +72,7 @@ async function start(): Promise<void> {
     [
       ['all', 'filter.total', 'total', PHOTO_SVG],
       ['coords', 'filter.withCoords', 'withCoords', PIN_SVG],
+      ['noCoords', 'filter.withoutCoords', 'withoutCoords', PIN_OFF_SVG],
       ['modified', 'filter.modified', 'modified', PENCIL_SVG]
     ] as const
   ).map(([key, label, count, svg]) => {
@@ -156,6 +157,13 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     viewer.show(p, folder?.generation ?? 0)
   }
 
+  /** Double click, C, View → Show on Map: the current photo on the map (tz.md, п. 4.4.2). */
+  const showOnMap = (): void => {
+    if (sel.current === null || !folder?.photos[sel.current]?.coords) return
+    if (view === 'photo') toggleView()
+    map.showOnMap(sel.current)
+  }
+
   /** Space and View menu: the map or the current photo (tz.md, п. 9.3). */
   const toggleView = (): void => {
     view = view === 'map' ? 'photo' : 'map'
@@ -191,8 +199,7 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     // Double click: show the photo on the map (from the photo view, back to the map first).
     onDoubleClick: (id) => {
       if (sel.current !== id || sel.ids.size !== 1) select(single(id))
-      if (view === 'photo') toggleView()
-      map.showOnMap(id)
+      showOnMap()
     },
     onDragStart: (id) => {
       const next = dragSelection(sel, id)
@@ -236,6 +243,14 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
         if (!e.repeat && folder) toggleView()
         return
       }
+      // C: show the current photo on the map. By the physical key, so it also works in the
+      // Russian layout («С»); Ctrl+C and other combinations are left alone.
+      if (e.code === 'KeyC' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!e.repeat) showOnMap()
+        return
+      }
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'a') {
         e.preventDefault()
         if (folder) select(selectAll(sel, order))
@@ -268,6 +283,8 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   window.geophotos.onCommand((cmd) => {
     if (cmd.type === 'toggleView') {
       if (folder) toggleView()
+    } else if (cmd.type === 'showOnMap') {
+      showOnMap()
     } else if (cmd.type === 'setFilter') {
       setFilter(cmd.filter)
     } else if (cmd.type === 'toggleHelp') {

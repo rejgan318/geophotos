@@ -11,6 +11,7 @@ export interface MenuHandlers {
   openSettings(): void
   exit(): void
   toggleView(): void
+  showOnMap(): void
   setFilter(filter: StripFilter): void
   shortcuts(): void
   about(): void
@@ -21,7 +22,13 @@ export const MENU_ID = {
   save: 'file.save',
   saveSelected: 'file.saveSelected',
   photoView: 'view.photo',
-  filter: { all: 'view.filter.all', coords: 'view.filter.coords', modified: 'view.filter.modified' }
+  showOnMap: 'view.showOnMap',
+  filter: {
+    all: 'view.filter.all',
+    coords: 'view.filter.coords',
+    noCoords: 'view.filter.noCoords',
+    modified: 'view.filter.modified'
+  }
 } as const
 
 /** Traditional window menu (tz.md, п. 4.9). Reload and developer tools exist only in development. */
@@ -78,9 +85,17 @@ export function buildMenu(t: Translate, h: MenuHandlers, recent: string[], dev: 
         registerAccelerator: false,
         click: h.toggleView
       },
+      {
+        id: MENU_ID.showOnMap,
+        label: t('menu.showOnMap'),
+        accelerator: 'C',
+        registerAccelerator: false,
+        click: h.showOnMap
+      },
       { type: 'separator' },
       filterItem('all', 'menu.filterAll'),
       filterItem('coords', 'menu.filterCoords'),
+      filterItem('noCoords', 'menu.filterNoCoords'),
       filterItem('modified', 'menu.filterModified'),
       ...devItems
     ]

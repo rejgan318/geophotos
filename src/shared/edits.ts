@@ -45,10 +45,17 @@ export function photosToSave(photos: readonly Photo[], only?: ReadonlySet<number
 }
 
 /** Counter of the status bar (п. 4.13). */
-export function photoCounts(photos: readonly Photo[]): { total: number; withCoords: number; modified: number } {
+export function photoCounts(photos: readonly Photo[]): {
+  total: number
+  withCoords: number
+  withoutCoords: number
+  modified: number
+} {
+  const withCoords = photos.filter((p) => p.coords).length
   return {
     total: photos.length,
-    withCoords: photos.filter((p) => p.coords).length,
+    withCoords,
+    withoutCoords: photos.length - withCoords,
     modified: photos.filter((p) => p.modified).length
   }
 }

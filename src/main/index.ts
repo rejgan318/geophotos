@@ -321,6 +321,7 @@ function updateMenu(recent: string[]): void {
         openSettings: () => void openSettingsFile(),
         exit: () => app.quit(),
         toggleView: () => win?.webContents.send(IPC.command, { type: 'toggleView' }),
+        showOnMap: () => win?.webContents.send(IPC.command, { type: 'showOnMap' }),
         setFilter: (filter: StripFilter) => win?.webContents.send(IPC.command, { type: 'setFilter', filter }),
         shortcuts: () => win?.webContents.send(IPC.command, { type: 'toggleHelp' }),
         about: () => win?.webContents.send(IPC.command, { type: 'showAbout' })
@@ -352,13 +353,17 @@ function refreshEditState(): void {
     viewItem.enabled = photos.length > 0
     viewItem.checked = ui.view === 'photo'
   }
+  // Show on Map: the current photo needs coordinates.
+  const showItem = menu?.getMenuItemById(MENU_ID.showOnMap)
+  if (showItem) showItem.enabled = ui.current !== null && !!photos[ui.current]?.coords
   const counts = photoCounts(photos)
   const available: Record<StripFilter, boolean> = {
     all: photos.length > 0,
     coords: counts.withCoords > 0,
+    noCoords: counts.withoutCoords > 0,
     modified: counts.modified > 0
   }
-  for (const f of ['all', 'coords', 'modified'] as const) {
+  for (const f of ['all', 'coords', 'noCoords', 'modified'] as const) {
     const item = menu?.getMenuItemById(MENU_ID.filter[f])
     if (!item) continue
     item.enabled = available[f]

@@ -59,7 +59,7 @@ export interface PhotosChanged {
 }
 
 /** Filter of the strip and the map by the status bar counter (tz.md, п. 4.13). */
-export type StripFilter = 'all' | 'coords' | 'modified'
+export type StripFilter = 'all' | 'coords' | 'noCoords' | 'modified'
 
 /** What the main area shows: the map or the current photo (Space, View menu). */
 export type ViewMode = 'map' | 'photo'
@@ -74,6 +74,7 @@ export interface UiState {
 
 export type WindowCommand =
   | { type: 'toggleView' }
+  | { type: 'showOnMap' }
   | { type: 'setFilter'; filter: StripFilter }
   | { type: 'toggleHelp' }
   | { type: 'showAbout' }
@@ -130,7 +131,7 @@ export function validSetCoords(v: unknown): v is SetCoordsRequest {
   )
 }
 
-const FILTERS: readonly StripFilter[] = ['all', 'coords', 'modified']
+const FILTERS: readonly StripFilter[] = ['all', 'coords', 'noCoords', 'modified']
 
 /** Checks the UI state coming from the window; null if it is not one. */
 export function validUiState(v: unknown): UiState | null {

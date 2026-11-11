@@ -66,7 +66,7 @@ describe('what is saved and counted', () => {
   })
 
   it('status bar counter (п. 4.13)', () => {
-    expect(photoCounts(photos)).toEqual({ total: 4, withCoords: 3, modified: 2 })
+    expect(photoCounts(photos)).toEqual({ total: 4, withCoords: 3, withoutCoords: 1, modified: 2 })
   })
 })
 

@@ -10,8 +10,10 @@
   "menu.exit": "E&xit",
   "menu.view": "&View",
   "menu.photoView": "&Photo View",
+  "menu.showOnMap": "&Show on Map",
   "menu.filterAll": "&All Photos",
   "menu.filterCoords": "Photos with &Coordinates",
+  "menu.filterNoCoords": "Photos &without Coordinates",
   "menu.filterModified": "&Modified Photos",
   "menu.reload": "Reload",
   "menu.devTools": "Developer Tools",
@@ -44,6 +46,7 @@
   "status.noSelection": "No photo selected",
   "filter.total": "Total: {n}",
   "filter.withCoords": "With coordinates: {n}",
+  "filter.withoutCoords": "Without coordinates: {n}",
   "filter.modified": "Modified: {n}",
   "filter.hint": "Show only these photos in the strip and on the map; click again to show all",
   "filter.allHint": "Show all photos in the strip and on the map",
@@ -90,6 +93,7 @@
   "help.key.click": "Click",
   "help.key.doubleClick": "Double-click",
   "help.doubleClick": "In the strip: show the photo on the map (centred; a group opens up)",
+  "help.showOnMap": "Show the current photo on the map (as a double click)",
   "help.prevNext": "Previous / next photo",
   "help.firstLast": "First / last photo",
   "help.photoView": "Map / photo",
@@ -112,5 +116,6 @@
   "help.markCoords": "The photo has coordinates",
   "help.markSelected": "Selected photo",
   "help.markModified": "Coordinates changed, not saved",
+  "help.markNoCoords": "Status bar: photos without coordinates — the ones still to place; a placed photo leaves the list",
   "help.markFilters": "Status bar counters: click to show only these photos, click again for all"
 }

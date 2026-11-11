@@ -10,8 +10,10 @@
   "menu.exit": "В&ыход",
   "menu.view": "&Вид",
   "menu.photoView": "Просмотр &фото",
+  "menu.showOnMap": "Показать на ка&рте",
   "menu.filterAll": "&Все фото",
   "menu.filterCoords": "Фото с &координатами",
+  "menu.filterNoCoords": "Фото &без координат",
   "menu.filterModified": "&Изменённые фото",
   "menu.reload": "Перезагрузить",
   "menu.devTools": "Инструменты разработчика",
@@ -44,6 +46,7 @@
   "status.noSelection": "Фото не выбрано",
   "filter.total": "Всего: {n}",
   "filter.withCoords": "С координатами: {n}",
+  "filter.withoutCoords": "Без координат: {n}",
   "filter.modified": "Изменено: {n}",
   "filter.hint": "Показать в ленте и на карте только эти фото; повторный клик — все",
   "filter.allHint": "Показать в ленте и на карте все фото",
@@ -90,6 +93,7 @@
   "help.key.click": "Клик",
   "help.key.doubleClick": "Двойной клик",
   "help.doubleClick": "В ленте: показать фото на карте (по центру; группа раскрывается)",
+  "help.showOnMap": "Показать текущее фото на карте (как двойной клик)",
   "help.prevNext": "Предыдущее / следующее фото",
   "help.firstLast": "Первое / последнее фото",
   "help.photoView": "Карта / фото",
@@ -112,5 +116,6 @@
   "help.markCoords": "У фото есть координаты",
   "help.markSelected": "Выбранное фото",
   "help.markModified": "Координаты изменены, не сохранены",
+  "help.markNoCoords": "Строка состояния: фото без координат — те, что ещё не привязаны; привязанное фото уходит из списка",
   "help.markFilters": "Счётчики в строке состояния: клик — показать только эти фото, повторный — все"
 }

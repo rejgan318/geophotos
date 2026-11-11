@@ -5,6 +5,7 @@ export type { StripFilter }
 
 export function matchesFilter(p: Photo, f: StripFilter): boolean {
   if (f === 'coords') return p.coords !== null
+  if (f === 'noCoords') return p.coords === null
   if (f === 'modified') return p.modified
   return true
 }

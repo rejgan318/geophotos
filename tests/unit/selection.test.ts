@@ -82,6 +82,7 @@ describe('strip filter by the status bar counter (tz.md, п. 4.13)', () => {
   it('all, with coordinates, modified', () => {
     expect(visibleIds(photos, 'all')).toEqual([0, 1, 2, 3, 4, 5])
     expect(visibleIds(photos, 'coords')).toEqual([1, 3, 4])
+    expect(visibleIds(photos, 'noCoords')).toEqual([0, 2, 5])
     expect(visibleIds(photos, 'modified')).toEqual([3])
     expect(matchesFilter(photos[0]!, 'coords')).toBe(false)
   })
@@ -119,6 +120,9 @@ describe('strip filter by the status bar counter (tz.md, п. 4.13)', () => {
     const saved = photos.map((p) => ({ ...p, modified: false }))
     expect(effectiveFilter(saved, 'modified')).toBe('all')
     expect(effectiveFilter([], 'coords')).toBe('all')
+    // All photos placed: "without coordinates" is empty and falls back to "all".
+    expect(effectiveFilter(photos, 'noCoords')).toBe('noCoords')
+    expect(effectiveFilter(photos.map((p) => ({ ...p, coords: { lat: 1, lon: 2 } })), 'noCoords')).toBe('all')
   })
 
   it('Shift+click and Ctrl+A take only shown photos', () => {
