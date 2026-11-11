@@ -1,7 +1,8 @@
-import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs'
 import { join, parse } from 'node:path'
 import log from 'electron-log/main'
 import type { LogLevel } from '@shared/settings'
+import { staleFallbackLogs } from './log-files'
 
 export { log }
 
@@ -32,6 +33,7 @@ export function setupLog(
   opts: { level: LogLevel; maxSizeKb: number; maxFiles: number; console: boolean }
 ): void {
   mkdirSync(logsDir, { recursive: true })
+  const removed = removeStaleFallbackLogs(logsDir, opts.maxFiles)
   const mainPath = join(logsDir, 'main.log')
   let path = mainPath
   let fallbackReason: string | null = null
@@ -75,4 +77,28 @@ export function setupLog(
   } else {
     log.warn(`Log is written here instead of main.log: ${fallbackReason}`)
   }
+  if (removed.length) log.info(`Old backup log files removed: ${removed.join(', ')}`)
+}
+
+/**
+ * Backup log files of earlier sessions (main.log was locked then) are not rotated away:
+ * only the latest maxFiles sessions are kept. A file that cannot be deleted now stays.
+ */
+function removeStaleFallbackLogs(logsDir: string, maxFiles: number): string[] {
+  let names: string[]
+  try {
+    names = readdirSync(logsDir)
+  } catch {
+    return []
+  }
+  const removed: string[] = []
+  for (const name of staleFallbackLogs(names, maxFiles)) {
+    try {
+      rmSync(join(logsDir, name))
+      removed.push(name)
+    } catch {
+      // Open in another program: try again at the next start.
+    }
+  }
+  return removed
 }
