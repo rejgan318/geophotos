@@ -3,11 +3,12 @@ import { dirname, join } from 'node:path'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, protocol, screen, session, shell } from 'electron'
 import { windowTitle } from '@shared/app-info'
 import { pathFromArgv } from '@shared/argv'
+import { isBatch, parseBatchArgs } from '@shared/batch-args'
 import { SUPPORTED_EXTENSIONS } from '@shared/formats'
 import { assignAddress, assignAltitude, assignCoords, pastePhotoData, photoCounts, photosAt, photosToSave } from '@shared/edits'
 import { ELEVATION_BATCH, pointsWithoutAltitude } from '@shared/elevation'
 import { formatDuration } from '@shared/duration'
-import { pointsWithoutAddress } from '@shared/geocode'
+import { pointKey, pointsWithoutAddress } from '@shared/geocode'
 import { makeTranslate, type Strings, type Translate } from '@shared/i18n'
 import {
   IPC,
@@ -38,6 +39,7 @@ import { savePhotos, type SaveFailure } from './save'
 import { PlaceSearch } from './search'
 import { DefaultSettingsError, ensureUserSettingsFile, formatProblem, loadSettings, setUserSetting } from './settings'
 import { readState, writeState, type AppState, type ToolsState } from './state'
+import { runBatch, type BatchOptions } from './batch'
 import { ElevationService } from './elevation'
 import { Geocoder } from './geocode'
 import { ThumbnailService } from './thumbnails'
@@ -100,7 +102,11 @@ let mapState: AppState['map'] = null
 let viewState: ViewState | null = null
 /** What the window reports: selection, filter, view mode. */
 let ui: UiState = { ids: [], current: null, filter: 'all', view: 'map', mapMode: 'pins' }
-let startupPath = pathFromArgv(process.argv.slice(1), (p) => kindOf(p) !== null, app.getAppPath())
+/** Started with --batch (tz.md, п. 10): no main window, the batch and the exit code. */
+const batchArgs = isBatch(process.argv.slice(1)) ? parseBatchArgs(process.argv.slice(1), app.getAppPath()) : null
+/** The batch window is running: the program state of the main window is not touched. */
+let batchOnly = batchArgs !== null
+let startupPath = batchArgs ? undefined : pathFromArgv(process.argv.slice(1), (p) => kindOf(p) !== null, app.getAppPath())
 
 function kindOf(p: string): 'dir' | 'file' | null {
   try {
@@ -633,6 +639,73 @@ function toggleAddress(): void {
 
 
 /**
+ * Photos of the open folder still waiting for an address or an altitude (пп. 5.5, 5.6), points
+ * that got no answer left out.
+ */
+function pendingPhotos(): Photo[] {
+  if (!current || (!tools.address && !tools.altitude)) return []
+  return current.data.photos.filter((p) => {
+    if (!p.coords) return false
+    const key = pointKey(p.coords)
+    return (
+      (tools.address && !p.address && !addressFailed.has(key)) ||
+      (tools.altitude && p.altitude === null && !altitudeFailed.has(key))
+    )
+  })
+}
+
+/**
+ * Closing the program (tz.md, пп. 6.5, 10). While addresses or altitudes are still being found:
+ * stay, save and finish them in the background, or exit without them; then, as always, the
+ * question about unsaved changes.
+ */
+async function confirmExit(): Promise<'stay' | 'exit' | 'background'> {
+  const left = pendingPhotos().length
+  if (left && win) {
+    asking = true
+    let response: number
+    try {
+      ;({ response } = await dialog.showMessageBox(win, {
+        type: 'question',
+        title: t('exitPending.title'),
+        message: t('exitPending.message', { count: left, time: formatDuration(pendingSeconds(addressLeft(), altitudeLeft()), t) }),
+        buttons: [t('exitPending.stay'), t('exitPending.background'), t('exitPending.exit')],
+        defaultId: 1,
+        cancelId: 0,
+        noLink: true
+      }))
+    } finally {
+      asking = false
+    }
+    if (response === 0) return 'stay'
+    if (response === 1) {
+      log.info(`Exit: ${left} photo(s) are finished in the background`)
+      const failed = await save(undefined, { askPending: false })
+      // Not saved (cancelled, or some files failed: their list is shown): the program stays.
+      return failed !== null && failed.length === 0 ? 'background' : 'stay'
+    }
+    log.info(`Exit without ${left} address(es)/altitude(s)`)
+  }
+  return (await confirmDiscard()) ? 'exit' : 'stay'
+}
+
+/**
+ * The main window closes; the rest of the addresses and altitudes are found and written in the
+ * progress window of the batch mode, which closes by itself when done (tz.md, п. 10).
+ */
+async function finishInBackground(w: BrowserWindow): Promise<void> {
+  const paths = pendingPhotos().map((p) => p.path)
+  const opts: BatchOptions = { address: tools.address, altitude: tools.altitude, subfolders: false, overwrite: false }
+  // The session is remembered now; the background work does not change it.
+  rememberSession()
+  batchOnly = true
+  current = null
+  const done = runBatchWindow(paths, opts)
+  w.destroy()
+  app.exit(await done)
+}
+
+/**
  * Saving while addresses or altitudes are still being found (пп. 5.5, 5.6): wait for them, save
  * without them, or cancel (false).
  */
@@ -673,9 +746,9 @@ function sendSaveState(state: SaveState): void {
  * "Save" (all modified photos) or "Save Selected" (tz.md, п. 6). Returns the photos that could
  * not be written (their list is shown in a window, п. 6.8), or null if saving was cancelled.
  */
-async function save(only?: ReadonlySet<number>): Promise<SaveFailure[] | null> {
+async function save(only?: ReadonlySet<number>, opts: { askPending?: boolean } = {}): Promise<SaveFailure[] | null> {
   if (!current || saving) return []
-  if (!(await askPendingBeforeSave())) return null
+  if (opts.askPending !== false && !(await askPendingBeforeSave())) return null
   if (!current || saving) return []
   const folder = current
   const toSave = photosToSave(folder.data.photos, only)
@@ -871,13 +944,14 @@ function createWindow(): BrowserWindow {
   // Closing the window (Exit, Alt+F4, ×) with unsaved changes asks first (tz.md, п. 6.5).
   w.on('close', (e) => {
     keepPlace()
-    if (closeConfirmed || (!isDirty() && !saving)) return
+    if (closeConfirmed || (!isDirty() && !saving && !pendingPhotos().length)) return
     e.preventDefault()
-    if (saving) return
-    void confirmDiscard().then((ok) => {
-      if (!ok) return
+    if (saving || asking) return
+    void confirmExit().then((how) => {
+      if (how === 'stay') return
       closeConfirmed = true
-      w.close()
+      if (how === 'background') void finishInBackground(w)
+      else w.close()
     })
   })
 
@@ -898,9 +972,107 @@ function createWindow(): BrowserWindow {
   return w
 }
 
+/** The progress window of the batch mode (tz.md, п. 10): small, no menu. */
+function createBatchWindow(): BrowserWindow {
+  const w = new BrowserWindow({
+    width: 520,
+    height: 250,
+    minWidth: 360,
+    minHeight: 180,
+    maximizable: false,
+    title: 'GeoPhotos',
+    show: false,
+    ...(dev ? { icon: join(app.getAppPath(), 'build', 'icon.png') } : {}),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  })
+  w.setMenu(null)
+  w.once('ready-to-show', () => w.show())
+  const devUrl = process.env['ELECTRON_RENDERER_URL']
+  if (dev && devUrl) void w.loadURL(`${devUrl}/batch.html`)
+  else void w.loadFile(join(__dirname, '../renderer/batch.html'))
+  return w
+}
+
+/**
+ * Runs a batch in its progress window (tz.md, п. 10) and waits until the window is closed.
+ * Returns the exit code: 0 — all done, 1 — some errors, 3 — cancelled.
+ */
+async function runBatchWindow(paths: string[], opts: BatchOptions): Promise<number> {
+  const w = createBatchWindow()
+  await new Promise<void>((r) => w.webContents.once('did-finish-load', () => r()))
+  let cancel = false
+  let running = true
+  const onCancel = (): void => {
+    if (!cancel) log.info('Batch: cancelled by the user')
+    cancel = true
+  }
+  ipcMain.on(IPC.batchCancel, onCancel)
+  // Closing the window while it works is a Cancel; afterwards it just closes.
+  w.on('close', (e) => {
+    if (!running) return
+    e.preventDefault()
+    onCancel()
+  })
+  log.info(
+    `Batch: ${paths.join(', ')}; address: ${opts.address}, altitude: ${opts.altitude}, ` +
+      `subfolders: ${opts.subfolders}, overwrite: ${opts.overwrite}`
+  )
+  const outcome = await runBatch(
+    paths,
+    opts,
+    {
+      exiftool,
+      reverse: (c) => geocoder.reverse(c),
+      elevations: (points) => elevation.get(points),
+      log,
+      addressIntervalMs: geocoder.intervalMs
+    },
+    (p) => {
+      if (w.isDestroyed()) return
+      w.webContents.send(IPC.batchState, p)
+      // The taskbar shows the progress too; unknown total — the moving bar.
+      w.setProgressBar(p.total ? p.done / p.total : 2)
+    },
+    () => cancel
+  )
+  running = false
+  ipcMain.off(IPC.batchCancel, onCancel)
+  for (const f of outcome.failed) log.error(`Batch error: ${f.name}: ${f.error}`)
+  log.info(
+    `Batch done: written ${outcome.written}, skipped ${outcome.skipped}, errors ${outcome.failed.length}` +
+      (outcome.cancelled ? ', cancelled' : '')
+  )
+  if (!w.isDestroyed()) {
+    w.setProgressBar(-1)
+    w.webContents.send(IPC.batchDone, outcome)
+    if (outcome.failed.length) w.flashFrame(true)
+    await new Promise<void>((r) => w.once('closed', () => r()))
+  }
+  return outcome.cancelled ? 3 : outcome.failed.length ? 1 : 0
+}
+
 void app.whenReady().then(async () => {
   if (!(await startup())) {
     app.exit(1)
+    return
+  }
+  ipcMain.handle(IPC.batchInit, () => ({ strings }))
+
+  // Batch mode (tz.md, п. 10): the batch window only; wrong parameters are told and the program ends.
+  if (batchArgs) {
+    if ('error' in batchArgs) {
+      log.error(`Batch mode: ${batchArgs.error}`)
+      await dialog.showMessageBox({ type: 'error', title: 'GeoPhotos', message: t('batch.badArgs', { error: batchArgs.error }), buttons: [t('dialog.ok')] })
+      app.exit(2)
+      return
+    }
+    const { paths: list, ...opts } = batchArgs
+    app.exit(await runBatchWindow(list, opts))
     return
   }
 
@@ -978,6 +1150,7 @@ void app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => app.quit())
 app.on('will-quit', () => {
-  rememberSession()
+  // The batch mode does not touch the state of the main window (last folder, map…).
+  if (!batchOnly) rememberSession()
   exiftool?.close()
 })

@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    />
+    <title>GeoPhotos</title>
+  </head>
+  <body>
+    <div id="batch">
+      <div id="phase"></div>
+      <progress id="bar" max="1" value="0"></progress>
+      <div id="eta"></div>
+      <div id="summary" hidden></div>
+      <ul id="errors" hidden></ul>
+      <div class="row">
+        <span id="auto"></span>
+        <button id="button" type="button"></button>
+      </div>
+    </div>
+    <script type="module" src="./src/batch.ts"></script>
+  </body>
+</html>

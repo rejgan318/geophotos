@@ -1,6 +1,8 @@
 import type {
   AboutInfo,
   AboutTarget,
+  BatchDone,
+  BatchState,
   FolderData,
   FolderLoading,
   InitData,
@@ -39,6 +41,11 @@ export interface GeoPhotosApi {
   aboutInfo(): Promise<AboutInfo>
   /** Opens the settings file (created if missing) or the log folder. */
   openAboutTarget(target: AboutTarget): Promise<void>
+  /** Batch window (tz.md, п. 10): texts, progress, result, Cancel. */
+  batchInit(): Promise<{ strings: Record<string, string> }>
+  onBatchState(cb: (s: BatchState) => void): void
+  onBatchDone(cb: (d: BatchDone) => void): void
+  batchCancel(): void
   readClipboard(): Promise<string>
   writeClipboard(text: string): Promise<void>
 }

@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import {
   IPC,
   type AboutInfo,
+  type BatchDone,
+  type BatchState,
   type FolderData,
   type FolderLoading,
   type InitData,
@@ -42,6 +44,14 @@ const api: GeoPhotosApi = {
   searchPlaces: (query) => ipcRenderer.invoke(IPC.search, query) as Promise<SearchResult>,
   aboutInfo: () => ipcRenderer.invoke(IPC.aboutInfo) as Promise<AboutInfo>,
   openAboutTarget: (target) => ipcRenderer.invoke(IPC.aboutOpen, target) as Promise<void>,
+  batchInit: () => ipcRenderer.invoke(IPC.batchInit) as Promise<{ strings: Record<string, string> }>,
+  onBatchState: (cb) => {
+    ipcRenderer.on(IPC.batchState, (_e, s: BatchState) => cb(s))
+  },
+  onBatchDone: (cb) => {
+    ipcRenderer.on(IPC.batchDone, (_e, d: BatchDone) => cb(d))
+  },
+  batchCancel: () => ipcRenderer.send(IPC.batchCancel),
   readClipboard: () => ipcRenderer.invoke(IPC.clipboardRead) as Promise<string>,
   writeClipboard: (text) => ipcRenderer.invoke(IPC.clipboardWrite, text) as Promise<void>
 }

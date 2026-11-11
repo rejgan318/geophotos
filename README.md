@@ -18,7 +18,7 @@ You open a folder from a trip, see the photos that already have coordinates (usu
 - **Photo view (Space):** a large preview in place of the map.
 - **Save:** *Save* writes all modified photos, *Save Selected* only the selected ones. Progress is shown, and a list of files that could not be written appears at the end. You are warned about unsaved changes.
 - **Log:** every write is logged with its old and new coordinates, so they can be restored by hand.
-- **Interface:** English and Russian. New languages are added as files, without code changes.
+- **Interface:** English, Russian and Ukrainian. New languages are added as files, without code changes.
 - **Next start:** the program reopens the last folder and photo.
 
 ### Where coordinates are written

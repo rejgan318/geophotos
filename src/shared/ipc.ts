@@ -33,6 +33,14 @@ export const IPC = {
   aboutInfo: 'about:info',
   /** invoke, window → main: open a license file (links in About). */
   aboutOpen: 'about:open',
+  /** invoke, batch window → main: the interface texts (tz.md, п. 10). */
+  batchInit: 'batch:init',
+  /** event, main → batch window: progress. */
+  batchState: 'batch:state',
+  /** event, main → batch window: the result. */
+  batchDone: 'batch:done',
+  /** send, batch window → main: Cancel. */
+  batchCancel: 'batch:cancel',
   /** invoke, window → main: text of the clipboard (Ctrl+V). */
   clipboardRead: 'clipboard:read',
   /** invoke, window → main: put text into the clipboard (Ctrl+C). */
@@ -161,6 +169,24 @@ export interface QueueState {
   address: number
   altitude: number
   seconds: number
+}
+
+/** Progress of the batch mode (tz.md, п. 10): the phase, steps, about how long is left. */
+export interface BatchState {
+  phase: 'scan' | 'address' | 'altitude' | 'write'
+  done: number
+  total: number
+  phaseDone: number
+  phaseTotal: number
+  seconds: number | null
+}
+
+/** Result of the batch mode. */
+export interface BatchDone {
+  written: number
+  skipped: number
+  failed: { name: string; error: string }[]
+  cancelled: boolean
 }
 
 export type { FolderData, SearchResult }

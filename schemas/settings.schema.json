@@ -14,7 +14,7 @@
       "type": "string",
       "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
       "default": "en",
-      "description": "Interface language: the name of a file in the locales folder without .json, for example \"en\" or \"ru\"."
+      "description": "Interface language: the name of a file in the locales folder without .json, for example \"en\", \"ru\" or \"uk\"."
     },
     "exiftoolPath": {
       "type": "string",
