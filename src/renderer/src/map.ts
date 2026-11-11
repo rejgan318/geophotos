@@ -104,11 +104,15 @@ export class MapView {
     const layers: Record<string, L.TileLayer> = {}
     let first: L.TileLayer | undefined
     let chosen: L.TileLayer | undefined
+    // Every source can be chosen at any zoom: beyond its own maximum its tiles are enlarged
+    // (tz.md, п. 5.1), so the map can zoom as far as the most detailed source.
+    const maxZoom = Math.max(...config.sources.map((s) => s.maxZoom))
     for (const s of config.sources) {
       const layer = L.tileLayer(s.url, {
         subdomains: s.subdomains,
         attribution: s.attribution,
-        maxZoom: s.maxZoom
+        maxNativeZoom: s.maxZoom,
+        maxZoom
       })
       layers[s.name] = layer
       first ??= layer

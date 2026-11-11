@@ -61,6 +61,8 @@ describe('config files (tz-config.md)', () => {
     expect(settings.map.tileSources['google']?.maxZoom).toBe(18)
     expect(settings.map.tileSources['google']?.url).toContain('google.com')
     expect(settings.map.tileSources['osm']?.url).toContain('openstreetmap')
+    // A source added in a new version reaches an older user file (tz.md, п. 5.1).
+    expect(mapSources(settings).sources.at(-1)?.key).toBe('topo')
   })
 
   it('invalid user file: problems with file, field, reason; defaults used (п. 8.4)', () => {
@@ -117,7 +119,7 @@ describe('config files (tz-config.md)', () => {
     const s = load(null).settings
     const custom: Settings = { ...s, map: { ...s.map, tileSources: { ...s.map.tileSources, bad: { name: 'x' } } } }
     const { sources, skipped } = mapSources(custom)
-    expect(sources.map((x) => x.key)).toEqual(['osm', 'esri', 'google'])
+    expect(sources.map((x) => x.key)).toEqual(['osm', 'esri', 'google', 'topo'])
     expect(skipped).toEqual(['bad'])
   })
 })

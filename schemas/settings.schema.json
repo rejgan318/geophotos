@@ -161,7 +161,7 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 24,
-          "description": "Maximum zoom level of the source."
+          "description": "Maximum zoom level of the source's tiles. The map can zoom further (as far as the most detailed source); then this source's tiles are enlarged."
         }
       }
     }
