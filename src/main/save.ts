@@ -81,12 +81,15 @@ export async function savePhotos(
   for (const item of items) {
     const { photo, source } = item
     try {
-      if (!photo.coords) throw new Error('No coordinates to write')
+      // A RAW file is never changed (п. 6.4): coordinates inside it cannot be removed.
+      if (!photo.coords && source.write === 'xmp' && photo.coordSource !== 'sidecar') {
+        throw new Error('The coordinates are inside the RAW file, which the program never changes')
+      }
       const steps = writePlan(source, photo.coords)
       for (const step of steps) await runStep(exiftool, step)
       written.push(item)
       log.info(
-        `Coordinates written: ${photo.path}; old: ${coordsText(item.old)}; new: ${coordsText(photo.coords)}; ` +
+        `${photo.coords ? 'Coordinates written' : 'Coordinates removed'}: ${photo.path}; old: ${coordsText(item.old)}; new: ${coordsText(photo.coords)}; ` +
           `to: ${steps.map((s) => (s.create ? `${s.path} (created)` : s.path)).join(', ')}`
       )
     } catch (e) {

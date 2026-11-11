@@ -39,6 +39,19 @@ describe('assigning coordinates (tz.md, пп. 4.5, 4.7)', () => {
     expect(back!.modified).toBe(false)
   })
 
+  it('Del removes coordinates: modified if the file had them, saved like any change (п. 6.6)', () => {
+    const changed = assignCoords(photos, file, [0, 1, 3], null)
+    // Photo 1 had no coordinates: nothing to remove.
+    expect(changed.map((p) => [p.id, p.coords, p.modified])).toEqual([
+      [0, null, true],
+      [3, null, true]
+    ])
+    expect(photosToSave(changed).map((p) => p.id)).toEqual([0, 3])
+    // Placing a removed photo back at its file point removes the mark.
+    expect(assignCoords(changed, file, [0], A)[0]!.modified).toBe(false)
+    expect(validSetCoords({ ids: [0], coords: null })).toBe(true)
+  })
+
   it('unknown ids and duplicates are ignored', () => {
     expect(assignCoords(photos, file, [1, 1, 99], B).map((p) => p.id)).toEqual([1])
   })

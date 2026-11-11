@@ -14,17 +14,18 @@ export function normalizeCoords(c: LatLon): LatLon {
 }
 
 /**
- * Gives the photos new coordinates (tz.md, пп. 4.5, 4.7). Returns only the photos that changed,
- * as new objects. A photo counts as modified while its coordinates differ from those in its file
- * (`fileCoords`), so moving it back to where it was removes the mark.
+ * Gives the photos new coordinates (tz.md, пп. 4.5, 4.7), or removes them with `null` (Del,
+ * п. 6.6). Returns only the photos that changed, as new objects. A photo counts as modified while
+ * its coordinates differ from those in its file (`fileCoords`), so moving it back to where it was
+ * removes the mark.
  */
 export function assignCoords(
   photos: readonly Photo[],
   fileCoords: readonly (LatLon | null)[],
   ids: readonly number[],
-  coords: LatLon
+  coords: LatLon | null
 ): Photo[] {
-  const c = normalizeCoords(coords)
+  const c = coords ? normalizeCoords(coords) : null
   const changed: Photo[] = []
   for (const id of new Set(ids)) {
     const p = photos[id]
@@ -39,9 +40,12 @@ export function photosAt(photos: readonly Photo[], coords: LatLon): number[] {
   return photos.filter((p) => sameCoords(p.coords, coords)).map((p) => p.id)
 }
 
-/** Modified photos to write: all of them ("Save") or only the given ones ("Save Selected"). */
+/**
+ * Modified photos to write: all of them ("Save") or only the given ones ("Save Selected"); a
+ * photo without coordinates has them removed from its files (п. 6.6).
+ */
 export function photosToSave(photos: readonly Photo[], only?: ReadonlySet<number>): Photo[] {
-  return photos.filter((p) => p.modified && p.coords && (!only || only.has(p.id)))
+  return photos.filter((p) => p.modified && (!only || only.has(p.id)))
 }
 
 /** Counter of the status bar (п. 4.13). */

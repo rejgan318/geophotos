@@ -84,7 +84,8 @@ export interface FolderLoading {
 
 export interface SetCoordsRequest {
   ids: number[]
-  coords: LatLon
+  /** null removes the coordinates (Del, tz.md, п. 6.6). */
+  coords: LatLon | null
 }
 
 export interface PhotosChanged {
@@ -157,11 +158,11 @@ export function parseThumbUrl(url: string): { generation: number; id: number; la
 export function validSetCoords(v: unknown): v is SetCoordsRequest {
   if (!v || typeof v !== 'object') return false
   const r = v as Record<string, unknown>
-  const c = r['coords'] as Record<string, unknown> | undefined
+  const c = r['coords'] as Record<string, unknown> | null | undefined
   const ids = r['ids']
+  if (!Array.isArray(ids) || !ids.every((id) => Number.isInteger(id) && (id as number) >= 0)) return false
+  if (c === null) return true
   return (
-    Array.isArray(ids) &&
-    ids.every((id) => Number.isInteger(id) && (id as number) >= 0) &&
     !!c &&
     typeof c['lat'] === 'number' &&
     typeof c['lon'] === 'number' &&

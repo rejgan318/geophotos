@@ -560,8 +560,9 @@ function setCoords(req: unknown): void {
   if (!current || saving || !validSetCoords(req)) return
   const changed = assignCoords(current.data.photos, current.fileCoords, req.ids, req.coords)
   if (!changed.length) return
+  const to = req.coords ? formatCoords(changed[0]!.coords!) : 'none'
   log.verbose(
-    `Coordinates set (not saved): ${changed.length} photo(s) → ${formatCoords(changed[0]!.coords!)}: ` +
+    `Coordinates set (not saved): ${changed.length} photo(s) → ${to}: ` +
       changed.map((p) => p.name).join(', ')
   )
   applyPhotos(changed)

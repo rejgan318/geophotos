@@ -25,6 +25,21 @@ describe('where coordinates are written (tz.md, пп. 6.2–6.4)', () => {
     expect(steps[0]!.args).toContain('-XMP-exif:GPSLongitude=-151.2153')
   })
 
+  it('removing coordinates (п. 6.6): GPS, altitude and address go from the file and its sidecar', () => {
+    const jpeg = writePlan({ path: 'a.jpg', write: 'file', xmpCoords: false, sidecar: { path: 'a.xmp', exists: true, coords: false } }, null)
+    expect(jpeg.map((s) => [s.path, s.kind])).toEqual([
+      ['a.jpg', 'file'],
+      ['a.xmp', 'sidecar']
+    ])
+    expect(jpeg[0]!.args).toEqual(expect.arrayContaining(['-GPS:all=', '-XMP-exif:GPS*=', '-XMP-photoshop:City=', '-IPTC:City=']))
+    expect(jpeg[1]!.args).toEqual(expect.arrayContaining(['-XMP-exif:GPS*=', '-XMP-photoshop:City=']))
+    expect(jpeg[1]!.args).not.toContain('-GPS:all=')
+    // RAW: only an existing sidecar; the RAW file is never touched, no sidecar is created.
+    const raw = writePlan({ path: 'r.cr2', write: 'xmp', xmpCoords: false, sidecar: { path: 'r.xmp', exists: true, coords: true } }, null)
+    expect(raw.map((s) => s.path)).toEqual(['r.xmp'])
+    expect(writePlan({ path: 'r.cr2', write: 'xmp', xmpCoords: false, sidecar: { path: 'r.xmp', exists: false, coords: false } }, null)).toEqual([])
+  })
+
   it('a sidecar of an ordinary file is updated only if it has coordinates', () => {
     const base = { path: 'h.heic', write: 'file' as const, xmpCoords: false }
     const withCoords = writePlan({ ...base, sidecar: { path: 'h.xmp', exists: true, coords: true } }, SW)

@@ -201,6 +201,48 @@ describe('saving generated cases', () => {
     near(again.photos.find((p) => p.name === b)?.coords, { lat: -30, lon: -40 })
   })
 
+  it('Del: coordinates, altitude and address are removed from EXIF, XMP, IPTC and the sidecar (п. 6.6)', async () => {
+    const dir = join(tmp.dir, 'del')
+    mkdirSync(dir)
+    const file = join(dir, 'full.jpg')
+    await makeJpeg(file)
+    await writeTags(et, file, [
+      '-n',
+      '-EXIF:GPSLatitude=10',
+      '-EXIF:GPSLatitudeRef=N',
+      '-EXIF:GPSLongitude=20',
+      '-EXIF:GPSLongitudeRef=E',
+      '-EXIF:GPSAltitude=300',
+      '-XMP-exif:GPSLatitude=10',
+      '-XMP-exif:GPSLongitude=20',
+      '-XMP-photoshop:City=Lviv',
+      '-IPTC:City=Lviv',
+      '-EXIF:Make=Canon'
+    ])
+    const side = join(dir, 'side.jpg')
+    await makeJpeg(side)
+    await writeTags(et, join(dir, 'side.xmp'), ['-n', '-XMP-exif:GPSLatitude=1', '-XMP-exif:GPSLongitude=2', '-XMP-photoshop:Country=UA'])
+
+    const folder = await scanFolder(dir, et)
+    expect(folder.photos.every((p) => p.coords)).toBe(true)
+    const photos = [...folder.photos]
+    for (const ch of assignCoords(photos, photos.map((p) => p.coords), photos.map((p) => p.id), null)) photos[ch.id] = ch
+    const items = photos.map((p) => ({ photo: p, source: folder.sources[p.id]!, old: folder.photos[p.id]!.coords }))
+    const log = memoryLog()
+    const outcome = await savePhotos(et, items, log)
+    expect(outcome.failed).toEqual([])
+    expect(outcome.saved.map((s) => s.photo.coords)).toEqual([null, null])
+    expect(log.lines.filter((l) => l.includes('Coordinates removed'))).toHaveLength(2)
+
+    const [rec] = await et.json(['-G0', '-GPS:all', '-XMP:all', '-IPTC:all', '-EXIF:Make', file])
+    expect(Object.keys(rec!).filter((k) => /GPS|City/.test(k))).toEqual([])
+    // Other tags stay.
+    expect(rec!['EXIF:Make']).toBe('Canon')
+    const [sideRec] = await et.json(['-G0', '-XMP:all', join(dir, 'side.xmp')])
+    expect(Object.keys(sideRec!).filter((k) => /GPS|Country/.test(k))).toEqual([])
+    expect((await scanFolder(dir, et)).photos.map((p) => p.coords)).toEqual([null, null])
+  })
+
   it('a leftover exiftool temp file does not block writing and is removed', async () => {
     const file = join(tmp.dir, 'leftover.jpg')
     await makeJpeg(file)

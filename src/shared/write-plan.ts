@@ -41,7 +41,30 @@ export function xmpArgs(c: LatLon): string[] {
   return [`-XMP-exif:GPSLatitude=${deg(c.lat)}`, `-XMP-exif:GPSLongitude=${deg(c.lon)}`]
 }
 
-/** No `*_original` copies on step 2 (tz.md, п. 6.3); -n: numbers as they are. */
+/**
+ * Removing the coordinates (Del, tz.md, п. 6.6) removes with them the altitude and the address,
+ * which would be wrong without them: the whole GPS block of EXIF, the GPS fields of XMP, and the
+ * place names that Lightroom shows (XMP and IPTC).
+ */
+const ADDRESS_DELETE = [
+  '-XMP-photoshop:Country=',
+  '-XMP-photoshop:State=',
+  '-XMP-photoshop:City=',
+  '-XMP-iptcCore:Location=',
+  '-XMP-iptcCore:CountryCode='
+]
+const XMP_DELETE = ['-XMP-exif:GPS*=', ...ADDRESS_DELETE]
+const FILE_DELETE = [
+  '-GPS:all=',
+  '-IPTC:Country-PrimaryLocationName=',
+  '-IPTC:Country-PrimaryLocationCode=',
+  '-IPTC:Province-State=',
+  '-IPTC:City=',
+  '-IPTC:Sub-location=',
+  ...XMP_DELETE
+]
+
+/** No `*_original` copies (tz.md, п. 6.3); -n: numbers as they are. */
 const COMMON = ['-overwrite_original', '-n']
 
 /**
@@ -50,7 +73,8 @@ const COMMON = ['-overwrite_original', '-n']
  *   the same values if they already have coordinates, so that reading by п. 3.7 gives the new ones.
  * - Other RAW: only the sidecar; an existing one is updated, a missing one is created.
  */
-export function writePlan(info: WriteInfo, c: LatLon): WriteStep[] {
+export function writePlan(info: WriteInfo, c: LatLon | null): WriteStep[] {
+  if (!c) return deletePlan(info)
   if (info.write === 'xmp') {
     if (!info.sidecar) throw new Error(`No sidecar for ${info.path}`)
     return [{ path: info.sidecar.path, kind: 'sidecar', create: !info.sidecar.exists, args: [...COMMON, ...xmpArgs(c)] }]
@@ -65,6 +89,19 @@ export function writePlan(info: WriteInfo, c: LatLon): WriteStep[] {
   ]
   if (info.sidecar?.exists && info.sidecar.coords) {
     steps.push({ path: info.sidecar.path, kind: 'sidecar', create: false, args: [...COMMON, ...xmpArgs(c)] })
+  }
+  return steps
+}
+
+/**
+ * Removing the coordinates (п. 6.6): from the file itself (ordinary formats and DNG) and from the
+ * sidecar if there is one. A RAW file is never changed: only its sidecar.
+ */
+function deletePlan(info: WriteInfo): WriteStep[] {
+  const steps: WriteStep[] = []
+  if (info.write !== 'xmp') steps.push({ path: info.path, kind: 'file', create: false, args: [...COMMON, ...FILE_DELETE] })
+  if (info.sidecar?.exists) {
+    steps.push({ path: info.sidecar.path, kind: 'sidecar', create: false, args: [...COMMON, ...XMP_DELETE] })
   }
   return steps
 }

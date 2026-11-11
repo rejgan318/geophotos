@@ -108,6 +108,7 @@
   "help.copy": "Copy the coordinates of the current photo",
   "help.paste": "Paste coordinates into the selected photos: copied from a photo or from another program (e.g. Google Maps)",
   "help.thumbnails": "On the map: markers / thumbnails",
+  "help.delete": "Remove the coordinates (and the address and altitude) of the selected photos; written by Save",
   "help.selectAll": "Select all shown photos",
   "help.save": "Save all modified photos",
   "help.open": "Open a photo and its folder",

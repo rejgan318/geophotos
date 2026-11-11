@@ -225,7 +225,8 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     reportState()
   }
 
-  const setCoords = async (ids: number[], coords: LatLon): Promise<void> => {
+  /** New coordinates for the photos; null removes them (Del, tz.md, п. 6.6). */
+  const setCoords = async (ids: number[], coords: LatLon | null): Promise<void> => {
     if (!folder || saving || !ids.length) return
     note('')
     await window.geophotos.setCoords({ ids, coords })
@@ -317,6 +318,13 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
         e.preventDefault()
         e.stopPropagation()
         if (!e.repeat) toggleThumbnails()
+        return
+      }
+      // Del: the selected photos lose their coordinates (and address, altitude) until Save.
+      if (e.key === 'Delete' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!e.repeat && folder) void setCoords([...sel.ids], null)
         return
       }
       // Ctrl+C / Ctrl+V of coordinates, by the physical key (any layout). Text fields keep
