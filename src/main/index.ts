@@ -9,6 +9,7 @@ import { assignAddress, assignAltitude, assignCoords, pastePhotoData, photoCount
 import { ELEVATION_BATCH, pointsWithoutAltitude } from '@shared/elevation'
 import { formatDuration } from '@shared/duration'
 import { pointKey, pointsWithoutAddress } from '@shared/geocode'
+import { RetryBook } from '@shared/retry'
 import { makeTranslate, type Strings, type Translate } from '@shared/i18n'
 import {
   IPC,
@@ -382,8 +383,8 @@ async function openFolder(
   }
   for (const dir of scanned.unreadable) log.warn(`Subfolder skipped, cannot be read: ${dir}`)
   // A new folder: every point may be asked again (tz.md, п. 5.5).
-  addressFailed.clear()
-  altitudeFailed.clear()
+  addressRetry.clear()
+  altitudeRetry.clear()
   selection = new Set(chosen ? [chosen.id] : [])
   win.webContents.send(IPC.folderLoaded, {
     ...current.data,
@@ -527,22 +528,56 @@ function applyPhotos(changed: Photo[]): void {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
-/** Points that got no address in this folder (no answer, or no address there): not asked again. */
-const addressFailed = new Set<string>()
+/**
+ * Points whose address did not come in this folder (п. 5.5): no answer — asked again later in the
+ * background; no address there, or the last try failed — not asked again.
+ */
+const addressRetry = new RetryBook()
 let addressRunning = false
 
-/** Points of the open folder still waiting for their address (п. 5.5); 0 when the mode is off. */
-function addressLeft(): number {
-  return tools.address && current ? pointsWithoutAddress(current.data.photos, addressFailed).size : 0
+/** Points of the open folder that need an address, except those in `blocked`. */
+function addressPoints(blocked: ReadonlySet<string>): number {
+  return tools.address && current ? pointsWithoutAddress(current.data.photos, blocked).size : 0
 }
 
-/** Points that got no altitude in this folder: not asked again (п. 5.6). */
-const altitudeFailed = new Set<string>()
+/** Points to ask for their address now (п. 5.5); 0 when the mode is off. */
+function addressLeft(): number {
+  return addressPoints(addressRetry.blocked(Date.now()))
+}
+
+/** Points still to get an address: now, or later on a retry. */
+function addressAll(): number {
+  return addressPoints(addressRetry.finalKeys())
+}
+
+/** Points whose altitude did not come (п. 5.6), as for the addresses. */
+const altitudeRetry = new RetryBook()
 let altitudeRunning = false
 
-/** Points of the open folder still waiting for their altitude; 0 when the mode is off. */
+function altitudePoints(blocked: ReadonlySet<string>): number {
+  return tools.altitude && current ? pointsWithoutAltitude(current.data.photos, blocked).size : 0
+}
+
+/** Points to ask for their altitude now; 0 when the mode is off. */
 function altitudeLeft(): number {
-  return tools.altitude && current ? pointsWithoutAltitude(current.data.photos, altitudeFailed).size : 0
+  return altitudePoints(altitudeRetry.blocked(Date.now()))
+}
+
+/** Points still to get an altitude: now, or later on a retry. */
+function altitudeAll(): number {
+  return altitudePoints(altitudeRetry.finalKeys())
+}
+
+/**
+ * Nothing to ask now, but some points wait for a retry: pause a little (at most a second, so a
+ * mode turned off or another folder stops the wait at once). False when nothing waits.
+ */
+async function waitForRetry(book: RetryBook, all: () => number): Promise<boolean> {
+  if (!all()) return false
+  reportQueue()
+  const now = Date.now()
+  await sleep(Math.min(1000, Math.max(50, (book.nextAt(now) ?? now + 1000) - now)))
+  return true
 }
 
 /**
@@ -555,17 +590,24 @@ function pendingSeconds(addresses: number, altitudes: number): number {
   return Math.ceil(Math.max(a, h))
 }
 
+/** The status bar: points still to get (waiting retries too), about how long the rest takes now. */
 function reportQueue(): void {
-  const address = addressLeft()
-  const altitude = altitudeLeft()
-  win?.webContents.send(IPC.queueState, { address, altitude, seconds: pendingSeconds(address, altitude) })
+  const now = Date.now()
+  const asking = addressLeft() + altitudeLeft()
+  // Only retries left: about the time until the nearest one.
+  const next = Math.min(addressRetry.nextAt(now) ?? Infinity, altitudeRetry.nextAt(now) ?? Infinity)
+  win?.webContents.send(IPC.queueState, {
+    address: addressAll(),
+    altitude: altitudeAll(),
+    seconds: asking || next === Infinity ? pendingSeconds(addressLeft(), altitudeLeft()) : Math.ceil((next - now) / 1000)
+  })
 }
 
 /** Starts getting addresses and altitudes if their modes are on and some photos need them. */
 function kickQueues(): void {
   reportQueue()
-  if (!addressRunning && addressLeft() > 0) void runAddresses()
-  if (!altitudeRunning && altitudeLeft() > 0) void runAltitudes()
+  if (!addressRunning && addressAll() > 0) void runAddresses()
+  if (!altitudeRunning && altitudeAll() > 0) void runAltitudes()
 }
 
 /**
@@ -579,13 +621,16 @@ async function runAltitudes(): Promise<void> {
       while (saving) await sleep(200)
       const folder = current
       if (!tools.altitude || !folder) break
-      const batch = [...pointsWithoutAltitude(folder.data.photos, altitudeFailed)].slice(0, ELEVATION_BATCH)
-      if (!batch.length) break
+      const batch = [...pointsWithoutAltitude(folder.data.photos, altitudeRetry.blocked(Date.now()))].slice(0, ELEVATION_BATCH)
+      if (!batch.length) {
+        if (await waitForRetry(altitudeRetry, altitudeAll)) continue
+        break
+      }
       const res = await elevation.get(batch.map(([, c]) => c))
       if (current !== folder || !tools.altitude) continue
       if (!res.ok) {
-        for (const [key] of batch) altitudeFailed.add(key)
-        log.warn(`Altitudes for ${batch.length} point(s) not received: ${res.error}`)
+        for (const [key] of batch) altitudeRetry.failed(key, Date.now())
+        log.warn(`Altitudes for ${batch.length} point(s) not received (asked again later): ${res.error}`)
         reportQueue()
         continue
       }
@@ -593,9 +638,10 @@ async function runAltitudes(): Promise<void> {
       batch.forEach(([key, point], i) => {
         const alt = res.values[i]
         if (alt === null || alt === undefined) {
-          altitudeFailed.add(key)
+          altitudeRetry.nothing(key)
           return
         }
+        altitudeRetry.done(key)
         const ids = photosAt(folder.data.photos, point).filter((id) => folder.data.photos[id]!.altitude === null)
         changed.push(...assignAltitude(folder.data.photos, folder.fileMeta, ids, alt))
       })
@@ -615,7 +661,7 @@ function toggleAltitude(): void {
   log.info(`Get Altitude: ${tools.altitude ? 'on' : 'off'}`)
   saveAppState()
   refreshEditState()
-  if (tools.altitude) altitudeFailed.clear()
+  if (tools.altitude) altitudeRetry.clear()
   kickQueues()
 }
 
@@ -630,18 +676,27 @@ async function runAddresses(): Promise<void> {
       while (saving) await sleep(200)
       const folder = current
       if (!tools.address || !folder) break
-      const next = pointsWithoutAddress(folder.data.photos, addressFailed).entries().next()
-      if (next.done) break
+      const next = pointsWithoutAddress(folder.data.photos, addressRetry.blocked(Date.now())).entries().next()
+      if (next.done) {
+        if (await waitForRetry(addressRetry, addressAll)) continue
+        break
+      }
       const [key, point] = next.value
       const res = await geocoder.reverse(point)
       if (current !== folder || !tools.address) continue
       if (!res.ok || !res.address) {
-        addressFailed.add(key)
-        if (res.ok) log.info(`No address at ${formatCoords(point)}`)
-        else log.warn(`Address for ${formatCoords(point)} not received: ${res.error}`)
+        if (res.ok) {
+          addressRetry.nothing(key)
+          log.info(`No address at ${formatCoords(point)}`)
+        } else {
+          addressRetry.failed(key, Date.now())
+          const again = addressRetry.isFinal(key) ? 'given up' : 'asked again later'
+          log.warn(`Address for ${formatCoords(point)} not received (${again}): ${res.error}`)
+        }
         reportQueue()
         continue
       }
+      addressRetry.done(key)
       const ids = photosAt(folder.data.photos, point).filter((id) => !folder.data.photos[id]!.address)
       const changed = assignAddress(folder.data.photos, folder.fileMeta, ids, res.address)
       log.verbose(`Address found (not saved): ${formatCoords(point)} → ${addressText(res.address)}: ${changed.length} photo(s)`)
@@ -660,14 +715,14 @@ function toggleAddress(): void {
   log.info(`Get Address: ${tools.address ? 'on' : 'off'}`)
   saveAppState()
   refreshEditState()
-  if (tools.address) addressFailed.clear()
+  if (tools.address) addressRetry.clear()
   kickQueues()
 }
 
 
 /**
- * Photos of the open folder still waiting for an address or an altitude (пп. 5.5, 5.6), points
- * that got no answer left out.
+ * Photos of the open folder still waiting for an address or an altitude (пп. 5.5, 5.6), also
+ * those whose point waits for a retry; points given up on are left out.
  */
 function pendingPhotos(): Photo[] {
   if (!current || (!tools.address && !tools.altitude)) return []
@@ -675,8 +730,8 @@ function pendingPhotos(): Photo[] {
     if (!p.coords) return false
     const key = pointKey(p.coords)
     return (
-      (tools.address && !p.address && !addressFailed.has(key)) ||
-      (tools.altitude && p.altitude === null && !altitudeFailed.has(key))
+      (tools.address && !p.address && !addressRetry.isFinal(key)) ||
+      (tools.altitude && p.altitude === null && !altitudeRetry.isFinal(key))
     )
   })
 }

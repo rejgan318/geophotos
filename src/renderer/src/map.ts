@@ -79,6 +79,8 @@ export interface MapHandlers {
   dragged(): number[] | null
   /** The map moved or zoomed, or another tile source was chosen (kept for the next run). */
   onViewChanged(): void
+  /** Ctrl+drag on the map drew a rectangle: the photos with markers inside it (п. 4.4.3). */
+  onBoxSelect(ids: number[]): void
 }
 
 /**
@@ -193,6 +195,7 @@ export class MapView {
     this.cluster.on('animationend spiderfied unspiderfied', () => this.highlightGroups())
 
     this.acceptDrops()
+    this.boxSelect()
     // Where the map was at the end of the last run; the first time, the settings' view (п. 7.1).
     const v = config.saved ?? config.initialView
     this.map.setView([v.lat, v.lon], v.zoom)
@@ -388,6 +391,59 @@ export class MapView {
     name.textContent = this.photos[id]?.name ?? ''
     box.append(img, name)
     return box
+  }
+
+  /**
+   * Selection by a rectangle (tz.md, п. 4.4.3): Ctrl+drag on the map (not on a marker) draws it;
+   * on release the photos whose markers are inside are reported, also those hidden in a group.
+   * Shift+drag stays Leaflet's zoom to a box.
+   */
+  private boxSelect(): void {
+    const container = this.map.getContainer()
+    let start: L.Point | null = null
+    let box: HTMLElement | null = null
+    const corners = (a: L.Point, b: L.Point): [L.Point, L.Point] => [
+      L.point(Math.min(a.x, b.x), Math.min(a.y, b.y)),
+      L.point(Math.max(a.x, b.x), Math.max(a.y, b.y))
+    ]
+    const onMove = (e: MouseEvent): void => {
+      if (!start || !box) return
+      const [min, max] = corners(start, this.map.mouseEventToContainerPoint(e))
+      Object.assign(box.style, { left: `${min.x}px`, top: `${min.y}px`, width: `${max.x - min.x}px`, height: `${max.y - min.y}px` })
+    }
+    const onUp = (e: MouseEvent): void => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      this.map.dragging.enable()
+      box?.remove()
+      box = null
+      if (!start) return
+      const [min, max] = corners(start, this.map.mouseEventToContainerPoint(e))
+      start = null
+      // A click, not a rectangle.
+      if (max.x - min.x < 4 && max.y - min.y < 4) return
+      const bounds = L.latLngBounds(this.map.containerPointToLatLng(min), this.map.containerPointToLatLng(max))
+      const ids = [...this.markers].filter(([, m]) => bounds.contains(m.getLatLng())).map(([id]) => id)
+      this.h.onBoxSelect(ids)
+    }
+    // Capture: the map must not start panning.
+    container.addEventListener(
+      'mousedown',
+      (e) => {
+        if (e.button !== 0 || !e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return
+        if ((e.target as HTMLElement).closest('.leaflet-marker-icon, .leaflet-control')) return
+        e.preventDefault()
+        e.stopPropagation()
+        this.map.dragging.disable()
+        start = this.map.mouseEventToContainerPoint(e)
+        box = document.createElement('div')
+        box.className = 'select-box'
+        container.append(box)
+        document.addEventListener('mousemove', onMove)
+        document.addEventListener('mouseup', onUp)
+      },
+      true
+    )
   }
 
   /** Photos from the strip can be dropped anywhere on the map (п. 4.5). */

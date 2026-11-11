@@ -1,7 +1,7 @@
 import { net } from 'electron'
 import { parseAddress, reverseUrl } from '@shared/geocode'
 import type { Address, LatLon } from '@shared/photo'
-import { throttled } from './throttle'
+import { REQUEST_TIMEOUT_MS, throttled } from './throttle'
 
 export type ReverseResult = { ok: true; address: Address | null } | { ok: false; error: string }
 
@@ -21,7 +21,7 @@ export class Geocoder {
     const url = reverseUrl(this.baseUrl, c, this.language)
     return throttled(url, this.intervalMs, async () => {
       try {
-        const res = await net.fetch(url, { headers: { 'User-Agent': this.userAgent }, signal: AbortSignal.timeout(15000) })
+        const res = await net.fetch(url, { headers: { 'User-Agent': this.userAgent }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
         if (!res.ok) return { ok: false, error: `HTTP ${res.status} ${res.statusText}`.trim() }
         return { ok: true, address: parseAddress(await res.json()) }
       } catch (e) {

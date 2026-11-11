@@ -256,8 +256,21 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     onMarkerMoved: async (id, to) => {
       const at = folder?.photos[id]?.coords
       if (!folder || !at) return
+      // The marker of one of several selected photos: all selected photos with coordinates go
+      // to the point (tz.md, п. 4.7); those without coordinates are not touched.
+      if (sel.ids.has(id) && sel.ids.size > 1) {
+        await setCoords([...sel.ids].filter((i) => folder?.photos[i]?.coords), to)
+        return
+      }
       const shown = folder.photos.filter((p) => matchesFilter(p, filter))
       await setCoords(photosAt(shown, at), to)
+    },
+    // A rectangle on the map selects the photos inside it instead of the old selection (п. 4.4.3);
+    // the current one is the first of them in the strip. An empty rectangle changes nothing.
+    onBoxSelect: (ids) => {
+      const inside = order.filter((id) => ids.includes(id))
+      if (!inside.length) return
+      select({ ids: new Set(inside), current: inside[0]!, anchor: inside[0]! })
     },
     onDropPhotos: (ids, at) => void setCoords(ids, at),
     // Double click on the map places the current photo if it has no coordinates yet (tz.md,

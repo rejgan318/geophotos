@@ -1,7 +1,7 @@
 import { net } from 'electron'
 import { elevationUrl, parseElevations } from '@shared/elevation'
 import type { LatLon } from '@shared/photo'
-import { throttled } from './throttle'
+import { REQUEST_TIMEOUT_MS, throttled } from './throttle'
 
 export type ElevationResult = { ok: true; values: (number | null)[] } | { ok: false; error: string }
 
@@ -19,7 +19,7 @@ export class ElevationService {
     const url = elevationUrl(this.baseUrl, points)
     return throttled(url, 1000, async () => {
       try {
-        const res = await net.fetch(url, { headers: { 'User-Agent': this.userAgent }, signal: AbortSignal.timeout(15000) })
+        const res = await net.fetch(url, { headers: { 'User-Agent': this.userAgent }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
         if (!res.ok) return { ok: false, error: `HTTP ${res.status} ${res.statusText}`.trim() }
         const values = parseElevations(await res.json(), points.length)
         return values ? { ok: true, values } : { ok: false, error: 'unexpected answer' }

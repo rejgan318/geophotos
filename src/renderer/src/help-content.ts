@@ -47,6 +47,7 @@ export const SECTIONS: Section[] = [
       { action: 'help.action.dragToMap', text: 'help.dragToMap' },
       { action: 'help.action.dragToPhoto', text: 'help.dragToPhoto' },
       { action: 'help.action.dragMarker', text: 'help.dragMarker' },
+      { keys: ['Ctrl+help.key.drag'], text: 'help.boxSelect' },
       { action: 'help.action.dropOnMark', text: 'help.dropOnMark' }
     ]
   },

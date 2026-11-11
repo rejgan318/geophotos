@@ -31,7 +31,12 @@ export interface BatchDeps {
   log: SaveLog & { warn(msg: string): void }
   /** Pause between address requests, ms: for the time estimate. */
   addressIntervalMs: number
+  /** Pause before asking again the points the service did not answer, ms (default 10 s). */
+  retryDelayMs?: number
 }
+
+/** Points the service did not answer are asked again this many times, at the end. */
+export const BATCH_RETRIES = 2
 
 export type BatchPhase = 'scan' | 'address' | 'altitude' | 'write'
 
@@ -143,34 +148,70 @@ export async function runBatch(
   const addresses = new Map<string, Address>()
   const addressErrors = new Map<string, string>()
   let stopped = false
-  for (const [i, [key, point]] of addressPoints.entries()) {
-    report('address', i, addressPoints.length, seconds(addressPoints.length - i, altitudeBatches, items.length))
-    if (cancelled()) {
-      stopped = true
-      break
+  const pause = (): Promise<void> => new Promise((r) => setTimeout(r, deps.retryDelayMs ?? 10_000))
+
+  // Addresses, one point at a time; the points the service did not answer are asked again at
+  // the end, after a pause (a point with no address there is not).
+  let ask = addressPoints
+  for (let pass = 0; pass <= BATCH_RETRIES && ask.length && !stopped; pass++) {
+    if (pass) {
+      deps.log.info(`Batch: asking ${ask.length} address(es) again`)
+      await pause()
     }
-    const res = await deps.reverse(point)
-    if (res.ok && res.address) addresses.set(key, res.address)
-    else addressErrors.set(key, res.ok ? 'no address at this point' : `address not received: ${res.error}`)
-    done++
+    const again: [string, LatLon][] = []
+    for (const [i, [key, point]] of ask.entries()) {
+      report('address', i, ask.length, seconds(ask.length - i, altitudeBatches, items.length))
+      if (cancelled()) {
+        stopped = true
+        break
+      }
+      const res = await deps.reverse(point)
+      if (res.ok && res.address) {
+        addresses.set(key, res.address)
+        addressErrors.delete(key)
+      } else if (res.ok) addressErrors.set(key, 'no address at this point')
+      else {
+        addressErrors.set(key, `address not received: ${res.error}`)
+        again.push([key, point])
+      }
+      if (!pass) done++
+    }
+    ask = again
   }
 
+  // Altitudes, up to 100 points a request; failed requests are asked again the same way.
   const altitudes = new Map<string, number>()
   const altitudeErrors = new Map<string, string>()
-  for (let b = 0; b < altitudeBatches && !stopped; b++) {
-    report('altitude', b, altitudeBatches, seconds(0, altitudeBatches - b, items.length))
-    if (cancelled()) {
-      stopped = true
-      break
+  let pending = altitudePoints
+  for (let pass = 0; pass <= BATCH_RETRIES && pending.length && !stopped; pass++) {
+    if (pass) {
+      deps.log.info(`Batch: asking ${pending.length} altitude(s) again`)
+      await pause()
     }
-    const batch = altitudePoints.slice(b * ELEVATION_BATCH, (b + 1) * ELEVATION_BATCH)
-    const res = await deps.elevations(batch.map(([, c]) => c))
-    batch.forEach(([key], i) => {
-      const v = res.ok ? res.values[i] : null
-      if (v !== null && v !== undefined) altitudes.set(key, v)
-      else altitudeErrors.set(key, res.ok ? 'no altitude at this point' : `altitude not received: ${res.error}`)
-    })
-    done++
+    const batches = Math.ceil(pending.length / ELEVATION_BATCH)
+    const again: [string, LatLon][] = []
+    for (let b = 0; b < batches; b++) {
+      report('altitude', b, batches, seconds(0, batches - b, items.length))
+      if (cancelled()) {
+        stopped = true
+        break
+      }
+      const batch = pending.slice(b * ELEVATION_BATCH, (b + 1) * ELEVATION_BATCH)
+      const res = await deps.elevations(batch.map(([, c]) => c))
+      batch.forEach(([key, point], i) => {
+        const v = res.ok ? res.values[i] : null
+        if (v !== null && v !== undefined) {
+          altitudes.set(key, v)
+          altitudeErrors.delete(key)
+        } else if (res.ok) altitudeErrors.set(key, 'no altitude at this point')
+        else {
+          altitudeErrors.set(key, `altitude not received: ${res.error}`)
+          again.push([key, point])
+        }
+      })
+      if (!pass) done++
+    }
+    pending = again
   }
 
   // Each photo gets what was found for its point; a photo with nothing new is not written.

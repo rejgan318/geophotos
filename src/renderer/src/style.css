@@ -593,6 +593,16 @@ body {
   white-space: nowrap;
 }
 
+/* The rectangle of a selection on the map (tz.md, п. 4.4.3), while it is drawn. */
+.select-box {
+  position: absolute;
+  z-index: 800;
+  box-sizing: border-box;
+  border: 2px dashed var(--marker-selected);
+  background: rgba(255, 23, 68, 0.12);
+  pointer-events: none;
+}
+
 /* Photo markers and groups on the map (tz.md, п. 4.8.1); colors come from the settings. */
 .photo-pin {
   background: none;

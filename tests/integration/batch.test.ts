@@ -99,6 +99,34 @@ describe('batch mode (tz.md, п. 10)', () => {
     ])
   })
 
+  it('a point the service did not answer is asked again at the end; one with nothing there is not', async () => {
+    const dir = join(tmp.dir, 'retry')
+    mkdirSync(dir)
+    await photoAt(join(dir, 'flaky.jpg'), { lat: 1, lon: 1 })
+    await photoAt(join(dir, 'sea.jpg'), { lat: 2, lon: 2 })
+    const asked: number[] = []
+    const base = deps({ reverse: 0, elevations: 0 })
+    const out = await runBatch(
+      [dir],
+      { address: true, altitude: false, subfolders: false, overwrite: false },
+      {
+        ...base,
+        retryDelayMs: 0,
+        reverse: async (c) => {
+          asked.push(c.lat)
+          if (c.lat === 2) return { ok: true, address: null }
+          // The first time the point gets no answer, the second time it does.
+          return asked.filter((x) => x === 1).length < 2 ? { ok: false, error: 'timeout' } : base.reverse(c)
+        }
+      },
+      () => {},
+      () => false
+    )
+    expect(asked).toEqual([1, 2, 1])
+    expect(out.written).toBe(1)
+    expect(out.failed).toEqual([{ name: join(dir, 'sea.jpg'), error: 'no address at this point' }])
+  })
+
   it('cancel while asking: what was found is still written, the rest is not asked', async () => {
     const dir = join(tmp.dir, 'cancel')
     mkdirSync(dir)

@@ -15,9 +15,9 @@ You open a folder from a trip, see the photos that already have coordinates (usu
   - drag a marker on the map;
   - Ctrl+V coordinates copied from Google Maps and the like, or Ctrl+C / Ctrl+V between photos (with the address and altitude);
   - Del removes coordinates, address and altitude.
-- **Selection:** click, Ctrl+click, Shift+click, Ctrl+A. Arrow keys move through the photos.
+- **Selection:** click, Ctrl+click, Shift+click, Ctrl+A; Ctrl+drag on the map selects the photos in a rectangle. Arrow keys move through the photos. Dragging the marker of one of several selected photos moves them all to that point.
 - **Filters:** all photos, with coordinates, without coordinates, modified — as buttons in the status bar and in the View menu.
-- **Address and altitude** (*Tools → Get Address / Get Altitude*): the address from Nominatim (OpenStreetMap) in the interface language, the altitude from the Open-Meteo Elevation API, for every photo of the folder that has coordinates.
+- **Address and altitude** (*Tools → Get Address / Get Altitude*): the address from Nominatim (OpenStreetMap) in the interface language, the altitude from the Open-Meteo Elevation API, for every photo of the folder that has coordinates. Points the service did not answer are asked again in the background.
 - **Photo view (Space):** a large preview in place of the map.
 - **Save:** *Save* writes all modified photos, *Save Selected* only the selected ones. Progress is shown, and a list of files that could not be written appears at the end. You are warned about unsaved changes.
 - **Log:** every write is logged with its old and new coordinates, so they can be restored by hand.
@@ -77,7 +77,7 @@ GeoPhotos.exe --batch [--no-address] [--no-altitude] [--subfolders] [--overwrite
 | `--subfolders` | Process the folders with all their subfolders |
 | `--overwrite` | Replace an address or altitude a photo already has (by default such photos are skipped) |
 
-Only photos with coordinates are processed. Each point is asked once; addresses come at most one per second (Nominatim's rule), altitudes up to 100 points per request. The results are written straight into the files.
+Only photos with coordinates are processed. Each point is asked once (points the service did not answer are asked again at the end, twice); addresses come at most one per second (Nominatim's rule), altitudes up to 100 points per request. The results are written straight into the files.
 
 A small window shows what is being done, a progress bar (also on the taskbar icon), about how long is left, and *Cancel*. Cancel during the requests keeps and writes what was already received. At the end it shows how many photos were written, skipped and failed (with the list of errors); with no errors it closes by itself after 10 seconds. Details go to the log.
 

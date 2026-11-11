@@ -1,3 +1,6 @@
+/** How long to wait for an answer of a data service (addresses, altitudes), ms. */
+export const REQUEST_TIMEOUT_MS = 20_000
+
 /**
  * Requests to one server, one at a time and at most one per interval (tz.md, пп. 5.3, 5.5:
  * Nominatim allows one request per second). Place search and addresses go to the same server,
