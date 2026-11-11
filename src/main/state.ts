@@ -5,22 +5,67 @@ import { MAX_RECENT } from '@shared/recent'
 
 /**
  * Program state between runs (tz.md, п. 7.5): a service file in userData, separate from the
- * settings, not edited by the user. It keeps the recent folders (п. 3.1), latest first, and the
- * folder and photo open when the program was closed (п. 7.1).
+ * settings, not edited by the user. It keeps the recent folders (п. 3.1), latest first, and what
+ * was on screen when the program was closed (п. 7.1).
  */
 export interface AppState {
   recentFolders: string[]
-  /** The open folder and the current photo at exit; opened at the next start without a parameter. */
-  lastSession: { folder: string; photo: string | null } | null
+  /**
+   * The open folder, the current photo and the strip scroll at exit; opened at the next start
+   * without a parameter.
+   */
+  lastSession: { folder: string; photo: string | null; scroll: number } | null
+  /** Position and size of the window (its normal size when maximized). */
+  window: WindowState | null
+  /** Place and zoom of the map, its tile source, markers or thumbnails. */
+  map: MapState | null
 }
 
-const EMPTY: AppState = { recentFolders: [], lastSession: null }
+export interface WindowState {
+  x: number
+  y: number
+  width: number
+  height: number
+  maximized: boolean
+}
+
+export interface MapState {
+  lat: number
+  lon: number
+  zoom: number
+  /** Key of the tile source (settings, map.tileSources). */
+  source: string
+  thumbnails: boolean
+}
+
+const EMPTY: AppState = { recentFolders: [], lastSession: null, window: null, map: null }
+
+type Obj = Record<string, unknown>
+const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 
 function readSession(v: unknown): AppState['lastSession'] {
-  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
-  const s = v as Record<string, unknown>
-  if (typeof s['folder'] !== 'string' || !s['folder']) return null
-  return { folder: s['folder'], photo: typeof s['photo'] === 'string' && s['photo'] ? s['photo'] : null }
+  if (!isObj(v)) return null
+  if (typeof v['folder'] !== 'string' || !v['folder']) return null
+  return {
+    folder: v['folder'],
+    photo: typeof v['photo'] === 'string' && v['photo'] ? v['photo'] : null,
+    scroll: isNum(v['scroll']) && v['scroll'] >= 0 ? v['scroll'] : 0
+  }
+}
+
+function readWindow(v: unknown): WindowState | null {
+  if (!isObj(v)) return null
+  const { x, y, width, height } = v
+  if (!isNum(x) || !isNum(y) || !isNum(width) || !isNum(height) || width < 100 || height < 100) return null
+  return { x, y, width, height, maximized: v['maximized'] === true }
+}
+
+function readMap(v: unknown): MapState | null {
+  if (!isObj(v)) return null
+  const { lat, lon, zoom, source } = v
+  if (!isNum(lat) || !isNum(lon) || !isNum(zoom) || Math.abs(lat) > 90 || zoom < 0) return null
+  return { lat, lon, zoom, source: typeof source === 'string' ? source : '', thumbnails: v['thumbnails'] === true }
 }
 
 /** Reads the state; a missing or broken file gives the default (empty) state. */
@@ -35,7 +80,12 @@ export function readState(file: string): AppState {
     if (!recentFolders.length && typeof v['lastFolder'] === 'string' && v['lastFolder']) {
       recentFolders.push(v['lastFolder'])
     }
-    return { recentFolders, lastSession: readSession(v['lastSession']) }
+    return {
+      recentFolders,
+      lastSession: readSession(v['lastSession']),
+      window: readWindow(v['window']),
+      map: readMap(v['map'])
+    }
   } catch {
     return { ...EMPTY }
   }

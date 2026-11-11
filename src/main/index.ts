@@ -1,6 +1,6 @@
 import { statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, protocol, session, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, protocol, screen, session, shell } from 'electron'
 import { windowTitle } from '@shared/app-info'
 import { pathFromArgv } from '@shared/argv'
 import { SUPPORTED_EXTENSIONS } from '@shared/formats'
@@ -18,11 +18,14 @@ import {
   type StripFilter,
   type UiState,
   validUiState,
-  type AboutInfo
+  validViewState,
+  type AboutInfo,
+  type ViewState
 } from '@shared/ipc'
 import { formatCoords, type LatLon, type Photo } from '@shared/photo'
 import { addRecent, removeRecent, samePath } from '@shared/recent'
 import { mapSources, type Settings } from '@shared/settings'
+import { windowOnScreen } from '@shared/window-place'
 import { ExifTool, exiftoolVersion } from './exiftool'
 import { scanFolder, type PhotoSource } from './folder'
 import { loadStrings } from './locales'
@@ -79,6 +82,11 @@ let asking = false
 let recentFolders: string[] = []
 /** Folder and photo of the previous run (tz.md, п. 7.1); replaced at exit. */
 let lastSession: AppState['lastSession'] = null
+/** Window place, map place and mode of the previous run; updated during this one (tz.md, п. 7.1). */
+let windowState: AppState['window'] = null
+let mapState: AppState['map'] = null
+/** The map and strip as the window last reported them. */
+let viewState: ViewState | null = null
 /** What the window reports: selection, filter, view mode. */
 let ui: UiState = { ids: [], current: null, filter: 'all', view: 'map', mapMode: 'pins' }
 let startupPath = pathFromArgv(process.argv.slice(1), (p) => kindOf(p) !== null, app.getAppPath())
@@ -157,15 +165,19 @@ function userAgent(): string {
 function initData(): InitData {
   const { sources, skipped } = mapSources(settings)
   if (skipped.length) log.warn(t('error.tileSources', { keys: skipped.join(', ') }))
+  // The tile source of the last run, if it is still in the settings (tz.md, п. 7.1).
+  const lastSource = mapState && sources.some((s) => s.key === mapState?.source) ? mapState.source : null
   return {
     strings,
     map: {
       sources,
-      defaultSource: settings.map.defaultSource,
+      defaultSource: lastSource ?? settings.map.defaultSource,
       initialView: settings.map.initialView,
       markers: settings.map.markers,
       hoverThumbSize: settings.map.hoverThumbSize,
-      thumbSize: settings.map.thumbnails.size
+      thumbSize: settings.map.thumbnails.size,
+      saved: mapState ? { lat: mapState.lat, lon: mapState.lon, zoom: mapState.zoom } : null,
+      thumbnails: mapState?.thumbnails ?? false
     },
     thumbScheme: THUMB_SCHEME
   }
@@ -183,16 +195,28 @@ function setRecent(update: (list: string[]) => string[]): void {
 
 function saveAppState(): void {
   try {
-    writeState(paths.state, { recentFolders, lastSession })
+    writeState(paths.state, { recentFolders, lastSession, window: windowState, map: mapState })
   } catch (e) {
     log.warn(`Cannot save state ${paths.state}: ${String(e)}`)
   }
 }
 
-/** At exit: the open folder and its current photo, for the next start (tz.md, п. 7.1). */
+/**
+ * At exit, for the next start (tz.md, п. 7.1): the open folder, its current photo and the strip
+ * scroll; the map place, tile source and mode. The window place is taken when it closes.
+ */
 function rememberSession(): void {
   const photo = ui.current === null ? undefined : current?.data.photos[ui.current]
-  lastSession = current ? { folder: current.data.folder, photo: photo?.path ?? null } : null
+  lastSession = current
+    ? { folder: current.data.folder, photo: photo?.path ?? null, scroll: viewState?.scroll ?? 0 }
+    : null
+  const thumbnails = ui.mapMode === 'thumbs'
+  if (viewState) {
+    const { lat, lon, zoom, source } = viewState
+    mapState = { lat, lon, zoom, source, thumbnails }
+  } else if (mapState) {
+    mapState = { ...mapState, thumbnails }
+  }
   saveAppState()
 }
 
@@ -211,7 +235,7 @@ async function restoreSession(): Promise<void> {
   const photoOk = !!photo && kindOf(photo) === 'file'
   if (photo && !photoOk) log.info(`Last selected photo not found: ${photo}`)
   log.info(`Restoring the last session: ${folder}`)
-  await openFolder(folder, photoOk && photo ? photo : undefined)
+  await openFolder(folder, photoOk && photo ? photo : undefined, { scroll: lastSession.scroll })
 }
 
 /** Opens a folder, or the folder of a photo with that photo selected (tz.md, п. 3.1). */
@@ -235,7 +259,8 @@ async function folderMissing(folder: string): Promise<void> {
   }
 }
 
-async function openFolder(folder: string, selectPath?: string): Promise<void> {
+/** `restored`: the folder of the last run opened at start (tz.md, п. 7.1). */
+async function openFolder(folder: string, selectPath?: string, restored?: { scroll: number }): Promise<void> {
   if (!win || saving) return
   if (!(await confirmDiscard())) return
   win.webContents.send(IPC.folderLoading, { folder })
@@ -265,7 +290,7 @@ async function openFolder(folder: string, selectPath?: string): Promise<void> {
     fileCoords: scanned.photos.map((p) => p.coords)
   }
   selection = new Set(chosen ? [chosen.id] : [])
-  win.webContents.send(IPC.folderLoaded, current.data)
+  win.webContents.send(IPC.folderLoaded, restored ? { ...current.data, restored } : current.data)
   setRecent((list) => addRecent(list, folder))
   refreshEditState()
 
@@ -554,9 +579,12 @@ function serveThumbnails(): void {
 }
 
 function createWindow(): BrowserWindow {
+  // The place of the last run, if it is still on a display (tz.md, п. 7.1).
+  const areas = screen.getAllDisplays().map((d) => d.workArea)
+  const place = windowState && windowOnScreen(windowState, areas) ? windowState : null
+  if (windowState && !place) log.info('The saved window place is off screen: default place')
   const w = new BrowserWindow({
-    width: 1280,
-    height: 860,
+    ...(place ? { x: place.x, y: place.y, width: place.width, height: place.height } : { width: 1280, height: 860 }),
     title: windowTitle(),
     show: false,
     // The built program takes its icon from the .exe; in development it is set here.
@@ -568,11 +596,22 @@ function createWindow(): BrowserWindow {
       sandbox: true
     }
   })
-  w.once('ready-to-show', () => w.show())
+  // The window place for the next run, whatever closes the window: the normal size, also when
+  // maximized (tz.md, п. 7.1).
+  const keepPlace = (): void => {
+    if (!w.isDestroyed()) windowState = { ...w.getNormalBounds(), maximized: w.isMaximized() }
+  }
+  w.on('move', keepPlace)
+  w.on('resize', keepPlace)
+  w.on('maximize', keepPlace)
+  w.on('unmaximize', keepPlace)
+  // maximize() also shows the window: both wait until the page is ready.
+  w.once('ready-to-show', () => (place?.maximized ? w.maximize() : w.show()))
   // The title is set by main (folder, unsaved mark), not by the page.
   w.on('page-title-updated', (e) => e.preventDefault())
   // Closing the window (Exit, Alt+F4, ×) with unsaved changes asks first (tz.md, п. 6.5).
   w.on('close', (e) => {
+    keepPlace()
     if (closeConfirmed || (!isDirty() && !saving)) return
     e.preventDefault()
     if (saving) return
@@ -645,6 +684,9 @@ void app.whenReady().then(async () => {
     selection = new Set(ui.ids)
     refreshEditState()
   })
+  ipcMain.on(IPC.viewState, (_e, v: unknown) => {
+    viewState = validViewState(v) ?? viewState
+  })
   ipcMain.handle(IPC.aboutInfo, () => aboutInfo())
   // Only the two known places: the window names a target, never a path.
   ipcMain.handle(IPC.aboutOpen, async (_e, target: unknown) => {
@@ -668,6 +710,9 @@ void app.whenReady().then(async () => {
   const saved = readState(paths.state)
   recentFolders = saved.recentFolders
   lastSession = saved.lastSession
+  windowState = saved.window
+  mapState = saved.map
+  ui = { ...ui, mapMode: mapState?.thumbnails ? 'thumbs' : 'pins' }
   updateMenu(recentFolders)
   win = createWindow()
   win.on('closed', () => (win = null))

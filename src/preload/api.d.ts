@@ -9,6 +9,7 @@ import type {
   SearchResult,
   SetCoordsRequest,
   UiState,
+  ViewState,
   WindowCommand
 } from '../shared/ipc'
 
@@ -26,6 +27,8 @@ export interface GeoPhotosApi {
   onPhotosChanged(cb: (data: PhotosChanged) => void): void
   /** Tells main the selection, filter and view mode (Save Selected, View menu, last session). */
   reportState(state: UiState): void
+  /** Tells main the place of the map, tile source and strip scroll (next run). */
+  reportView(view: ViewState): void
   /** Commands of the View menu. */
   onCommand(cb: (cmd: WindowCommand) => void): void
   onSaveState(cb: (state: SaveState) => void): void

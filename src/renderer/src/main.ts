@@ -56,7 +56,7 @@ async function start(): Promise<void> {
   /** Map or photo in the main area (Space, View menu). */
   let view: ViewMode = 'map'
   /** Markers or thumbnails on the map (T, View menu; tz.md, п. 4.8.3). */
-  let mapMode: MapMode = 'pins'
+  let mapMode: MapMode = init.map.thumbnails ? 'thumbs' : 'pins'
 
   const showStatus = (): void => {
     const p = sel.current === null ? undefined : folder?.photos[sel.current]
@@ -196,6 +196,19 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     map.showOnMap(sel.current)
   }
 
+  /**
+   * The map place, tile source and strip scroll go to main for the next run (tz.md, п. 7.1),
+   * once they settle.
+   */
+  let viewTimer: number | undefined
+  const reportView = (): void => {
+    window.clearTimeout(viewTimer)
+    viewTimer = window.setTimeout(
+      () => window.geophotos.reportView({ ...map.view(), scroll: byId('strip').scrollLeft }),
+      300
+    )
+  }
+
   /** T and View menu: markers or thumbnails on the map. */
   const toggleThumbnails = (): void => {
     mapMode = mapMode === 'pins' ? 'thumbs' : 'pins'
@@ -239,7 +252,8 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
       void setCoords([p.id], at)
       return true
     },
-    dragged: () => dragged
+    dragged: () => dragged,
+    onViewChanged: () => reportView()
   })
   const strip = new Strip(byId('strip'), t, {
     onClick: (id, mods) => select(clickSelect(sel, id, mods, order)),
@@ -374,11 +388,15 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     sel = EMPTY_SELECTION
     filter = 'all'
     strip.setPhotos(data)
-    map.setPhotos(data.photos, data.generation)
+    // The folder of the last run: the map stays where it was (tz.md, п. 7.1).
+    map.setPhotos(data.photos, data.generation, !data.restored)
     applyFilter()
     // The photo chosen in the dialog or dropped onto the window becomes selected (tz.md, п. 3.1).
     // Otherwise the first photo already is (a photo is always selected, п. 4.4).
     if (data.selected !== null) select(single(data.selected))
+    // …and the strip scrolls back to where it was.
+    if (data.restored) byId('strip').scrollLeft = data.restored.scroll
+    reportView()
   })
 
   window.geophotos.onPhotosChanged(({ generation, photos }) => {
@@ -426,8 +444,13 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     if (path) void window.geophotos.openPath(path)
   })
 
+  byId('strip').addEventListener('scroll', reportView, { passive: true })
+
   showStatus()
   showCounts()
+  // The View menu shows the mode of the map from the start, also without a folder.
+  reportState()
+  reportView()
 }
 
 void start()

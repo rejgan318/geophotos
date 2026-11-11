@@ -77,6 +77,8 @@ export interface MapHandlers {
   onMapDoubleClick(at: LatLon): boolean
   /** The photos being dragged from the strip right now, or null. */
   dragged(): number[] | null
+  /** The map moved or zoomed, or another tile source was chosen (kept for the next run). */
+  onViewChanged(): void
 }
 
 /**
@@ -87,7 +89,8 @@ export interface MapHandlers {
 export class MapView {
   private readonly map: L.Map
   private readonly cluster: L.MarkerClusterGroup
-  private readonly initialView: InitData['map']['initialView']
+  /** Key of the tile source shown. */
+  private source = ''
   private readonly style: MarkerStyle
   private readonly icon: L.DivIcon
   private readonly selectedIcon: L.DivIcon
@@ -113,10 +116,10 @@ export class MapView {
     config: InitData['map'],
     private readonly h: MapHandlers
   ) {
-    this.initialView = config.initialView
     this.style = config.markers
     this.hoverSize = config.hoverThumbSize
     this.thumbSize = config.thumbSize
+    this.thumbs = config.thumbnails
     this.icon = pinIcon(this.style, false)
     this.selectedIcon = pinIcon(this.style, true)
 
@@ -132,6 +135,7 @@ export class MapView {
     })
 
     const layers: Record<string, L.TileLayer> = {}
+    const keys = new Map<L.Layer, string>()
     let first: L.TileLayer | undefined
     let chosen: L.TileLayer | undefined
     // Every source can be chosen at any zoom: beyond its own maximum its tiles are enlarged
@@ -145,10 +149,17 @@ export class MapView {
         maxZoom
       })
       layers[s.name] = layer
+      keys.set(layer, s.key)
       first ??= layer
       if (s.key === config.defaultSource) chosen = layer
     }
-    ;(chosen ?? first)?.addTo(this.map)
+    const start = chosen ?? first
+    start?.addTo(this.map)
+    this.source = start ? (keys.get(start) ?? '') : ''
+    this.map.on('baselayerchange', (e: L.LayersControlEvent) => {
+      this.source = keys.get(e.layer) ?? this.source
+      this.h.onViewChanged()
+    })
     L.control.layers(layers, undefined, { position: 'topright' }).addTo(this.map)
     L.control.scale({ imperial: false }).addTo(this.map)
 
@@ -182,7 +193,10 @@ export class MapView {
     this.cluster.on('animationend spiderfied unspiderfied', () => this.highlightGroups())
 
     this.acceptDrops()
-    this.showInitialView()
+    // Where the map was at the end of the last run; the first time, the settings' view (п. 7.1).
+    const v = config.saved ?? config.initialView
+    this.map.setView([v.lat, v.lon], v.zoom)
+    this.map.on('moveend', () => this.h.onViewChanged())
 
     // A thumbnail without a preview becomes a placeholder (load errors do not bubble: capture).
     el.addEventListener(
@@ -230,13 +244,17 @@ export class MapView {
     return this.map
   }
 
-  showInitialView(): void {
-    const v = this.initialView
-    this.map.setView([v.lat, v.lon], v.zoom)
+  /** Place, zoom and tile source of the map now (kept for the next run, п. 7.1). */
+  view(): { lat: number; lon: number; zoom: number; source: string } {
+    const c = this.map.getCenter().wrap()
+    return { lat: c.lat, lon: c.lng, zoom: this.map.getZoom(), source: this.source }
   }
 
-  /** Markers of photos with coordinates; the view fits them, or the initial view if none (п. 5.2). */
-  setPhotos(photos: Photo[], generation: number): void {
+  /**
+   * Markers of photos with coordinates. With `fit` the view shows them all (п. 5.2); without
+   * photos with coordinates, or without `fit` (the folder of the last run), the map stays (п. 7.3).
+   */
+  setPhotos(photos: Photo[], generation: number, fit: boolean): void {
     this.generation = generation
     this.cluster.clearLayers()
     this.markers.clear()
@@ -250,7 +268,7 @@ export class MapView {
       if (m) this.markers.set(p.id, m)
     }
     this.cluster.addLayers([...this.markers.values()])
-    if (!this.fitMarkers()) this.showInitialView()
+    if (fit) this.fitMarkers()
   }
 
   /**

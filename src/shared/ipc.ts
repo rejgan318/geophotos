@@ -19,6 +19,8 @@ export const IPC = {
   photosChanged: 'photos:changed',
   /** send, window → main: selection, filter and view mode (Save Selected, View menu, last session). */
   uiState: 'ui:state',
+  /** send, window → main: place of the map, tile source, strip scroll (kept for the next run). */
+  viewState: 'ui:viewState',
   /** event, main → window: a command from the menu (View). */
   command: 'ui:command',
   /** event, main → window: progress and result of saving. */
@@ -45,9 +47,35 @@ export interface InitData {
     hoverThumbSize: number
     /** Longer side of a thumbnail on the map, px (tz.md, п. 4.8.3). */
     thumbSize: number
+    /** Place and zoom of the map at the end of the last run; null — the settings' initial view. */
+    saved: { lat: number; lon: number; zoom: number } | null
+    /** Thumbnails on the map at the end of the last run (п. 7.1). */
+    thumbnails: boolean
   }
   /** Scheme of thumbnail URLs: `${thumbScheme}://f<generation>/<photo id>`. */
   thumbScheme: string
+}
+
+/** What the window reports for the next run (tz.md, п. 7.1): the map and the strip scroll. */
+export interface ViewState {
+  lat: number
+  lon: number
+  zoom: number
+  /** Key of the tile source shown. */
+  source: string
+  /** Scroll of the strip, px. */
+  scroll: number
+}
+
+/** Checks the view state coming from the window; null if it is not one. */
+export function validViewState(v: unknown): ViewState | null {
+  if (!v || typeof v !== 'object') return null
+  const r = v as Record<string, unknown>
+  const num = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x)
+  const { lat, lon, zoom, source, scroll } = r
+  if (!num(lat) || !num(lon) || !num(zoom) || !num(scroll) || typeof source !== 'string') return null
+  if (Math.abs(lat) > 90 || zoom < 0 || scroll < 0) return null
+  return { lat, lon, zoom, source, scroll }
 }
 
 export interface FolderLoading {

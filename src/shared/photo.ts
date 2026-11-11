@@ -35,6 +35,11 @@ export interface FolderData {
   generation: number
   /** Photo to select right after opening (the chosen or dropped photo), or null. */
   selected: number | null
+  /**
+   * Set only when the folder of the last run is opened at start (tz.md, п. 7.1): the strip
+   * scroll comes back, and the map stays where it was instead of showing all photos.
+   */
+  restored?: { scroll: number }
 }
 
 export function formatCoords(c: LatLon): string {
