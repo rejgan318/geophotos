@@ -31,6 +31,7 @@ export const SECTIONS: Section[] = [
       { keys: ['Del'], text: 'help.delete' },
       { keys: ['Ctrl+S'], text: 'help.save' },
       { keys: ['Ctrl+O'], text: 'help.open' },
+      { keys: ['F5'], text: 'help.refresh' },
       { keys: ['F1'], text: 'help.help' },
       { keys: ['Enter'], text: 'help.search' }
     ]

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { addRecent, removeRecent, samePath } from '@shared/recent'
+import { addRecent, idsByPath, removeRecent, samePath } from '@shared/recent'
 import { readState, writeState } from '../../src/main/state'
 
 let tmp: string | undefined
@@ -27,6 +27,18 @@ describe('recent folders (tz.md, п. 3.1)', () => {
     expect(list[0]).toBe('d:\\F5\\')
     expect(list.filter((f) => samePath(f, 'D:\\f5'))).toHaveLength(1)
     expect(removeRecent(list, 'D:\\F5')).not.toContain('d:\\F5\\')
+  })
+})
+
+describe('File → Refresh keeps the selection by path (tz.md, п. 3.8)', () => {
+  it('photos are found by path in the re-read folder; gone ones are left out', () => {
+    const after = [
+      { id: 0, path: 'D:\\Trip\\new.jpg' },
+      { id: 1, path: 'D:\\Trip\\a.jpg' },
+      { id: 2, path: 'D:\\Trip\\sub\\b.jpg' }
+    ]
+    expect(idsByPath(after, ['d:/trip/A.JPG', 'D:\\Trip\\sub\\b.jpg', 'D:\\Trip\\deleted.jpg'])).toEqual([1, 2])
+    expect(idsByPath(after, [])).toEqual([])
   })
 })
 

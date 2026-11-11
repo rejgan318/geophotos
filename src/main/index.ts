@@ -27,7 +27,7 @@ import {
   type ViewState
 } from '@shared/ipc'
 import { addressText, formatCoords, type FileMeta, type Photo } from '@shared/photo'
-import { addRecent, removeRecent, samePath } from '@shared/recent'
+import { addRecent, idsByPath, removeRecent, samePath } from '@shared/recent'
 import { mapSources, type Settings } from '@shared/settings'
 import { windowOnScreen } from '@shared/window-place'
 import { ExifTool, exiftoolVersion } from './exiftool'
@@ -265,6 +265,25 @@ async function restoreSession(): Promise<void> {
   })
 }
 
+/**
+ * File → Refresh (F5, tz.md, п. 3.8): the open folder is read again — new files come, deleted ones
+ * go, changes made outside show. The current and selected photos, the filter, the map and the strip
+ * scroll stay; unsaved changes are asked about first, as when another folder is opened (п. 6.5).
+ */
+async function refresh(): Promise<void> {
+  const folder = current
+  if (!folder || saving) return
+  const pathOf = (id: number | null): string | undefined => (id === null ? undefined : folder.data.photos[id]?.path)
+  const paths = ui.ids.map(pathOf).filter((p): p is string => !!p)
+  log.info(`Refresh: ${folder.data.folder}`)
+  await openFolder(
+    folder.data.folder,
+    pathOf(ui.current),
+    { scroll: viewState?.scroll ?? 0, subfolders: folder.subfolders },
+    { paths, filter: ui.filter }
+  )
+}
+
 /** Opens a folder, or the folder of a photo with that photo selected (tz.md, п. 3.1). */
 async function openPath(path: string): Promise<void> {
   const kind = kindOf(path)
@@ -327,7 +346,8 @@ async function askSubfolders(folder: string): Promise<boolean> {
 async function openFolder(
   folder: string,
   selectPath?: string,
-  restored?: { scroll: number; subfolders: boolean }
+  restored?: { scroll: number; subfolders: boolean },
+  keep?: { paths: string[]; filter: StripFilter }
 ): Promise<void> {
   if (!win || saving) return
   if (!(await confirmDiscard())) return
@@ -365,7 +385,11 @@ async function openFolder(
   addressFailed.clear()
   altitudeFailed.clear()
   selection = new Set(chosen ? [chosen.id] : [])
-  win.webContents.send(IPC.folderLoaded, restored ? { ...current.data, restored: { scroll: restored.scroll } } : current.data)
+  win.webContents.send(IPC.folderLoaded, {
+    ...current.data,
+    ...(restored ? { restored: { scroll: restored.scroll } } : {}),
+    ...(keep ? { keep: { ids: idsByPath(current.data.photos, keep.paths), filter: keep.filter } } : {})
+  })
   setRecent((list) => addRecent(list, folder))
   refreshEditState()
   kickQueues()
@@ -420,6 +444,7 @@ function updateMenu(recent: string[]): void {
       {
         openPhoto: () => void choosePhoto(),
         openRecent: (folder) => void openPath(folder),
+        refresh: () => void refresh(),
         clearRecent: () => setRecent(() => []),
         save: () => void save(),
         saveSelected: () => void save(selection),
@@ -451,6 +476,8 @@ function refreshEditState(): void {
   const photos = current?.data.photos ?? []
   win?.setTitle(windowTitle(current?.data.folder, isDirty()))
   const menu = Menu.getApplicationMenu()
+  const refreshItem = menu?.getMenuItemById(MENU_ID.refresh)
+  if (refreshItem) refreshItem.enabled = !!current && !saving
   const saveItem = menu?.getMenuItemById(MENU_ID.save)
   const selItem = menu?.getMenuItemById(MENU_ID.saveSelected)
   if (saveItem) saveItem.enabled = !saving && photosToSave(photos).length > 0

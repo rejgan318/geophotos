@@ -408,15 +408,19 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
 
   window.geophotos.onFolderLoaded((data) => {
     folder = data
-    sel = EMPTY_SELECTION
-    filter = 'all'
+    // Refresh keeps the selection and the filter (tz.md, п. 3.8); any other opening starts afresh.
+    const keep = data.keep
+    const cur = keep ? (data.selected ?? keep.ids.at(-1) ?? null) : null
+    sel = keep && cur !== null ? { ids: new Set(keep.ids.length ? keep.ids : [cur]), current: cur, anchor: cur } : EMPTY_SELECTION
+    filter = keep?.filter ?? 'all'
     strip.setPhotos(data)
-    // The folder of the last run: the map stays where it was (tz.md, п. 7.1).
+    // The folder of the last run or a refresh: the map stays where it was (tz.md, пп. 7.1, 3.8).
     map.setPhotos(data.photos, data.generation, !data.restored)
     applyFilter()
+    if (keep && sel.current !== null) select(sel)
     // The photo chosen in the dialog or dropped onto the window becomes selected (tz.md, п. 3.1).
     // Otherwise the first photo already is (a photo is always selected, п. 4.4).
-    if (data.selected !== null) select(single(data.selected))
+    else if (data.selected !== null) select(single(data.selected))
     // …and the strip scrolls back to where it was.
     if (data.restored) byId('strip').scrollLeft = data.restored.scroll
     reportView()

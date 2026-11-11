@@ -1,3 +1,5 @@
+import type { StripFilter } from './ipc'
+
 export interface LatLon {
   lat: number
   lon: number
@@ -87,6 +89,11 @@ export interface FolderData {
    * scroll comes back, and the map stays where it was instead of showing all photos.
    */
   restored?: { scroll: number }
+  /**
+   * File → Refresh (tz.md, п. 3.8): the selected photos (`selected` is the current one) and the
+   * strip filter stay as they were.
+   */
+  keep?: { ids: number[]; filter: StripFilter }
 }
 
 export function formatCoords(c: LatLon): string {

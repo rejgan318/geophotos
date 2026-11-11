@@ -5,6 +5,7 @@ import type { StripFilter } from '@shared/ipc'
 export interface MenuHandlers {
   openPhoto(): void
   openRecent(folder: string): void
+  refresh(): void
   clearRecent(): void
   save(): void
   saveSelected(): void
@@ -23,6 +24,7 @@ export interface MenuHandlers {
 
 /** Ids of menu items that are enabled and disabled while the program runs. */
 export const MENU_ID = {
+  refresh: 'file.refresh',
   save: 'file.save',
   saveSelected: 'file.saveSelected',
   photoView: 'view.photo',
@@ -55,6 +57,7 @@ export function buildMenu(t: Translate, h: MenuHandlers, recent: string[], dev: 
       submenu: [
         { label: t('menu.openPhoto'), accelerator: 'CmdOrCtrl+O', click: h.openPhoto },
         { label: t('menu.openRecent'), submenu: recentItems },
+        { id: MENU_ID.refresh, label: t('menu.refresh'), accelerator: 'F5', click: h.refresh, enabled: false },
         { type: 'separator' },
         { id: MENU_ID.save, label: t('menu.save'), accelerator: 'CmdOrCtrl+S', click: h.save, enabled: false },
         { id: MENU_ID.saveSelected, label: t('menu.saveSelected'), click: h.saveSelected, enabled: false },

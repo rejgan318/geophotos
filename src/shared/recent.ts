@@ -11,6 +11,14 @@ export function addRecent(list: readonly string[], folder: string, max = MAX_REC
   return [folder, ...list.filter((f) => !samePath(f, folder))].slice(0, max)
 }
 
+/**
+ * Photos of a re-read folder that are the given files (File → Refresh, tz.md, п. 3.8): their
+ * ids may have moved, so they are found by path; files that are gone are left out.
+ */
+export function idsByPath(photos: readonly { id: number; path: string }[], paths: readonly string[]): number[] {
+  return photos.filter((p) => paths.some((q) => samePath(p.path, q))).map((p) => p.id)
+}
+
 export function removeRecent(list: readonly string[], folder: string): string[] {
   return list.filter((f) => !samePath(f, folder))
 }
