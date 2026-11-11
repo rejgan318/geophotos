@@ -71,6 +71,7 @@ export class AboutView {
       line(t('about.exiftool', { version: info.exiftoolVersion, path: info.exiftoolPath })),
       line(`${t('about.settings')} `, link('settings', info.settings)),
       line(`${t('about.logs')} `, link('logs', info.logs)),
+      line(`${t('about.license')} `, link('license', 'MIT'), ' · ', link('notices', t('about.notices'))),
       line(`Electron ${info.electron} · Node.js ${info.node}`)
     )
     this.el.hidden = false

@@ -475,6 +475,21 @@ function setCoords(req: unknown): void {
   applyPhotos(changed)
 }
 
+/**
+ * The program's license and the licenses of the components (links in About): next to the .exe;
+ * in development — LICENSE of the project and out/THIRD-PARTY-NOTICES.txt made by the build.
+ */
+async function openLicenseFile(which: 'license' | 'notices'): Promise<void> {
+  const file = dev
+    ? join(app.getAppPath(), which === 'license' ? 'LICENSE' : join('out', 'THIRD-PARTY-NOTICES.txt'))
+    : join(dirname(process.execPath), which === 'license' ? 'LICENSE.txt' : 'THIRD-PARTY-NOTICES.txt')
+  const err = await shell.openPath(file)
+  if (err) {
+    log.error(`Cannot open ${file}: ${err}`)
+    if (win) void dialog.showMessageBox(win, { type: 'error', message: `${err}\n${file}`, buttons: [t('dialog.ok')] })
+  }
+}
+
 /** The log folder (link in About): the log has old and new coordinates of every write (tz.md, п. 6.9). */
 async function openLogFolder(): Promise<void> {
   const err = await shell.openPath(paths.logs)
@@ -534,6 +549,8 @@ function createWindow(): BrowserWindow {
     height: 860,
     title: windowTitle(),
     show: false,
+    // The built program takes its icon from the .exe; in development it is set here.
+    ...(dev ? { icon: join(app.getAppPath(), 'build', 'icon.png') } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -623,6 +640,7 @@ void app.whenReady().then(async () => {
   ipcMain.handle(IPC.aboutOpen, async (_e, target: unknown) => {
     if (target === 'settings') await openSettingsFile()
     else if (target === 'logs') await openLogFolder()
+    else if (target === 'license' || target === 'notices') await openLicenseFile(target)
   })
   ipcMain.handle(IPC.search, async (_e, query: unknown) => {
     if (typeof query !== 'string' || !query.trim()) return { ok: true, places: [] }

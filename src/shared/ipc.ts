@@ -90,7 +90,7 @@ export interface AboutInfo {
 }
 
 /** What a link in About opens; main knows the paths, the window only names the target. */
-export type AboutTarget = 'settings' | 'logs'
+export type AboutTarget = 'settings' | 'logs' | 'license' | 'notices'
 
 /** Saving (tz.md, п. 6.8): n of N while it goes, then the result. */
 export type SaveState =

@@ -77,6 +77,8 @@
   "about.description": "Manual geotagging of photos on a map.",
   "about.exiftool": "exiftool {version}: {path}",
   "about.settings": "Settings:",
+  "about.license": "License:",
+  "about.notices": "Third-party components",
   "about.openHint": "Click to open",
   "about.logs": "Logs:",
   "help.title": "Keyboard Shortcuts",

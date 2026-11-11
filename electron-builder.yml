@@ -22,6 +22,15 @@ extraResources:
   - from: locales
     to: locales
     filter: ['**/*.json']
+# Next to GeoPhotos.exe: the program's license and the licenses of the components it includes
+# (THIRD-PARTY-NOTICES.txt is made by scripts/third-party-notices.mjs during the build).
+extraFiles:
+  - from: LICENSE
+    to: LICENSE.txt
+  - from: out/THIRD-PARTY-NOTICES.txt
+    to: THIRD-PARTY-NOTICES.txt
 win:
+  # Made from build/icon.svg by scripts/make-icon.mjs.
+  icon: build/icon.ico
   target:
     - dir

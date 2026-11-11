@@ -77,6 +77,8 @@
   "about.description": "Ручная привязка фото к карте.",
   "about.exiftool": "exiftool {version}: {path}",
   "about.settings": "Настройки:",
+  "about.license": "Лицензия:",
+  "about.notices": "Сторонние компоненты",
   "about.openHint": "Открыть",
   "about.logs": "Логи:",
   "help.title": "Сочетания клавиш",
