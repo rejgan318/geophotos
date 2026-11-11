@@ -83,7 +83,7 @@
               "minimum": 16,
               "maximum": 96,
               "default": 40,
-              "description": "Height of a marker pin, px. The selected marker is 1.3 times larger; groups scale with it."
+              "description": "Height of a marker pin, px. The selected marker has the same size; groups scale with it."
             }
           }
         },

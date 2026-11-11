@@ -16,8 +16,9 @@ function pinSvg(fill: string, stroke: string): string {
   )
 }
 
+/** The selected pin differs only by color, not by size (tz.md, п. 4.8.1). */
 function pinIcon(style: MarkerStyle, selected: boolean): L.DivIcon {
-  const h = Math.round(style.size * (selected ? 1.3 : 1))
+  const h = Math.round(style.size)
   const w = Math.round((h * 24) / 34)
   return L.divIcon({
     className: selected ? 'photo-pin selected' : 'photo-pin',
@@ -49,6 +50,11 @@ export interface MapHandlers {
   onMarkerMoved(photoId: number, to: LatLon): Promise<void>
   /** Photos dragged from the strip were dropped onto the map (п. 4.5). */
   onDropPhotos(ids: number[], at: LatLon): void
+  /**
+   * Double click on the map (not on a photo marker or group, п. 4.4.2). True if it was used
+   * (the current photo got the point); otherwise the map zooms in as usual.
+   */
+  onMapDoubleClick(at: LatLon): boolean
   /** The photos being dragged from the strip right now, or null. */
   dragged(): number[] | null
 }
@@ -84,8 +90,16 @@ export class MapView {
     this.icon = pinIcon(this.style, false)
     this.selectedIcon = pinIcon(this.style, true)
 
-    // Arrow keys belong to the strip (п. 4.4.1); +/- still zoom.
-    this.map = L.map(el, { zoomControl: true, worldCopyJump: true, keyboardPanDelta: 0 })
+    // Arrow keys belong to the strip (п. 4.4.1); +/- still zoom. Double click is handled below:
+    // it can give the current photo its coordinates instead of zooming (п. 4.4.2).
+    this.map = L.map(el, { zoomControl: true, worldCopyJump: true, keyboardPanDelta: 0, doubleClickZoom: false })
+    this.map.on('dblclick', (e: L.LeafletMouseEvent) => {
+      if (this.h.onMapDoubleClick(this.dropPoint(e.originalEvent))) return
+      // The same as Leaflet's own double click zoom; Shift zooms out.
+      const z = this.map.getZoom()
+      const delta = this.map.options.zoomDelta ?? 1
+      this.map.setZoomAround(e.containerPoint, e.originalEvent.shiftKey ? z - delta : z + delta)
+    })
 
     const layers: Record<string, L.TileLayer> = {}
     let first: L.TileLayer | undefined
@@ -340,6 +354,11 @@ export class MapView {
     if (!this.place) {
       // Under the photo pins: a photo dropped onto the mark stays easy to grab.
       this.place = L.marker(ll, { icon: placeIcon(), keyboard: false, zIndexOffset: -10000 })
+      // A double click on the mark itself gives the current photo exactly its point (п. 4.4.2).
+      this.place.on('dblclick', () => {
+        const at = this.place?.getLatLng()
+        if (at) this.h.onMapDoubleClick({ lat: at.lat, lon: at.lng })
+      })
       this.place.addTo(this.map)
     } else {
       this.place.setLatLng(ll)

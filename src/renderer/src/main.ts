@@ -192,6 +192,14 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
       await setCoords(photosAt(shown, at), to)
     },
     onDropPhotos: (ids, at) => void setCoords(ids, at),
+    // Double click on the map places the current photo if it has no coordinates yet (tz.md,
+    // п. 4.4.2); the other selected photos do not change.
+    onMapDoubleClick: (at) => {
+      const p = sel.current === null ? undefined : folder?.photos[sel.current]
+      if (!p || p.coords || saving) return false
+      void setCoords([p.id], at)
+      return true
+    },
     dragged: () => dragged
   })
   const strip = new Strip(byId('strip'), t, {
