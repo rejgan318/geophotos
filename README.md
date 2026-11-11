@@ -6,39 +6,44 @@ You open a folder from a trip, see the photos that already have coordinates (usu
 
 ## Features
 
-- **Map:** OpenStreetMap, Esri satellite and Google satellite imagery. Nearby markers are grouped.
+- **Map:** OpenStreetMap, Esri satellite, Google satellite and OpenTopoMap. Nearby markers are grouped. Markers or photo thumbnails on the map (key T); hovering a marker shows its thumbnail.
 - **Place search:** by name or address, through Nominatim.
-- **Thumbnail strip:** sorted by shooting date. Marks show photos with coordinates and unsaved changes.
+- **Thumbnail strip:** sorted by shooting date. Marks show photos with coordinates, an address, an altitude, and unsaved changes. Photos of subfolders can be loaded too.
 - **Ways to set coordinates:**
-  - drag thumbnails from the strip onto the map;
-  - drag them onto a photo that already has coordinates;
-  - drag a marker on the map.
+  - drag thumbnails from the strip onto the map, or double-click the map for the current photo;
+  - drag a photo onto another one in the strip (both ways: the one without coordinates gets them);
+  - drag a marker on the map;
+  - Ctrl+V coordinates copied from Google Maps and the like, or Ctrl+C / Ctrl+V between photos (with the address and altitude);
+  - Del removes coordinates, address and altitude.
 - **Selection:** click, Ctrl+click, Shift+click, Ctrl+A. Arrow keys move through the photos.
-- **Filters:** all photos, photos with coordinates, modified photos — as buttons in the status bar and in the View menu.
+- **Filters:** all photos, with coordinates, without coordinates, modified — as buttons in the status bar and in the View menu.
+- **Address and altitude** (*Tools → Get Address / Get Altitude*): the address from Nominatim (OpenStreetMap) in the interface language, the altitude from the Open-Meteo Elevation API, for every photo of the folder that has coordinates.
 - **Photo view (Space):** a large preview in place of the map.
 - **Save:** *Save* writes all modified photos, *Save Selected* only the selected ones. Progress is shown, and a list of files that could not be written appears at the end. You are warned about unsaved changes.
 - **Log:** every write is logged with its old and new coordinates, so they can be restored by hand.
 - **Interface:** English, Russian and Ukrainian. New languages are added as files, without code changes.
-- **Next start:** the program reopens the last folder and photo.
+- **File → Refresh (F5):** reads the folder again after it was changed outside; the view stays.
+- **Batch mode:** addresses and altitudes for whole folders from the command line (see below).
+- **Next start:** the program reopens the last folder and photo, the window, the map and its mode.
 
 ### Where coordinates are written
 
-Only latitude and longitude are written. Altitude and other tags are not touched.
+Latitude and longitude, the altitude, and the address (country, country code, state, city, street) are written. Other tags are not touched. When coordinates change, the old address and altitude are removed.
 
 | Format | Written to |
 |---|---|
-| JPEG, HEIC/HEIF, AVIF, PNG, WebP, TIFF, DNG | EXIF inside the file; the embedded XMP and an existing sidecar are updated too if they already hold coordinates |
+| JPEG, HEIC/HEIF, AVIF, PNG, WebP, TIFF, DNG | Coordinates and altitude: EXIF inside the file; the embedded XMP and an existing sidecar are updated too if they already hold coordinates. Address: XMP of the file and of an existing sidecar (old IPTC place names are removed) |
 | Other RAW (CR2, CR3, NEF, ARW, RAF, ORF, RW2, …) | Only the XMP sidecar, Lightroom-style (`IMG_0001.CR2` → `IMG_0001.xmp`). An existing sidecar is updated with its other contents kept. The RAW file is never modified |
 
 No `*_original` backup copies are left. Read-only files are reported and skipped.
 
-When coordinates exist in several places, they are read in this order: XMP sidecar, embedded XMP, EXIF.
+When coordinates exist in several places, they are read in this order: XMP sidecar, embedded XMP, EXIF. Videos are not supported.
 
 ## Requirements
 
 - Windows 10 or 11.
 - [ExifTool](https://exiftool.org/) (checked with 13.62). Put it in `PATH`, or set `exiftoolPath` in the settings file.
-- Internet access for map tiles and place search.
+- Internet access for map tiles, place search, addresses and altitudes.
 
 ## Running from source
 
@@ -57,12 +62,43 @@ npm run build
 
 A folder or a photo can be passed on the command line: `GeoPhotos.exe "D:\Photos\Trip"`.
 
+## Batch mode
+
+Addresses and altitudes for many photos at once, without the main window:
+
+```
+GeoPhotos.exe --batch [--no-address] [--no-altitude] [--subfolders] [--overwrite] <folder | file ...>
+```
+
+| Option | Meaning |
+|---|---|
+| `--no-address` | Do not get addresses (by default they are got) |
+| `--no-altitude` | Do not get altitudes (by default they are got) |
+| `--subfolders` | Process the folders with all their subfolders |
+| `--overwrite` | Replace an address or altitude a photo already has (by default such photos are skipped) |
+
+Only photos with coordinates are processed. Each point is asked once; addresses come at most one per second (Nominatim's rule), altitudes up to 100 points per request. The results are written straight into the files.
+
+A small window shows what is being done, a progress bar (also on the taskbar icon), about how long is left, and *Cancel*. Cancel during the requests keeps and writes what was already received. At the end it shows how many photos were written, skipped and failed (with the list of errors); with no errors it closes by itself after 10 seconds. Details go to the log.
+
+Exit code: `0` — done, `1` — some photos failed, `2` — wrong parameters, `3` — cancelled.
+
+Examples:
+
+```
+GeoPhotos.exe --batch "D:\Photos\Trip"
+GeoPhotos.exe --batch --subfolders --no-address "D:\Photos\2024"
+GeoPhotos.exe --batch --overwrite "D:\Photos\Trip\IMG_0001.CR2" "D:\Photos\Trip\IMG_0002.CR2"
+```
+
+The same window is used when the program is closed while addresses or altitudes are still being received and you choose to finish them in the background.
+
 ## Settings and logs
 
 - **Settings:** `%APPDATA%\GeoPhotos\settings.json`, created by *File → Open Settings File* with every option and its description. The file is JSONC with a JSON Schema, so editors such as VS Code show hints and check values. Changes apply after a restart.
 - **Logs:** `%APPDATA%\GeoPhotos\logs`.
 
-*Help → About* links to both.
+*Tools* has *Open Settings File* and *Open Log Folder*.
 
 ## Map tiles
 
@@ -95,4 +131,4 @@ Some integration tests use real photos that are not in the repository. Set `GEOP
 
 ## License
 
-[MIT](LICENSE). The built program also carries THIRD-PARTY-NOTICES.txt with the licenses of the components it includes (made by `scripts/third-party-notices.mjs` during the build); *Help → About* links to both.
+[MIT](LICENSE). The built program also carries THIRD-PARTY-NOTICES.txt with the licenses of the components it includes (made by `scripts/third-party-notices.mjs` during the build); *Help → About* links to both. Altitudes come from Open-Meteo (open-meteo.com), based on Copernicus DEM GLO-90; addresses and place search from Nominatim, © OpenStreetMap contributors.
