@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import {
   IPC,
+  type AboutInfo,
   type FolderData,
   type FolderLoading,
   type InitData,
@@ -33,7 +34,9 @@ const api: GeoPhotosApi = {
   onSaveState: (cb) => {
     ipcRenderer.on(IPC.saveState, (_e, state: SaveState) => cb(state))
   },
-  searchPlaces: (query) => ipcRenderer.invoke(IPC.search, query) as Promise<SearchResult>
+  searchPlaces: (query) => ipcRenderer.invoke(IPC.search, query) as Promise<SearchResult>,
+  aboutInfo: () => ipcRenderer.invoke(IPC.aboutInfo) as Promise<AboutInfo>,
+  openAboutTarget: (target) => ipcRenderer.invoke(IPC.aboutOpen, target) as Promise<void>
 }
 
 contextBridge.exposeInMainWorld('geophotos', api)

@@ -17,7 +17,8 @@ import {
   type SaveState,
   type StripFilter,
   type UiState,
-  validUiState
+  validUiState,
+  type AboutInfo
 } from '@shared/ipc'
 import { formatCoords, type LatLon, type Photo } from '@shared/photo'
 import { addRecent, removeRecent, samePath } from '@shared/recent'
@@ -322,8 +323,7 @@ function updateMenu(recent: string[]): void {
         toggleView: () => win?.webContents.send(IPC.command, { type: 'toggleView' }),
         setFilter: (filter: StripFilter) => win?.webContents.send(IPC.command, { type: 'setFilter', filter }),
         shortcuts: () => win?.webContents.send(IPC.command, { type: 'toggleHelp' }),
-        openLogFolder: () => void openLogFolder(),
-        about: () => void showAbout()
+        about: () => win?.webContents.send(IPC.command, { type: 'showAbout' })
       },
       recent,
       dev
@@ -475,7 +475,7 @@ function setCoords(req: unknown): void {
   applyPhotos(changed)
 }
 
-/** Help → Open Log Folder: the log has old and new coordinates of every write (tz.md, п. 6.9). */
+/** The log folder (link in About): the log has old and new coordinates of every write (tz.md, п. 6.9). */
 async function openLogFolder(): Promise<void> {
   const err = await shell.openPath(paths.logs)
   if (err) {
@@ -484,25 +484,17 @@ async function openLogFolder(): Promise<void> {
   }
 }
 
-/** Help → About: versions and where the settings and the log are. */
-async function showAbout(): Promise<void> {
-  if (!win) return
-  await dialog.showMessageBox(win, {
-    type: 'info',
-    title: t('about.title'),
-    message: `GeoPhotos ${app.getVersion()}`,
-    detail: [
-      t('about.description'),
-      '',
-      t('about.exiftool', { version: exiftoolVer, path: settings.exiftoolPath }),
-      t('about.settings', { path: paths.user }),
-      t('about.logs', { path: paths.logs }),
-      '',
-      `Electron ${process.versions.electron} · Node.js ${process.versions.node}`
-    ].join('\n'),
-    buttons: [t('dialog.ok')],
-    noLink: true
-  })
+/** Help → About: versions and where the settings and the log are; the window shows links to them. */
+function aboutInfo(): AboutInfo {
+  return {
+    version: app.getVersion(),
+    exiftoolVersion: exiftoolVer,
+    exiftoolPath: settings.exiftoolPath,
+    settings: paths.user,
+    logs: paths.logs,
+    electron: process.versions.electron,
+    node: process.versions.node
+  }
 }
 
 async function openSettingsFile(): Promise<void> {
@@ -625,6 +617,12 @@ void app.whenReady().then(async () => {
     ui = validUiState(state) ?? ui
     selection = new Set(ui.ids)
     refreshEditState()
+  })
+  ipcMain.handle(IPC.aboutInfo, () => aboutInfo())
+  // Only the two known places: the window names a target, never a path.
+  ipcMain.handle(IPC.aboutOpen, async (_e, target: unknown) => {
+    if (target === 'settings') await openSettingsFile()
+    else if (target === 'logs') await openLogFolder()
   })
   ipcMain.handle(IPC.search, async (_e, query: unknown) => {
     if (typeof query !== 'string' || !query.trim()) return { ok: true, places: [] }

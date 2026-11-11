@@ -24,7 +24,11 @@ export const IPC = {
   /** event, main → window: progress and result of saving. */
   saveState: 'save:state',
   /** invoke, window → main: find a place by name. */
-  search: 'search:places'
+  search: 'search:places',
+  /** invoke, window → main: data of Help → About. */
+  aboutInfo: 'about:info',
+  /** invoke, window → main: open the settings file or the log folder (links in About). */
+  aboutOpen: 'about:open'
 } as const
 
 export interface InitData {
@@ -72,6 +76,21 @@ export type WindowCommand =
   | { type: 'toggleView' }
   | { type: 'setFilter'; filter: StripFilter }
   | { type: 'toggleHelp' }
+  | { type: 'showAbout' }
+
+/** Help → About (tz.md, п. 4.9). */
+export interface AboutInfo {
+  version: string
+  exiftoolVersion: string
+  exiftoolPath: string
+  settings: string
+  logs: string
+  electron: string
+  node: string
+}
+
+/** What a link in About opens; main knows the paths, the window only names the target. */
+export type AboutTarget = 'settings' | 'logs'
 
 /** Saving (tz.md, п. 6.8): n of N while it goes, then the result. */
 export type SaveState =

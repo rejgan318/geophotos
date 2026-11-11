@@ -7,6 +7,7 @@ import { photoCoords, photoDate } from './describe'
 import { MapView } from './map'
 import { PhotoView } from './viewer'
 import { HelpView } from './help'
+import { AboutView } from './about'
 import { effectiveFilter, matchesFilter, toggleFilter, visibleIds, type StripFilter } from './filter'
 import { PENCIL_SVG, PHOTO_SVG, PIN_SVG } from './icons'
 import { isNavKey, navigateShown } from './navigation'
@@ -200,6 +201,7 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   addSearchBox(map, t)
   const viewer = new PhotoView(byId('viewer'), t)
   const help = new HelpView(t)
+  const about = new AboutView(t)
   new ResizeObserver(() => map.invalidateSize()).observe(byId('map'))
 
   // Keys that work wherever the focus is, except text fields (tz.md, пп. 4.4, 4.4.1):
@@ -208,9 +210,12 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   window.addEventListener(
     'keydown',
     (e) => {
-      // Help is on top: Esc closes it, other keys do nothing behind it.
-      if (help.visible) {
-        if (e.key === 'Escape') help.hide()
+      // Help and About are on top: Esc closes them, other keys do nothing behind them.
+      if (help.visible || about.visible) {
+        if (e.key === 'Escape') {
+          help.hide()
+          about.hide()
+        }
         if (e.key !== 'F1') {
           e.preventDefault()
           e.stopPropagation()
@@ -260,7 +265,11 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     } else if (cmd.type === 'setFilter') {
       setFilter(cmd.filter)
     } else if (cmd.type === 'toggleHelp') {
+      about.hide()
       help.toggle()
+    } else if (cmd.type === 'showAbout') {
+      help.hide()
+      void about.show()
     }
   })
 

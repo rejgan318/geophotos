@@ -1,7 +1,7 @@
 {
   "name": "geophotos",
   "productName": "GeoPhotos",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Manual geotagging of photos on a map",
   "main": "./out/main/index.js",

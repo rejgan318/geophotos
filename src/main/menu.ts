@@ -13,7 +13,6 @@ export interface MenuHandlers {
   toggleView(): void
   setFilter(filter: StripFilter): void
   shortcuts(): void
-  openLogFolder(): void
   about(): void
 }
 
@@ -90,7 +89,6 @@ export function buildMenu(t: Translate, h: MenuHandlers, recent: string[], dev: 
     label: t('menu.help'),
     submenu: [
       { label: t('menu.shortcuts'), accelerator: 'F1', click: h.shortcuts },
-      { label: t('menu.openLogs'), click: h.openLogFolder },
       { type: 'separator' },
       { label: t('menu.about'), click: h.about }
     ]

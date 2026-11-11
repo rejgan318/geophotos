@@ -1,4 +1,6 @@
 import type {
+  AboutInfo,
+  AboutTarget,
   FolderData,
   FolderLoading,
   InitData,
@@ -28,6 +30,9 @@ export interface GeoPhotosApi {
   onCommand(cb: (cmd: WindowCommand) => void): void
   onSaveState(cb: (state: SaveState) => void): void
   searchPlaces(query: string): Promise<SearchResult>
+  aboutInfo(): Promise<AboutInfo>
+  /** Opens the settings file (created if missing) or the log folder. */
+  openAboutTarget(target: AboutTarget): Promise<void>
 }
 
 declare global {

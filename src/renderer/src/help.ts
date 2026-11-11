@@ -15,20 +15,20 @@ export class HelpView {
 
   constructor(t: Translate) {
     this.el = document.createElement('div')
-    this.el.id = 'help'
+    this.el.className = 'overlay'
     this.el.hidden = true
     const box = document.createElement('div')
-    box.className = 'help-box'
+    box.className = 'overlay-box help-box'
     box.setAttribute('role', 'dialog')
     box.setAttribute('aria-label', t('help.title'))
 
     const head = document.createElement('div')
-    head.className = 'help-head'
+    head.className = 'overlay-head'
     const title = document.createElement('h2')
     title.textContent = t('help.title')
     const close = document.createElement('button')
     close.type = 'button'
-    close.className = 'help-close'
+    close.className = 'overlay-close'
     close.textContent = '×'
     close.title = t('help.close')
     close.addEventListener('click', () => this.hide())

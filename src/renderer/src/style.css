@@ -517,8 +517,8 @@ body {
   background: var(--marker-selected);
 }
 
-/* Help → Keyboard Shortcuts (F1) over the window. */
-#help {
+/* Windows over the program: Help → Keyboard Shortcuts (F1) and Help → About. */
+.overlay {
   position: fixed;
   inset: 0;
   z-index: 4000;
@@ -528,11 +528,11 @@ body {
   background: rgba(0, 0, 0, 0.45);
 }
 
-#help[hidden] {
+.overlay[hidden] {
   display: none;
 }
 
-.help-box {
+.overlay-box {
   max-width: min(640px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
   overflow-y: auto;
@@ -544,13 +544,13 @@ body {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.7);
 }
 
-.help-head {
+.overlay-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.help-box h2 {
+.overlay-box h2 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
@@ -565,7 +565,7 @@ body {
   color: var(--fg-dim);
 }
 
-.help-close {
+.overlay-close {
   border: none;
   background: transparent;
   color: var(--fg-dim);
@@ -573,7 +573,7 @@ body {
   cursor: pointer;
 }
 
-.help-close:hover {
+.overlay-close:hover {
   color: var(--fg);
 }
 
@@ -624,4 +624,21 @@ body {
   width: 11px;
   height: 11px;
   fill: var(--icon-color);
+}
+
+.about-box {
+  min-width: 420px;
+}
+
+.about-box p {
+  margin: 8px 0;
+  word-break: break-all;
+}
+
+.about-box a {
+  color: #8ab4f8;
+}
+
+.about-box a:hover {
+  color: #aecbfa;
 }
