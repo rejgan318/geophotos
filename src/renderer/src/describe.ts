@@ -14,6 +14,7 @@ export function photoCoords(p: Photo, t: Translate): string {
 /** Tooltip of a thumbnail: name, date, coordinates (and a read error, if any). */
 export function photoTooltip(p: Photo, t: Translate): string {
   const lines = [p.name, photoDate(p, t), photoCoords(p, t)]
+  if (p.modified) lines.push(t('photo.modified'))
   if (p.error) lines.push(t('photo.readError', { error: p.error }))
   return lines.join('\n')
 }

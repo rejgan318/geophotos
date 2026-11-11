@@ -1,15 +1,28 @@
 import { Menu, type MenuItemConstructorOptions } from 'electron'
 import type { Translate } from '@shared/i18n'
+import type { StripFilter } from '@shared/ipc'
 
 export interface MenuHandlers {
   openPhoto(): void
   openRecent(folder: string): void
   clearRecent(): void
+  save(): void
+  saveSelected(): void
   openSettings(): void
   exit(): void
+  toggleView(): void
+  setFilter(filter: StripFilter): void
 }
 
-/** Traditional window menu (tz.md, п. 4.9). The View menu exists only in development. */
+/** Ids of menu items that are enabled and disabled while the program runs. */
+export const MENU_ID = {
+  save: 'file.save',
+  saveSelected: 'file.saveSelected',
+  photoView: 'view.photo',
+  filter: { all: 'view.filter.all', coords: 'view.filter.coords', modified: 'view.filter.modified' }
+} as const
+
+/** Traditional window menu (tz.md, п. 4.9). Reload and developer tools exist only in development. */
 export function buildMenu(t: Translate, h: MenuHandlers, recent: string[], dev: boolean): Menu {
   const recentItems: MenuItemConstructorOptions[] = recent.length
     ? [
@@ -27,20 +40,48 @@ export function buildMenu(t: Translate, h: MenuHandlers, recent: string[], dev: 
         { label: t('menu.openPhoto'), accelerator: 'CmdOrCtrl+O', click: h.openPhoto },
         { label: t('menu.openRecent'), submenu: recentItems },
         { type: 'separator' },
+        { id: MENU_ID.save, label: t('menu.save'), accelerator: 'CmdOrCtrl+S', click: h.save, enabled: false },
+        { id: MENU_ID.saveSelected, label: t('menu.saveSelected'), click: h.saveSelected, enabled: false },
+        { type: 'separator' },
         { label: t('menu.openSettings'), click: h.openSettings },
         { type: 'separator' },
         { label: t('menu.exit'), click: h.exit }
       ]
     }
   ]
-  if (dev) {
-    template.push({
-      label: t('menu.view'),
-      submenu: [
+  // View: map / photo (Space; the window handles the key, so Space still types in text fields)
+  // and the filters of the status bar counter (tz.md, пп. 4.13, 9.3).
+  const filterItem = (filter: StripFilter, label: string): MenuItemConstructorOptions => ({
+    id: MENU_ID.filter[filter],
+    label: t(label),
+    type: 'radio',
+    checked: filter === 'all',
+    click: () => h.setFilter(filter)
+  })
+  const devItems: MenuItemConstructorOptions[] = dev
+    ? [
+        { type: 'separator' },
         { label: t('menu.reload'), role: 'reload' },
         { label: t('menu.devTools'), role: 'toggleDevTools' }
       ]
-    })
-  }
+    : []
+  template.push({
+    label: t('menu.view'),
+    submenu: [
+      {
+        id: MENU_ID.photoView,
+        label: t('menu.photoView'),
+        type: 'checkbox',
+        accelerator: 'Space',
+        registerAccelerator: false,
+        click: h.toggleView
+      },
+      { type: 'separator' },
+      filterItem('all', 'menu.filterAll'),
+      filterItem('coords', 'menu.filterCoords'),
+      filterItem('modified', 'menu.filterModified'),
+      ...devItems
+    ]
+  })
   return Menu.buildFromTemplate(template)
 }

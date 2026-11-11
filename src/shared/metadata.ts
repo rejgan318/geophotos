@@ -94,12 +94,15 @@ export function toPhoto(
   sidecar: ExifRecord | undefined
 ): Omit<Photo, 'id'> {
   if (!rec) {
-    return { name, path, date: null, dateSource: 'file', coords: null, coordSource: null, error: 'no metadata' }
+    return {
+      name, path, date: null, dateSource: 'file', coords: null, coordSource: null, modified: false,
+      error: 'no metadata'
+    }
   }
   const { date, source: dateSource } = pickDate(rec)
   const { coords, source: coordSource } = pickCoords(rec, sidecar)
   const error = readError(rec)
-  return { name, path, date, dateSource, coords, coordSource, ...(error ? { error } : {}) }
+  return { name, path, date, dateSource, coords, coordSource, modified: false, ...(error ? { error } : {}) }
 }
 
 /** Order of the strip: by date (shooting or file), then by name; photos without date go last. */

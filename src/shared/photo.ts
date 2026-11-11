@@ -17,8 +17,15 @@ export interface Photo {
   dateSource: 'shot' | 'file'
   coords: LatLon | null
   coordSource: CoordSource | null
+  /** Coordinates changed in the program and not saved yet (tz.md, п. 4.3). */
+  modified: boolean
   /** Read error reported by exiftool (broken file etc.). */
   error?: string
+}
+
+export function sameCoords(a: LatLon | null, b: LatLon | null): boolean {
+  if (!a || !b) return a === b
+  return a.lat === b.lat && a.lon === b.lon
 }
 
 export interface FolderData {

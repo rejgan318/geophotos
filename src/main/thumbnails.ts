@@ -6,6 +6,12 @@ import type { PhotoSource } from './folder'
 /** Longest side of a thumbnail, px: strip thumbnails are ~120 px, ×2 for high-DPI screens. */
 export const THUMB_SIZE = 320
 
+/** Longest side of the photo view image, px: enough for a large screen, fast to make. */
+export const LARGE_SIZE = 2560
+
+/** Large images kept in memory: the current photo and its neighbours. */
+const LARGE_CACHE = 6
+
 /** Applies EXIF orientation 1–8 explicitly (embedded previews carry none of their own). */
 function orient(img: Sharp, orientation: number): Sharp {
   switch (orientation) {
@@ -20,15 +26,24 @@ function orient(img: Sharp, orientation: number): Sharp {
   }
 }
 
-function toThumb(img: Sharp): Promise<Buffer> {
+function resized(img: Sharp, size: number): Promise<Buffer> {
   return img
-    .resize(THUMB_SIZE, THUMB_SIZE, { fit: 'inside', withoutEnlargement: true })
-    .jpeg({ quality: 82 })
+    .resize(size, size, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: size > THUMB_SIZE ? 88 : 82 })
     .toBuffer()
 }
 
 /** Makes one thumbnail JPEG (tz.md, п. 3.3.4). Throws when the photo cannot be shown. */
-export async function makeThumbnail(source: PhotoSource, exiftool: ExifTool): Promise<Buffer> {
+export function makeThumbnail(source: PhotoSource, exiftool: ExifTool): Promise<Buffer> {
+  return makeImage(source, exiftool, THUMB_SIZE)
+}
+
+/**
+ * A JPEG of the photo with the given longest side, from the same source as the thumbnail
+ * (п. 3.3.4: RAW, DNG and HEIC — their embedded preview). Throws when the photo cannot be shown.
+ */
+export async function makeImage(source: PhotoSource, exiftool: ExifTool, size: number): Promise<Buffer> {
+  const toThumb = (img: Sharp): Promise<Buffer> => resized(img, size)
   if (source.preview === 'image') {
     // Read into memory: avoids any trouble with non-Latin paths in the image library.
     return toThumb(sharp(await readFile(source.path), { failOn: 'none' }).rotate())
@@ -51,6 +66,8 @@ export async function makeThumbnail(source: PhotoSource, exiftool: ExifTool): Pr
  */
 export class ThumbnailService {
   private cache = new Map<string, Promise<Buffer>>()
+  /** Large images, least recently used first. */
+  private large = new Map<string, Promise<Buffer>>()
   private running = 0
   private waiting: (() => void)[] = []
 
@@ -68,8 +85,23 @@ export class ThumbnailService {
     return p
   }
 
+  /** The image of the photo view: not queued behind the strip thumbnails, a few kept in memory. */
+  getLarge(source: PhotoSource): Promise<Buffer> {
+    let p = this.large.get(source.path)
+    if (p) {
+      this.large.delete(source.path)
+    } else {
+      p = makeImage(source, this.exiftool, LARGE_SIZE)
+      p.catch(() => this.large.delete(source.path))
+    }
+    this.large.set(source.path, p)
+    while (this.large.size > LARGE_CACHE) this.large.delete(this.large.keys().next().value!)
+    return p
+  }
+
   clear(): void {
     this.cache.clear()
+    this.large.clear()
   }
 
   private async limited<T>(job: () => Promise<T>): Promise<T> {

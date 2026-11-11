@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { parse } from 'jsonc-parser'
+import { parse, type ParseError } from 'jsonc-parser'
 import { afterEach, describe, expect, it } from 'vitest'
 import { makeTranslate } from '@shared/i18n'
 import { mapSources, mergeSettings, type Settings } from '@shared/settings'
@@ -130,6 +130,14 @@ describe('localization (tz.md, п. 2.3)', () => {
     expect(files.length).toBeGreaterThanOrEqual(2)
     for (const f of files) {
       expect(Object.keys(parse(readFileSync(join(dir, f), 'utf8'))).sort(), f).toEqual(en)
+    }
+  })
+
+  it('language files have no syntax errors (a tolerant parse would hide them)', () => {
+    for (const f of files) {
+      const errors: ParseError[] = []
+      parse(readFileSync(join(dir, f), 'utf8'), errors)
+      expect(errors, f).toEqual([])
     }
   })
 

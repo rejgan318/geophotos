@@ -9,11 +9,18 @@
     <title>GeoPhotos</title>
   </head>
   <body>
-    <div id="map"></div>
+    <div id="main">
+      <div id="map"></div>
+      <div id="viewer" hidden></div>
+    </div>
     <div id="strip" tabindex="0"></div>
     <div id="status">
       <span id="status-photo"></span>
+      <span id="status-note"></span>
       <span id="status-counts"></span>
+    </div>
+    <div id="progress" hidden>
+      <div class="progress-box"><span id="progress-text"></span></div>
     </div>
     <script type="module" src="./src/main.ts"></script>
   </body>

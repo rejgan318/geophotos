@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { scanFolder, type ScannedFolder } from '../../src/main/folder'
-import { makeThumbnail, THUMB_SIZE } from '../../src/main/thumbnails'
+import { LARGE_SIZE, makeImage, makeThumbnail, THUMB_SIZE } from '../../src/main/thumbnails'
 import { copyMaster, hasMaster, newExifTool, tempDir } from './helpers'
 
 const et = newExifTool()
@@ -32,6 +32,16 @@ describe.skipIf(!hasMaster)('thumbnails of every test photo (tz.md, п. 3.3.4)',
       await expectThumb(await makeThumbnail(source, et)).catch((e: unknown) => {
         throw new Error(`${photo.name}: ${String(e)}`)
       })
+    }
+  })
+
+  it('the photo view gets a large image of every photo, up to LARGE_SIZE (tz.md, п. 9.3)', async () => {
+    for (const [i, photo] of folder.photos.entries()) {
+      const m = await sharp(await makeImage(folder.sources[i]!, et, LARGE_SIZE)).metadata()
+      const side = Math.max(m.width ?? 0, m.height ?? 0)
+      expect(m.format, photo.name).toBe('jpeg')
+      expect(side, photo.name).toBeLessThanOrEqual(LARGE_SIZE)
+      expect(side, photo.name).toBeGreaterThan(THUMB_SIZE)
     }
   })
 

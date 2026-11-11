@@ -83,7 +83,7 @@ describe('dates', () => {
 })
 
 describe('photos', () => {
-  const base = { path: 'x', coords: null, coordSource: null, dateSource: 'shot' as const }
+  const base = { path: 'x', coords: null, coordSource: null, dateSource: 'shot' as const, modified: false }
 
   it('order: by date, then by name; no date last', () => {
     const list = [

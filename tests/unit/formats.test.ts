@@ -55,8 +55,9 @@ describe('launch parameter: folder or photo', () => {
 
 describe('thumbnail URLs', () => {
   it('round trip', () => {
-    expect(parseThumbUrl(thumbUrl(3, 12))).toEqual({ generation: 3, id: 12 })
-    expect(parseThumbUrl('thumb://f3/12/')).toEqual({ generation: 3, id: 12 })
+    expect(parseThumbUrl(thumbUrl(3, 12))).toEqual({ generation: 3, id: 12, large: false })
+    expect(parseThumbUrl('thumb://f3/12/')).toEqual({ generation: 3, id: 12, large: false })
+    expect(parseThumbUrl(thumbUrl(3, 12, true))).toEqual({ generation: 3, id: 12, large: true })
     expect(parseThumbUrl('https://x')).toBeNull()
   })
 })

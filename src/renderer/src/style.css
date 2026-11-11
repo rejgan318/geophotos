@@ -8,6 +8,7 @@
   --fg-dim: #999;
   --selected: #fff;
   --error: #e05050;
+  --modified: #ffb300;
 }
 
 html,
@@ -25,9 +26,73 @@ body {
   flex-direction: column;
 }
 
-#map {
+/* The main area: the map, or the photo view over it (tz.md, п. 9.3). */
+#main {
+  position: relative;
   flex: 1;
   min-height: 0;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+}
+
+#viewer {
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #111;
+  overflow: hidden;
+}
+
+#viewer[hidden] {
+  display: none;
+}
+
+#viewer img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+#viewer img[hidden] {
+  display: none;
+}
+
+.viewer-caption {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  max-width: calc(100% - 16px);
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #eee;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.viewer-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg-dim);
+}
+
+.viewer-placeholder[hidden] {
+  display: none;
+}
+
+.viewer-placeholder svg {
+  width: 64px;
+  height: 64px;
 }
 
 /* Thumbnail strip */
@@ -77,12 +142,99 @@ body {
   user-select: none;
 }
 
+.thumb[hidden] {
+  display: none;
+}
+
+.strip-empty {
+  margin: auto;
+  color: var(--fg-dim);
+}
+
 .thumb:hover {
   border-color: #666;
 }
 
 .thumb.selected {
   border-color: var(--selected);
+  background: #4a4a4a;
+}
+
+/* The current photo of a multiple selection (status bar, map follow it). */
+.thumb.current {
+  box-shadow: 0 0 0 1px var(--selected);
+}
+
+/* Unsaved coordinates (tz.md, п. 4.3): only the pencil badge; the frame is for the selection. */
+.thumb .badge-modified {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Same look and size as the coordinates badge, in the "modified" color. */
+.thumb .badge-modified svg {
+  width: 11px;
+  height: 11px;
+  fill: var(--modified);
+}
+
+/* A photo with coordinates under photos dragged within the strip (tz.md, п. 4.5). */
+.thumb.drop-target {
+  border-color: var(--marker-color);
+  box-shadow: 0 0 0 2px var(--marker-color);
+}
+
+/* Drag image: kept off screen, used by setDragImage. */
+#drag-ghost {
+  position: fixed;
+  top: -1000px;
+  left: 0;
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-thumb);
+  border-radius: 3px;
+}
+
+#drag-ghost img {
+  max-width: 72px;
+  max-height: 72px;
+}
+
+#drag-ghost .placeholder {
+  font-size: 9px;
+  color: var(--fg-dim);
+  overflow: hidden;
+}
+
+#drag-ghost .placeholder svg {
+  width: 24px;
+  height: 24px;
+}
+
+#drag-ghost .count {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 11px;
+  background: var(--marker-selected);
+  color: #fff;
+  font: bold 12px/22px 'Segoe UI', sans-serif;
+  text-align: center;
 }
 
 .thumb img {
@@ -153,6 +305,185 @@ body {
 #status-photo {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+#status-note {
+  margin-left: auto;
+  color: var(--fg);
+}
+
+/* Counter as filter buttons (tz.md, п. 4.13): the strip badge icons with numbers.
+   The active filter is outlined in the color of its icon; "all" is white. */
+#status-counts {
+  display: flex;
+  gap: 2px;
+}
+
+.filter-btn {
+  --filter-color: var(--selected);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px 0 2px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--fg-dim);
+  font: 12px 'Segoe UI', sans-serif;
+  cursor: pointer;
+}
+
+.filter-btn.coords {
+  --filter-color: var(--marker-color);
+}
+
+.filter-btn.modified {
+  --filter-color: var(--modified);
+}
+
+.filter-btn:hover:not(:disabled) {
+  border-color: #555;
+  color: var(--fg);
+}
+
+/* An empty filter is not available: no hover, no pointer. */
+.filter-btn:disabled {
+  cursor: default;
+}
+
+.filter-btn.active {
+  border-color: var(--filter-color);
+  color: var(--fg);
+}
+
+.filter-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-icon svg {
+  width: 11px;
+  height: 11px;
+  fill: var(--filter-color);
+}
+
+.filter-btn:focus-visible {
+  outline: 1px solid var(--selected);
+  outline-offset: 1px;
+}
+
+/* Saving progress (tz.md, п. 6.8): over the whole window, nothing can be changed meanwhile. */
+#progress {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: wait;
+}
+
+#progress[hidden] {
+  display: none;
+}
+
+.progress-box {
+  padding: 14px 24px;
+  border-radius: 4px;
+  background: #1e1e1e;
+  color: var(--fg);
+  font-size: 14px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+
+/* Place search on the map (tz.md, п. 5.3). */
+.search-box {
+  width: 300px;
+  background: #fff;
+  color: #222;
+  font: 13px 'Segoe UI', sans-serif;
+}
+
+.search-row {
+  display: flex;
+}
+
+.search-box input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  padding: 6px 8px;
+  font: inherit;
+  outline: none;
+  background: transparent;
+}
+
+.search-clear {
+  border: none;
+  background: transparent;
+  width: 28px;
+  font-size: 16px;
+  color: #777;
+  cursor: pointer;
+}
+
+.search-clear:hover {
+  color: #222;
+}
+
+.search-message {
+  padding: 4px 8px 6px;
+  color: #555;
+  border-top: 1px solid #ddd;
+}
+
+.search-message[hidden],
+.search-results[hidden] {
+  display: none;
+}
+
+.search-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  border-top: 1px solid #ddd;
+}
+
+.search-results li {
+  padding: 5px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-results li.active {
+  background: #e3efff;
+}
+
+/* Mark of a found place: a ring with a dot, not a photo pin. */
+.place-mark {
+  background: none;
+  border: none;
+}
+
+.place-mark div {
+  width: 26px;
+  height: 26px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 4px solid #2979ff;
+  background: radial-gradient(circle, #fff 0 3px, rgba(41, 121, 255, 0.25) 4px);
+  box-shadow: 0 0 0 2px #fff, 0 1px 6px rgba(0, 0, 0, 0.7);
 }
 
 /* Photo markers and groups on the map (tz.md, п. 4.8.1); colors come from the settings. */
