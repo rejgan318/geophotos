@@ -26,6 +26,11 @@
   "dialog.photos": "Фото",
   "dialog.allFiles": "Все файлы",
   "dialog.ok": "OK",
+  "dialog.yes": "Да",
+  "dialog.no": "Нет",
+  "subfolders.title": "Вложенные папки",
+  "subfolders.question": "Загрузить фото и из вложенных папок (всех уровней)?",
+  "subfolders.dontAsk": "Больше не спрашивать",
 
   "error.exiftool.title": "exiftool не найден",
   "error.exiftool.message": "exiftool не найден: {path}",

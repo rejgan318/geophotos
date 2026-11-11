@@ -137,6 +137,24 @@ export function ensureUserSettingsFile(userPath: string, schemaPath: string, def
   return true
 }
 
+/**
+ * Sets one field of the user settings file, keeping its comments and layout (tz-config.md,
+ * п. 5.1). A missing file is created first, as by Open Settings File (п. 6.3).
+ */
+export function setUserSetting(
+  userPath: string,
+  schemaPath: string,
+  defaultsPath: string,
+  field: string[],
+  value: unknown
+): void {
+  ensureUserSettingsFile(userPath, schemaPath, defaultsPath)
+  const text = readFileSync(userPath, 'utf8')
+  const eol = text.includes('\r\n') ? '\r\n' : '\n'
+  const edits = modify(text, field, value, { formattingOptions: { ...FORMAT, eol } })
+  writeFileSync(userPath, applyEdits(text, edits), 'utf8')
+}
+
 /** The part of JSON Schema used for comments. */
 interface SchemaNode {
   description?: string

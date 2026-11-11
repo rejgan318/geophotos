@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { chmodSync, copyFileSync, existsSync, readdirSync, readFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { assignCoords } from '@shared/edits'
@@ -172,6 +172,33 @@ describe('saving generated cases', () => {
     const [rec] = await et.json(['-n', '-G0', '-EXIF:GPSLatitude', '-EXIF:GPSLatitudeRef', file])
     expect(rec!['EXIF:GPSLatitude']).toBeCloseTo(45.25, 6)
     expect(rec!['EXIF:GPSLatitudeRef']).toBe('S')
+  })
+
+  it('subfolders: photos with the same name in different folders keep their own coordinates (п. 3.2)', async () => {
+    const root = join(tmp.dir, 'nested')
+    const deep = join(root, 'b', 'deeper')
+    mkdirSync(join(root, 'a'), { recursive: true })
+    mkdirSync(deep, { recursive: true })
+    await makeJpeg(join(root, 'top.jpg'))
+    await makeJpeg(join(root, 'a', 'same.jpg'))
+    await makeJpeg(join(deep, 'same.jpg'))
+
+    // Without subfolders only the folder itself is read.
+    expect((await scanFolder(root, et)).photos.map((p) => p.name)).toEqual(['top.jpg'])
+
+    const folder = await scanFolder(root, et, { subfolders: true })
+    const a = join('a', 'same.jpg')
+    const b = join('b', 'deeper', 'same.jpg')
+    expect(folder.photos.map((p) => p.name).sort()).toEqual([a, b, 'top.jpg'].sort())
+    const outcome = await assignAndSave(folder, { [a]: { lat: 10, lon: 20 }, [b]: { lat: -30, lon: -40 } }, memoryLog())
+    expect(outcome.failed).toEqual([])
+    // Read back after writing by the whole path, not by the file name.
+    const byName = new Map(outcome.saved.map((s) => [s.photo.name, s.photo.coords]))
+    near(byName.get(a), { lat: 10, lon: 20 })
+    near(byName.get(b), { lat: -30, lon: -40 })
+    const again = await scanFolder(root, et, { subfolders: true })
+    near(again.photos.find((p) => p.name === a)?.coords, { lat: 10, lon: 20 })
+    near(again.photos.find((p) => p.name === b)?.coords, { lat: -30, lon: -40 })
   })
 
   it('a leftover exiftool temp file does not block writing and is removed', async () => {

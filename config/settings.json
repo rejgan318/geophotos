@@ -45,6 +45,9 @@
     "maxSizeKb": 1024,
     "maxFiles": 5
   },
+  "folders": {
+    "subfolders": "ask"
+  },
   "search": {
     "url": "https://nominatim.openstreetmap.org"
   }

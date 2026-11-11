@@ -55,14 +55,14 @@ describe('state between runs (tz.md, п. 7.5)', () => {
     expect(readState(file)).toEqual({ recentFolders: ['D:\\old'], ...NONE })
   })
 
-  it('the folder, photo and strip scroll of the last session survive a restart (п. 7.1)', () => {
+  it('the folder, photo, strip scroll and subfolders choice of the last session survive a restart (пп. 7.1, 3.2)', () => {
     const file = stateFile()
-    const lastSession = { folder: NIGHT, photo: `${NIGHT}\\IMG_0001.CR2`, scroll: 840 }
+    const lastSession = { folder: NIGHT, photo: `${NIGHT}\\IMG_0001.CR2`, scroll: 840, subfolders: true }
     writeState(file, { recentFolders: [NIGHT], ...NONE, lastSession })
     expect(readState(file)).toEqual({ recentFolders: [NIGHT], ...NONE, lastSession })
-    // Files of earlier versions have no scroll.
+    // Files of earlier versions have no scroll and no subfolders choice.
     writeFileSync(file, JSON.stringify({ lastSession: { folder: 'D:\\x', photo: 5 } }))
-    expect(readState(file).lastSession).toEqual({ folder: 'D:\\x', photo: null, scroll: 0 })
+    expect(readState(file).lastSession).toEqual({ folder: 'D:\\x', photo: null, scroll: 0, subfolders: false })
     writeFileSync(file, JSON.stringify({ lastSession: { photo: 'D:\\x\\a.jpg' } }))
     expect(readState(file).lastSession).toBeNull()
   })

@@ -22,6 +22,8 @@ export interface Settings {
   }
   log: { level: LogLevel; maxSizeKb: number; maxFiles: number }
   search: { url: string }
+  /** Photos from subfolders (tz.md, п. 3.2). */
+  folders: { subfolders: 'ask' | 'yes' | 'no' }
 }
 
 /** Look of map markers (tz.md, п. 4.8.1). */

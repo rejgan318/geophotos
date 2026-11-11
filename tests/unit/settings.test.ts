@@ -5,7 +5,7 @@ import { parse, type ParseError } from 'jsonc-parser'
 import { afterEach, describe, expect, it } from 'vitest'
 import { makeTranslate } from '@shared/i18n'
 import { mapSources, mergeSettings, type Settings } from '@shared/settings'
-import { ensureUserSettingsFile, loadSettings } from '../../src/main/settings'
+import { ensureUserSettingsFile, loadSettings, setUserSetting } from '../../src/main/settings'
 import { helpTextKeys } from '../../src/renderer/src/help-content'
 
 const root = resolve(import.meta.dirname, '../..')
@@ -113,6 +113,24 @@ describe('config files (tz-config.md)', () => {
     writeFileSync(file, '{\n  "$schema": "file:///x.json"\n  // old comment\n}')
     expect(ensureUserSettingsFile(file, schemaPath, defaultsPath)).toBe(true)
     expect(parse(readFileSync(file, 'utf8')).language).toBe('en')
+  })
+
+  it('the program sets a field of the user file, keeping comments (tz.md, п. 3.2; tz-config.md, п. 5)', () => {
+    const file = userFile('{\r\n  // my note\r\n  "language": "ru"\r\n}\r\n')
+    setUserSetting(file, schemaPath, defaultsPath, ['folders', 'subfolders'], 'yes')
+    const text = readFileSync(file, 'utf8')
+    expect(text).toContain('// my note')
+    expect(text).not.toMatch(/[^\r]\n/)
+    expect(parse(text)).toEqual({ language: 'ru', folders: { subfolders: 'yes' } })
+    expect(load(text).settings.folders.subfolders).toBe('yes')
+  })
+
+  it('setting a field without a user file creates the full file first', () => {
+    const file = userFile(null)
+    setUserSetting(file, schemaPath, defaultsPath, ['folders', 'subfolders'], 'no')
+    const value = parse(readFileSync(file, 'utf8'))
+    expect(value.folders.subfolders).toBe('no')
+    expect(value.language).toBe('en')
   })
 
   it('tile sources without url are skipped', () => {

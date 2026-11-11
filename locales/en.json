@@ -26,6 +26,11 @@
   "dialog.photos": "Photos",
   "dialog.allFiles": "All files",
   "dialog.ok": "OK",
+  "dialog.yes": "Yes",
+  "dialog.no": "No",
+  "subfolders.title": "Subfolders",
+  "subfolders.question": "Load photos from the folders inside this one too (all levels)?",
+  "subfolders.dontAsk": "Don't ask again",
 
   "error.exiftool.title": "exiftool not found",
   "error.exiftool.message": "exiftool not found: {path}",

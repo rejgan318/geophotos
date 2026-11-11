@@ -14,7 +14,7 @@ export interface AppState {
    * The open folder, the current photo and the strip scroll at exit; opened at the next start
    * without a parameter.
    */
-  lastSession: { folder: string; photo: string | null; scroll: number } | null
+  lastSession: { folder: string; photo: string | null; scroll: number; subfolders: boolean } | null
   /** Position and size of the window (its normal size when maximized). */
   window: WindowState | null
   /** Place and zoom of the map, its tile source, markers or thumbnails. */
@@ -50,7 +50,9 @@ function readSession(v: unknown): AppState['lastSession'] {
   return {
     folder: v['folder'],
     photo: typeof v['photo'] === 'string' && v['photo'] ? v['photo'] : null,
-    scroll: isNum(v['scroll']) && v['scroll'] >= 0 ? v['scroll'] : 0
+    scroll: isNum(v['scroll']) && v['scroll'] >= 0 ? v['scroll'] : 0,
+    // Whether photos from subfolders were loaded (tz.md, п. 3.2): restored without asking.
+    subfolders: v['subfolders'] === true
   }
 }
 

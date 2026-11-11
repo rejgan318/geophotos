@@ -27,13 +27,13 @@ import { addRecent, removeRecent, samePath } from '@shared/recent'
 import { mapSources, type Settings } from '@shared/settings'
 import { windowOnScreen } from '@shared/window-place'
 import { ExifTool, exiftoolVersion } from './exiftool'
-import { scanFolder, type PhotoSource } from './folder'
+import { hasSubfolders, scanFolder, type PhotoSource } from './folder'
 import { loadStrings } from './locales'
 import { log, setupLog } from './logger'
 import { buildMenu, MENU_ID } from './menu'
 import { savePhotos, type SaveFailure } from './save'
 import { PlaceSearch } from './search'
-import { DefaultSettingsError, ensureUserSettingsFile, formatProblem, loadSettings } from './settings'
+import { DefaultSettingsError, ensureUserSettingsFile, formatProblem, loadSettings, setUserSetting } from './settings'
 import { readState, writeState, type AppState } from './state'
 import { ThumbnailService } from './thumbnails'
 
@@ -58,6 +58,8 @@ interface OpenFolder {
   sources: PhotoSource[]
   /** Coordinates as they are in the files: what "modified" is compared with, and the log's "old". */
   fileCoords: (LatLon | null)[]
+  /** Photos from subfolders are loaded too (tz.md, п. 3.2). */
+  subfolders: boolean
 }
 
 let settings: Settings
@@ -208,7 +210,12 @@ function saveAppState(): void {
 function rememberSession(): void {
   const photo = ui.current === null ? undefined : current?.data.photos[ui.current]
   lastSession = current
-    ? { folder: current.data.folder, photo: photo?.path ?? null, scroll: viewState?.scroll ?? 0 }
+    ? {
+        folder: current.data.folder,
+        photo: photo?.path ?? null,
+        scroll: viewState?.scroll ?? 0,
+        subfolders: current.subfolders
+      }
     : null
   const thumbnails = ui.mapMode === 'thumbs'
   if (viewState) {
@@ -235,7 +242,10 @@ async function restoreSession(): Promise<void> {
   const photoOk = !!photo && kindOf(photo) === 'file'
   if (photo && !photoOk) log.info(`Last selected photo not found: ${photo}`)
   log.info(`Restoring the last session: ${folder}`)
-  await openFolder(folder, photoOk && photo ? photo : undefined, { scroll: lastSession.scroll })
+  await openFolder(folder, photoOk && photo ? photo : undefined, {
+    scroll: lastSession.scroll,
+    subfolders: lastSession.subfolders
+  })
 }
 
 /** Opens a folder, or the folder of a photo with that photo selected (tz.md, п. 3.1). */
@@ -259,14 +269,57 @@ async function folderMissing(folder: string): Promise<void> {
   }
 }
 
-/** `restored`: the folder of the last run opened at start (tz.md, п. 7.1). */
-async function openFolder(folder: string, selectPath?: string, restored?: { scroll: number }): Promise<void> {
+/**
+ * Whether to load photos from the subfolders too (tz.md, п. 3.2): by the setting, or by asking
+ * when the folder has any. "Don't ask again" writes the answer into the user settings file.
+ */
+async function askSubfolders(folder: string): Promise<boolean> {
+  const mode = settings.folders.subfolders
+  if (mode !== 'ask') return mode === 'yes'
+  if (!win || !(await hasSubfolders(folder).catch(() => false))) return false
+  const res = await dialog.showMessageBox(win, {
+    type: 'question',
+    title: t('subfolders.title'),
+    message: t('subfolders.question'),
+    detail: folder,
+    buttons: [t('dialog.yes'), t('dialog.no')],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+    checkboxLabel: t('subfolders.dontAsk'),
+    checkboxChecked: false
+  })
+  const yes = res.response === 0
+  if (res.checkboxChecked) {
+    const value = yes ? 'yes' : 'no'
+    settings.folders.subfolders = value
+    try {
+      setUserSetting(paths.user, paths.schema, paths.defaults, ['folders', 'subfolders'], value)
+      log.info(`Subfolders: "${value}" saved in ${paths.user}`)
+    } catch (e) {
+      log.error(`Cannot save the subfolders choice in ${paths.user}: ${String(e)}`)
+    }
+  }
+  return yes
+}
+
+/**
+ * `restored`: the folder of the last run opened at start (tz.md, п. 7.1), with the strip scroll
+ * and the subfolders choice of that run.
+ */
+async function openFolder(
+  folder: string,
+  selectPath?: string,
+  restored?: { scroll: number; subfolders: boolean }
+): Promise<void> {
   if (!win || saving) return
   if (!(await confirmDiscard())) return
+  const subfolders = restored ? restored.subfolders : await askSubfolders(folder)
+  if (!win) return
   win.webContents.send(IPC.folderLoading, { folder })
   let scanned
   try {
-    scanned = await scanFolder(folder, exiftool)
+    scanned = await scanFolder(folder, exiftool, { subfolders })
   } catch (e) {
     log.error(`Cannot open folder ${folder}: ${String(e)}`)
     await dialog.showMessageBox(win, {
@@ -287,15 +340,19 @@ async function openFolder(folder: string, selectPath?: string, restored?: { scro
   current = {
     data: { folder, photos: scanned.photos, generation, selected: chosen?.id ?? null },
     sources: scanned.sources,
-    fileCoords: scanned.photos.map((p) => p.coords)
+    fileCoords: scanned.photos.map((p) => p.coords),
+    subfolders
   }
+  for (const dir of scanned.unreadable) log.warn(`Subfolder skipped, cannot be read: ${dir}`)
   selection = new Set(chosen ? [chosen.id] : [])
-  win.webContents.send(IPC.folderLoaded, restored ? { ...current.data, restored } : current.data)
+  win.webContents.send(IPC.folderLoaded, restored ? { ...current.data, restored: { scroll: restored.scroll } } : current.data)
   setRecent((list) => addRecent(list, folder))
   refreshEditState()
 
   const withCoords = scanned.photos.filter((p) => p.coords).length
-  log.info(`Folder opened: ${folder}; photos: ${scanned.photos.length}, with coordinates: ${withCoords}`)
+  log.info(
+    `Folder opened: ${folder}${subfolders ? ' (with subfolders)' : ''}; photos: ${scanned.photos.length}, with coordinates: ${withCoords}`
+  )
 
   const failed = scanned.photos.filter((p) => p.error)
   for (const p of failed) log.warn(`Read error: ${p.path}: ${p.error}`)

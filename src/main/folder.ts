@@ -1,5 +1,5 @@
 import { readdir } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { baseNameOf, formatOf, isSidecar, isSupported, sidecarNameOf, type PreviewKind } from '@shared/formats'
 import {
   comparePhotos,
@@ -29,6 +29,8 @@ export interface PhotoSource extends WriteInfo {
 export interface ScannedFolder {
   photos: Photo[]
   sources: PhotoSource[]
+  /** Subfolders that could not be read (no access): skipped. */
+  unreadable: string[]
 }
 
 const COORD_TAGS = [
@@ -58,13 +60,71 @@ const TAGS = [
 
 const SIDECAR_TAGS = ['-File:FileName', '-XMP:GPSLatitude', '-XMP:GPSLongitude']
 
-/** Reads the photos of one folder, without subfolders (tz.md, п. 9.1). */
-export async function scanFolder(folder: string, exiftool: ExifTool): Promise<ScannedFolder> {
+/** Whether a folder has folders inside it (tz.md, п. 3.2). */
+export async function hasSubfolders(folder: string): Promise<boolean> {
+  const entries = await readdir(folder, { withFileTypes: true })
+  return entries.some((e) => e.isDirectory())
+}
+
+/**
+ * Reads the photos of a folder and, with `subfolders`, of all folders inside it, all levels
+ * (tz.md, п. 3.2). A photo from a subfolder is named by its path from the folder
+ * (`2024-05\IMG_0001.jpg`). The photos of all folders are in one time order.
+ */
+export async function scanFolder(
+  folder: string,
+  exiftool: ExifTool,
+  opts: { subfolders?: boolean } = {}
+): Promise<ScannedFolder> {
+  const unreadable: string[] = []
+  const dirs = opts.subfolders ? await allFolders(folder, unreadable) : [folder]
+  const items: Item[] = []
+  for (const dir of dirs) {
+    try {
+      items.push(...(await scanOne(folder, dir, exiftool)))
+    } catch (e) {
+      // The folder itself must be readable; a subfolder that is not is skipped.
+      if (dir === folder) throw e
+      unreadable.push(dir)
+    }
+  }
+  items.sort((a, b) => comparePhotos(a.photo, b.photo))
+  return {
+    photos: items.map((it, id) => ({ id, ...it.photo })),
+    sources: items.map((it) => it.source),
+    unreadable
+  }
+}
+
+/** The folder and every folder inside it, all levels; unreadable ones go to `unreadable`. */
+async function allFolders(folder: string, unreadable: string[]): Promise<string[]> {
+  const result: string[] = []
+  const queue = [folder]
+  while (queue.length) {
+    const dir = queue.shift()!
+    result.push(dir)
+    try {
+      const entries = await readdir(dir, { withFileTypes: true })
+      const subs = entries.filter((e) => e.isDirectory()).map((e) => join(dir, e.name))
+      queue.push(...subs.sort((a, b) => a.localeCompare(b)))
+    } catch (e) {
+      if (dir === folder) throw e
+      unreadable.push(dir)
+      result.pop()
+    }
+  }
+  return result
+}
+
+type Item = { photo: Omit<Photo, 'id'>; source: PhotoSource }
+
+/** The photos of one folder (`dir`), named by their path from the opened `root`. */
+async function scanOne(root: string, folder: string, exiftool: ExifTool): Promise<Item[]> {
   const entries = await readdir(folder, { withFileTypes: true })
   const names = entries.filter((e) => e.isFile()).map((e) => e.name)
   const photoNames = names.filter(isSupported)
   const sidecarNames = names.filter(isSidecar)
-  if (!photoNames.length) return { photos: [], sources: [] }
+  if (!photoNames.length) return []
 
   // A sidecar belongs to the RAW file with the same name if there is one (tz.md, п. 3.7).
   const rawBases = new Set(
@@ -82,7 +142,7 @@ export async function scanFolder(folder: string, exiftool: ExifTool): Promise<Sc
     ? await readRecords(exiftool, folder, sidecarNames, SIDECAR_TAGS)
     : new Map<string, ExifRecord>()
 
-  const items = photoNames.map((name) => {
+  return photoNames.map((name) => {
     const path = join(folder, name)
     const rec = records.get(name.toLowerCase())
     const format = formatOf(name)!
@@ -105,14 +165,8 @@ export async function scanFolder(folder: string, exiftool: ExifTool): Promise<Sc
       previewTag: format.preview === 'image' ? null : embeddedPreviewTag(rec),
       orientation: Number.isInteger(orientation) && orientation >= 1 && orientation <= 8 ? orientation : 1
     }
-    return { photo: toPhoto(name, path, rec, sidecarRec), source }
+    return { photo: toPhoto(relative(root, path), path, rec, sidecarRec), source }
   })
-
-  items.sort((a, b) => comparePhotos(a.photo, b.photo))
-  return {
-    photos: items.map((it, id) => ({ id, ...it.photo })),
-    sources: items.map((it) => it.source)
-  }
 }
 
 export interface RereadCoords {
@@ -164,20 +218,27 @@ async function readRecords(
   return map
 }
 
-/** exiftool records by lower-case full path (files missing on disk are absent). */
+/**
+ * exiftool records by lower-case full path (files missing on disk are absent). Matched by the
+ * whole path: photos of different subfolders can have the same name (tz.md, п. 3.2).
+ */
 async function recordsByPath(exiftool: ExifTool, paths: string[], tags: string[]): Promise<Map<string, ExifRecord>> {
-  const byName = new Map<string, string>()
-  for (const p of paths) byName.set(fileNameOf(p).toLowerCase(), p.toLowerCase())
+  const byKey = new Map<string, string>()
+  for (const p of paths) byKey.set(pathKey(p), p.toLowerCase())
   // Missing files (a sidecar not created yet) make exiftool report an error: no records then.
   const recs = await exiftool.json(['-n', '-G0', ...tags, ...paths]).catch(() => [])
   const map = new Map<string, ExifRecord>()
   for (const rec of recs) {
-    // SourceFile comes back with forward slashes; the file name identifies it within the folder.
-    const name = tagValue(rec, 'FileName', 'File') ?? baseOfSourceFile(rec)
-    const path = typeof name === 'string' ? byName.get(name.toLowerCase()) : undefined
+    const src = rec['SourceFile']
+    const path = typeof src === 'string' ? byKey.get(pathKey(src)) : undefined
     if (path) map.set(path, rec)
   }
   return map
+}
+
+/** A path to compare: exiftool gives SourceFile with forward slashes; case does not matter. */
+function pathKey(p: string): string {
+  return p.replace(/\\/g, '/').toLowerCase()
 }
 
 function baseOfSourceFile(rec: ExifRecord): string | undefined {

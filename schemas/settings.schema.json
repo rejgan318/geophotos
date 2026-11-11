@@ -153,6 +153,18 @@
           "description": "Address of the Nominatim search service."
         }
       }
+    },
+    "folders": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Opening folders.",
+      "properties": {
+        "subfolders": {
+          "enum": ["ask", "yes", "no"],
+          "default": "ask",
+          "description": "Photos from folders inside the opened one (all levels): ask each time, always load them, or never. Set by the program when \"Don't ask again\" is ticked."
+        }
+      }
     }
   },
   "definitions": {
