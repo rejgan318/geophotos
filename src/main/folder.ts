@@ -185,6 +185,7 @@ async function scanOne(root: string, folder: string, exiftool: ExifTool): Promis
     const source: PhotoSource = {
       path,
       write: format.write,
+      video: format.video,
       xmpCoords: !!rec && xmpCoords(rec) !== null,
       sidecar: owns
         ? {

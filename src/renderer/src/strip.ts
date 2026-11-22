@@ -1,7 +1,7 @@
 import type { Translate } from '@shared/i18n'
 import { thumbUrl } from '@shared/ipc'
 import { dropOnPhoto } from '@shared/edits'
-import { canEdit, type FolderData, type LatLon, type Photo } from '@shared/photo'
+import { type FolderData, type LatLon, type Photo } from '@shared/photo'
 import { photoTooltip } from './describe'
 import { ADDRESS_SVG, ALTITUDE_SVG, FILE_SVG, PENCIL_SVG, PIN_SVG, VIDEO_SVG } from './icons'
 import type { Selection } from './selection'
@@ -92,8 +92,7 @@ export class Strip {
   private makeItem(p: Photo): HTMLElement {
     const item = document.createElement('div')
     item.className = 'thumb'
-    // A video cannot be placed yet (tz.md, п. 9.3: 0.22.0); photos can be dropped onto it.
-    item.draggable = canEdit(p)
+    item.draggable = true
     item.dataset['id'] = String(p.id)
 
     const img = document.createElement('img')

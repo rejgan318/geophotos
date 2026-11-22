@@ -2,7 +2,7 @@ import { statSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { checkedAltitude, ELEVATION_BATCH, needsAltitude } from '@shared/elevation'
 import { pointKey } from '@shared/geocode'
-import { canEdit, sameAddress, sameAltitude, type Address, type LatLon, type Photo } from '@shared/photo'
+import { sameAddress, sameAltitude, type Address, type LatLon, type Photo } from '@shared/photo'
 import { samePath } from '@shared/recent'
 import type { ElevationResult } from './elevation'
 import type { ExifTool } from './exiftool'
@@ -119,8 +119,6 @@ export async function runBatch(
       for (const dir of scan.unreadable) deps.log.warn(`Batch: subfolder skipped, cannot be read: ${dir}`)
       scan.photos.forEach((photo, i) => {
         if (!entry.all && !entry.files.some((f) => samePath(f, photo.path))) return
-        // Videos are not written yet (tz.md, п. 9.3: 0.22.0).
-        if (!canEdit(photo)) return
         const needAddress = opts.address && !!photo.coords && (opts.overwrite || !photo.address)
         // A 0 is checked against the terrain (tz.md, п. 5.6).
         const needAltitude = opts.altitude && !!photo.coords && (opts.overwrite || needsAltitude(photo.altitude))

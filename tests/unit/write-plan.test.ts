@@ -1,4 +1,37 @@
 import { describe, expect, it } from 'vitest'
+import { quickTimeGpsArgs, writePlan as plan } from '@shared/write-plan'
+
+describe('videos (tz.md, пп. 3.3.6, 6.3, 6.4)', () => {
+  const mov = { path: 'D:\\v\\a.mov', write: 'file' as const, video: true, xmpCoords: false, sidecar: { path: 'D:\\v\\a.xmp', exists: false, coords: false } }
+  const avi = { path: 'D:\\v\\b.avi', write: 'xmp' as const, video: true, xmpCoords: false, sidecar: { path: 'D:\\v\\b.xmp', exists: false, coords: false } }
+  const addr = { country: 'Україна', countryCode: 'UA', state: '', city: 'Харків', location: '' }
+
+  it('QuickTime: Keys and UserData, the old value removed first, the time of the file kept', () => {
+    expect(quickTimeGpsArgs({ lat: 49.5, lon: -36.25 }, 120.456)).toEqual([
+      '-QuickTime:GPSCoordinates=',
+      '-Keys:GPSCoordinates=49.5 -36.25 120.46',
+      '-UserData:GPSCoordinates=49.5 -36.25 120.46'
+    ])
+    const [step, ...rest] = plan(mov, { lat: 49.5, lon: 36.25 }, addr, null)
+    expect(rest).toEqual([])
+    expect(step!.args).toContain('-P')
+    expect(step!.args).toContain('-Keys:GPSCoordinates=49.5 36.25')
+    expect(step!.args).toContain('-XMP-photoshop:City=Харків')
+    expect(step!.args.some((a) => a.startsWith('-EXIF:') || a.startsWith('-IPTC:'))).toBe(false)
+  })
+
+  it('Del removes the QuickTime GPS and the XMP GPS and places', () => {
+    const [step] = plan(mov, null)
+    expect(step!.args).toEqual(expect.arrayContaining(['-P', '-QuickTime:GPSCoordinates=', '-XMP-exif:GPS*=', '-XMP-photoshop:City=']))
+    expect(step!.args).not.toContain('-GPS:all=')
+  })
+
+  it('AVI and the like: only the sidecar, created if missing', () => {
+    expect(plan(avi, { lat: 1, lon: 2 })).toEqual([
+      expect.objectContaining({ path: 'D:\\v\\b.xmp', kind: 'sidecar', create: true })
+    ])
+  })
+})
 import type { Address } from '@shared/photo'
 import { writePlan, writeResult, xmpAddressArgs, type WriteInfo } from '@shared/write-plan'
 

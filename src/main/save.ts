@@ -81,9 +81,17 @@ export async function savePhotos(
   for (const item of items) {
     const { photo, source } = item
     try {
-      // A RAW file is never changed (п. 6.4): coordinates inside it cannot be removed.
+      // A RAW file, or a video exiftool cannot write, is never changed (пп. 6.4, 3.3.6): coordinates
+      // inside it cannot be removed. Nor can a GPS track of a video (п. 6.6).
       if (!photo.coords && source.write === 'xmp' && photo.coordSource !== 'sidecar') {
-        throw new Error('The coordinates are inside the RAW file, which the program never changes')
+        throw new Error(
+          source.video
+            ? 'The coordinates are inside the video file, which the program cannot change'
+            : 'The coordinates are inside the RAW file, which the program never changes'
+        )
+      }
+      if (!photo.coords && photo.coordSource === 'track') {
+        throw new Error('The coordinates are in the GPS track of the video, which the program does not remove')
       }
       const steps = writePlan(source, photo.coords, photo.address, photo.altitude)
       for (const step of steps) await runStep(exiftool, step)

@@ -1,5 +1,5 @@
 import { pointKey } from './geocode'
-import { canEdit, type LatLon, type Photo } from './photo'
+import type { LatLon, Photo } from './photo'
 
 /** Open-Meteo answers up to 100 points in one request (tz.md, п. 5.6). */
 export const ELEVATION_BATCH = 100
@@ -48,7 +48,7 @@ export function checkedAltitude(current: number | null, found: number): number |
 export function pointsWithoutAltitude(photos: readonly Photo[], failed: ReadonlySet<string>): Map<string, LatLon> {
   const points = new Map<string, LatLon>()
   for (const p of photos) {
-    if (!p.coords || !canEdit(p) || !needsAltitude(p.altitude)) continue
+    if (!p.coords || !needsAltitude(p.altitude)) continue
     const key = pointKey(p.coords)
     if (!failed.has(key) && !points.has(key)) points.set(key, p.coords)
   }

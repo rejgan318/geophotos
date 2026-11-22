@@ -82,14 +82,6 @@ export interface Photo {
 export type DateSource = 'shot' | 'name' | 'file'
 
 /**
- * Whether the program may change the photo's coordinates, address and altitude. Videos are only
- * shown in 0.20.0; they become editable in 0.22.0 (tz.md, п. 9.3).
- */
-export function canEdit(p: Pick<Photo, 'video'>): boolean {
-  return !p.video
-}
-
-/**
  * Size of a file for the status bar (tz.md, п. 4.13): one decimal under 10 units ("6.4", "86",
  * "1.2"), with the unit key of the locale files. Bytes are 1024-based, as Explorer shows them.
  */

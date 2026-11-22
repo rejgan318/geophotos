@@ -1,7 +1,9 @@
+import { copyFileSync, existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { scanFolder, type ScannedFolder } from '../../src/main/folder'
 import { makeThumbnail } from '../../src/main/thumbnails'
+import { savePhotos } from '../../src/main/save'
 import { newExifTool, hasVideos, tempDir, VIDEO_DIR, makeJpeg } from './helpers'
 
 const et = newExifTool()
@@ -56,6 +58,49 @@ describe.skipIf(!hasVideos)('videos of the user (tz.md, пп. 3.3.6, 4.2)', () =
   it('without the system thumbnail (outside Electron) a video cannot be shown (→ placeholder)', async () => {
     const i = folder.photos.findIndex((p) => p.name === 'MVI_3380.MOV')
     await expect(makeThumbnail(folder.sources[i]!, et)).rejects.toThrow()
+  })
+})
+
+// Copies of the user's videos in a temporary folder (tz.md, пп. 6.3, 6.4, 6.6).
+describe.skipIf(!hasVideos)('placing videos (0.22.0)', () => {
+  const tmp = tempDir()
+  afterAll(() => tmp.remove())
+  const names = ['MVI_3380.MOV', '20190816_192927.mp4', 'M2U00030.MPG']
+
+  it('written into MOV and MP4, into the sidecar for MPG; read back; the file time kept', async () => {
+    for (const n of names) copyFileSync(join(VIDEO_DIR, n), join(tmp.dir, n))
+    const before = new Map(names.map((n) => [n, statSync(join(tmp.dir, n)).mtimeMs]))
+    const scan = await scanFolder(tmp.dir, et)
+    const addr = { country: 'Україна', countryCode: 'UA', state: '', city: 'Харків', location: 'Сумська, 1' }
+    const items = scan.photos.map((p, i) => ({
+      photo: { ...p, coords: { lat: 49.9935, lon: 36.2304 }, address: addr, altitude: 135, modified: true },
+      source: scan.sources[i]!,
+      old: p.coords
+    }))
+    const log = { info: () => {}, error: () => {} }
+    const out = await savePhotos(et, items, log)
+    expect(out.failed).toEqual([])
+    for (const s of out.saved) {
+      expect(s.photo, s.photo.name).toMatchObject({ coords: { lat: 49.9935, lon: 36.2304 }, altitude: 135, address: { city: 'Харків' } })
+    }
+    for (const n of names) expect(statSync(join(tmp.dir, n)).mtimeMs, n).toBe(before.get(n))
+    expect(existsSync(join(tmp.dir, 'M2U00030.xmp'))).toBe(true)
+    expect(existsSync(join(tmp.dir, 'MVI_3380.xmp'))).toBe(false)
+
+    // Opened again: the same, from QuickTime (MOV, MP4) and from the sidecar (MPG).
+    const again = await scanFolder(tmp.dir, et)
+    const by = (n: string) => again.photos.find((p) => p.name === n)!
+    expect(by('MVI_3380.MOV')).toMatchObject({ coordSource: 'quicktime', altitude: 135, address: { city: 'Харків' } })
+    expect(by('M2U00030.MPG')).toMatchObject({ coordSource: 'sidecar', altitude: 135 })
+    // The camera's time is not touched.
+    expect(by('MVI_3380.MOV').date).toBe('2010-07-03 21:19:02')
+
+    // Del.
+    const del = again.photos.map((p, i) => ({ photo: { ...p, coords: null, address: null, altitude: null, modified: true }, source: again.sources[i]!, old: p.coords }))
+    const removed = await savePhotos(et, del, log)
+    expect(removed.failed).toEqual([])
+    const last = await scanFolder(tmp.dir, et)
+    for (const p of last.photos) expect(p, p.name).toMatchObject({ coords: null, address: null, altitude: null })
   })
 })
 

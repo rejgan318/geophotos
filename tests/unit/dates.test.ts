@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { formatWallTime } from '@shared/date-format'
 import { dateFromName, isCameraVideo, videoDate, wallTime, zoneAt } from '@shared/dates'
 import { firstTrackPoint, pickAltitude, pickCoords, pickDate, readError, toPhoto, videoDuration } from '@shared/metadata'
-import { canEdit, durationText, fileSizeParts } from '@shared/photo'
+import { durationText, fileSizeParts } from '@shared/photo'
 import { assignAddress, assignCoords, dropOnPhoto } from '@shared/edits'
 import { pointsWithoutAddress } from '@shared/geocode'
 import { pointsWithoutAltitude } from '@shared/elevation'
@@ -214,7 +214,7 @@ describe('video metadata (п. 3.3.6)', () => {
   })
 })
 
-describe('videos are only shown in 0.20.0 (tz.md, п. 9.3)', () => {
+describe('videos are placed like photos (0.22.0, tz.md, п. 3.3.6)', () => {
   const base = { dateSource: 'shot' as const, coordSource: null, address: null, altitude: null, modified: false }
   const photos: Photo[] = [
     { ...base, id: 0, name: 'a.jpg', path: 'a.jpg', date: null, coords: null },
@@ -223,22 +223,20 @@ describe('videos are only shown in 0.20.0 (tz.md, п. 9.3)', () => {
   ]
   const file = photos.map((p) => ({ coords: p.coords, address: p.address, altitude: p.altitude }))
 
-  it('they are not changed', () => {
-    expect(canEdit(photos[0]!)).toBe(true)
-    expect(canEdit(photos[1]!)).toBe(false)
-    expect(assignCoords(photos, file, [0, 1, 2], { lat: 5, lon: 6 }).map((p) => p.id)).toEqual([0])
-    expect(assignCoords(photos, file, [1], null)).toEqual([])
+  it('they get coordinates, lose them (Del) and get an address', () => {
+    expect(assignCoords(photos, file, [0, 1, 2], { lat: 5, lon: 6 }).map((p) => p.id)).toEqual([0, 1, 2])
+    expect(assignCoords(photos, file, [1], null).map((p) => p.id)).toEqual([1])
     const addr = { country: 'X', countryCode: 'XX', state: '', city: '', location: '' }
-    expect(assignAddress(photos, file, [1], addr)).toEqual([])
+    expect(assignAddress(photos, file, [1], addr).map((p) => p.id)).toEqual([1])
   })
 
-  it('no addresses or altitudes are asked for them', () => {
-    expect(pointsWithoutAddress(photos, new Set()).size).toBe(0)
-    expect(pointsWithoutAltitude(photos, new Set()).size).toBe(0)
+  it('addresses and altitudes are asked for them', () => {
+    expect(pointsWithoutAddress(photos, new Set()).size).toBe(1)
+    expect(pointsWithoutAltitude(photos, new Set()).size).toBe(1)
   })
 
-  it('a photo dropped onto a video with coordinates gets them; a video without gets nothing', () => {
+  it('dropping onto a video works both ways', () => {
     expect(dropOnPhoto(photos, [0], 1)).toEqual({ ids: [0], coords: { lat: 1, lon: 2 } })
-    expect(dropOnPhoto(photos, [1], 2)).toBeNull()
+    expect(dropOnPhoto(photos, [1], 2)).toEqual({ ids: [2], coords: { lat: 1, lon: 2 } })
   })
 })

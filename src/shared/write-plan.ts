@@ -10,6 +10,8 @@ export interface WriteInfo {
   xmpCoords: boolean
   /** The XMP sidecar the photo owns (tz.md, п. 3.7); null if it owns none (JPEG of a RAW+JPEG pair). */
   sidecar: { path: string; exists: boolean; coords: boolean } | null
+  /** A video (tz.md, п. 3.3.6): written into QuickTime, not EXIF. */
+  video?: boolean
 }
 
 /** One exiftool write: the file and the tag arguments. */
@@ -74,6 +76,23 @@ function iptcAddressDelete(): string[] {
 const COMMON = ['-overwrite_original', '-n']
 
 /**
+ * A video file keeps its modification time (-P): for some videos it is the only date there is
+ * (tz.md, пп. 4.2, 6.3).
+ */
+const VIDEO_COMMON = [...COMMON, '-P']
+
+/**
+ * GPS of a video in its QuickTime metadata (tz.md, пп. 3.3.6, 6.3), where phones keep it: Keys
+ * (iPhone) and UserData (Android); ISO 6709 with the altitude. The old value is removed from every
+ * QuickTime group first, so no other one is left behind.
+ */
+export function quickTimeGpsArgs(c: LatLon | null, altitude: number | null = null): string[] {
+  if (!c) return ['-QuickTime:GPSCoordinates=']
+  const v = `${deg(c.lat)} ${deg(c.lon)}${altitude === null ? '' : ` ${Math.round(altitude * 100) / 100}`}`
+  return ['-QuickTime:GPSCoordinates=', `-Keys:GPSCoordinates=${v}`, `-UserData:GPSCoordinates=${v}`]
+}
+
+/**
  * Where and how the coordinates and the address are written (tz.md, пп. 6.2–6.4, 5.5).
  * - Ordinary formats and DNG: coordinates in EXIF of the file; the embedded XMP and the sidecar
  *   get the same values if they already have coordinates, so that reading by п. 3.7 gives the new
@@ -95,6 +114,7 @@ export function writePlan(
     if (!info.sidecar) throw new Error(`No sidecar for ${info.path}`)
     return [{ path: info.sidecar.path, kind: 'sidecar', create: !info.sidecar.exists, args: [...COMMON, ...xmpGps, ...addr] }]
   }
+  if (info.video) return videoPlan(info, c, address, altitude)
   const steps: WriteStep[] = [
     {
       path: info.path,
@@ -126,10 +146,37 @@ export function writePlan(
  * sidecar if there is one. A RAW file is never changed: only its sidecar.
  */
 function deletePlan(info: WriteInfo): WriteStep[] {
+  if (info.video && info.write === 'file') return videoPlan(info, null, null, null)
   const steps: WriteStep[] = []
   if (info.write !== 'xmp') steps.push({ path: info.path, kind: 'file', create: false, args: [...COMMON, ...FILE_DELETE] })
   if (info.sidecar?.exists) {
     steps.push({ path: info.sidecar.path, kind: 'sidecar', create: false, args: [...COMMON, ...XMP_DELETE] })
+  }
+  return steps
+}
+
+/**
+ * A video exiftool writes (the QuickTime family, п. 3.3.6): its QuickTime GPS and XMP, and an
+ * existing sidecar the same way as for photos (it is read first, п. 3.7).
+ */
+function videoPlan(info: WriteInfo, c: LatLon | null, address: Address | null, altitude: number | null): WriteStep[] {
+  if (!c) {
+    const steps: WriteStep[] = [{ path: info.path, kind: 'file', create: false, args: [...VIDEO_COMMON, ...quickTimeGpsArgs(null), ...XMP_DELETE] }]
+    if (info.sidecar?.exists) steps.push({ path: info.sidecar.path, kind: 'sidecar', create: false, args: [...COMMON, ...XMP_DELETE] })
+    return steps
+  }
+  const addr = xmpAddressArgs(address)
+  const xmpGps = [...xmpArgs(c), ...altitudeArgs('XMP-exif', altitude)]
+  const steps: WriteStep[] = [
+    {
+      path: info.path,
+      kind: 'file',
+      create: false,
+      args: [...VIDEO_COMMON, ...quickTimeGpsArgs(c, altitude), ...(info.xmpCoords ? xmpGps : []), ...addr]
+    }
+  ]
+  if (info.sidecar?.exists) {
+    steps.push({ path: info.sidecar.path, kind: 'sidecar', create: false, args: [...COMMON, ...(info.sidecar.coords ? xmpGps : []), ...addr] })
   }
   return steps
 }
