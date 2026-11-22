@@ -73,6 +73,8 @@ export interface Photo {
   modified: boolean
   /** Read error reported by exiftool (broken file etc.). */
   error?: string
+  /** Size of the file, bytes (status bar, tz.md, п. 4.13); absent if unknown. */
+  size?: number
   /** A video (tz.md, п. 3.3.6): its length in seconds, null if unknown. Absent for photos. */
   video?: { duration: number | null }
 }
@@ -81,10 +83,26 @@ export type DateSource = 'shot' | 'name' | 'file'
 
 /**
  * Whether the program may change the photo's coordinates, address and altitude. Videos are only
- * shown in 0.20.0; they become editable in 0.21.0 (tz.md, п. 9.3).
+ * shown in 0.20.0; they become editable in 0.22.0 (tz.md, п. 9.3).
  */
 export function canEdit(p: Pick<Photo, 'video'>): boolean {
   return !p.video
+}
+
+/**
+ * Size of a file for the status bar (tz.md, п. 4.13): one decimal under 10 units ("6.4", "86",
+ * "1.2"), with the unit key of the locale files. Bytes are 1024-based, as Explorer shows them.
+ */
+export function fileSizeParts(bytes: number): { value: number; digits: number; unit: 'size.b' | 'size.kb' | 'size.mb' | 'size.gb' } {
+  const units = ['size.b', 'size.kb', 'size.mb', 'size.gb'] as const
+  let v = Math.max(0, bytes)
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i++
+  }
+  const digits = i > 0 && v < 10 ? 1 : 0
+  return { value: Number(v.toFixed(digits)), digits, unit: units[i]! }
 }
 
 /** "0:47", "1:02:03": length of a video (tz.md, п. 4.13). */

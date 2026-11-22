@@ -5,8 +5,9 @@ import { windowTitle } from '@shared/app-info'
 import { pathFromArgv } from '@shared/argv'
 import { isBatch, parseBatchArgs } from '@shared/batch-args'
 import { SUPPORTED_EXTENSIONS } from '@shared/formats'
+import { EXIFTOOL_DOWNLOAD_URL, exiftoolCandidates } from '@shared/exiftool-places'
 import { assignAddress, assignAltitude, assignCoords, pastePhotoData, photoCounts, photosAt, photosToSave } from '@shared/edits'
-import { ELEVATION_BATCH, pointsWithoutAltitude } from '@shared/elevation'
+import { checkedAltitude, ELEVATION_BATCH, needsAltitude, pointsWithoutAltitude } from '@shared/elevation'
 import { formatDuration } from '@shared/duration'
 import { pointKey, pointsWithoutAddress } from '@shared/geocode'
 import { RetryBook } from '@shared/retry'
@@ -154,27 +155,55 @@ async function startup(): Promise<boolean> {
   }
   if (missing) log.warn(t('error.locale', { language: settings.language }))
 
-  try {
-    const version = await exiftoolVersion(settings.exiftoolPath)
-    exiftoolVer = version
-    log.info(`exiftool ${version}: ${settings.exiftoolPath}`)
-  } catch (e) {
-    log.error(`exiftool not found (${settings.exiftoolPath}): ${String(e)}`)
-    dialog.showMessageBoxSync({
-      type: 'error',
-      title: t('error.exiftool.title'),
-      message: t('error.exiftool.message', { path: settings.exiftoolPath }),
-      detail: t('error.exiftool.detail', { settings: paths.user }),
-      buttons: [t('dialog.ok')]
-    })
-    return false
-  }
+  const found = await findExiftool(settings.exiftoolPath)
+  if (!found) return false
+  settings = { ...settings, exiftoolPath: found.path }
+  exiftoolVer = found.version
   exiftool = new ExifTool(settings.exiftoolPath)
   thumbnails = new ThumbnailService(exiftool, 3, systemThumbnail)
   placeSearch = new PlaceSearch(settings.search.url, userAgent(), settings.language)
   geocoder = new Geocoder(settings.geocode.url, userAgent(), settings.language, settings.geocode.minIntervalMs)
   elevation = new ElevationService(settings.elevation.url, userAgent())
   return true
+}
+
+/**
+ * exiftool (tz.md, п. 2.2): the path of the settings; if it does not run, the usual places of
+ * Windows. Not found — a message with "Download exiftool", "Open Settings File" and "Close";
+ * null then, and the program exits.
+ */
+async function findExiftool(configured: string): Promise<{ path: string; version: string } | null> {
+  try {
+    const version = await exiftoolVersion(configured)
+    log.info(`exiftool ${version}: ${configured}`)
+    return { path: configured, version }
+  } catch (e) {
+    log.warn(`exiftool does not run (${configured}): ${String(e)}`)
+  }
+  for (const path of exiftoolCandidates(process.env, dirname(process.execPath))) {
+    if (kindOf(path) !== 'file') continue
+    try {
+      const version = await exiftoolVersion(path)
+      log.info(`exiftool ${version} found: ${path} (the path of the settings, "${configured}", does not run)`)
+      return { path, version }
+    } catch (e) {
+      log.warn(`exiftool found but does not run: ${path}: ${String(e)}`)
+    }
+  }
+  log.error(`exiftool not found (${configured}, nor in the usual places)`)
+  const choice = dialog.showMessageBoxSync({
+    type: 'error',
+    title: t('error.exiftool.title'),
+    message: t('error.exiftool.message', { path: configured }),
+    detail: t('error.exiftool.detail', { settings: paths.user }),
+    buttons: [t('error.exiftool.download'), t('error.exiftool.openSettings'), t('dialog.close')],
+    defaultId: 0,
+    cancelId: 2,
+    noLink: true
+  })
+  if (choice === 0) await shell.openExternal(EXIFTOOL_DOWNLOAD_URL).catch((e: unknown) => log.error(`Cannot open ${EXIFTOOL_DOWNLOAD_URL}: ${String(e)}`))
+  if (choice === 1) await openSettingsFile()
+  return null
 }
 
 /** The program names itself to OpenStreetMap services (tile and Nominatim usage policies). */
@@ -199,7 +228,9 @@ function initData(): InitData {
       saved: mapState ? { lat: mapState.lat, lon: mapState.lon, zoom: mapState.zoom } : null,
       thumbnails: mapState?.thumbnails ?? false
     },
-    thumbScheme: THUMB_SCHEME
+    thumbScheme: THUMB_SCHEME,
+    // Regional format of Windows (as in Explorer), for dates (tz.md, п. 4.13).
+    dateLocale: app.getSystemLocale() || strings['locale'] || 'en-US'
   }
 }
 
@@ -641,8 +672,13 @@ async function runAltitudes(): Promise<void> {
           altitudeRetry.nothing(key)
           return
         }
-        altitudeRetry.done(key)
-        const ids = photosAt(folder.data.photos, point).filter((id) => folder.data.photos[id]!.altitude === null)
+        // A 0 that the terrain confirms stays and is not asked again in this folder (п. 5.6).
+        const at = photosAt(folder.data.photos, point).filter((id) => needsAltitude(folder.data.photos[id]!.altitude))
+        const ids = at.filter((id) => checkedAltitude(folder.data.photos[id]!.altitude, alt) !== null)
+        if (ids.length < at.length) altitudeRetry.nothing(key)
+        else altitudeRetry.done(key)
+        const zeros = ids.filter((id) => folder.data.photos[id]!.altitude === 0)
+        if (zeros.length) log.info(`Altitude 0 at ${formatCoords(point)} is wrong (terrain ${Math.round(alt)} m): ${zeros.length} photo(s)`)
         changed.push(...assignAltitude(folder.data.photos, folder.fileMeta, ids, alt))
       })
       log.verbose(`Altitudes found (not saved): ${batch.length} point(s), ${changed.length} photo(s)`)

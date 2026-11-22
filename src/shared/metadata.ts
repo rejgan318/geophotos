@@ -245,7 +245,13 @@ export function toPhoto(
   const error = readError(rec, opts.video)
   const address = pickAddress(rec, sidecar)
   const altitude = pickAltitude(rec, sidecar, opts.track)
-  return { name, path, date, dateSource, coords, coordSource, address, altitude, modified: false, ...(error ? { error } : {}), ...video }
+  const size = num(tagValue(rec, 'FileSize', 'File'))
+  return {
+    name, path, date, dateSource, coords, coordSource, address, altitude, modified: false,
+    ...(error ? { error } : {}),
+    ...(size !== null ? { size } : {}),
+    ...video
+  }
 }
 
 /** Order of the strip: by date (shooting or file), then by name; photos without date go last. */

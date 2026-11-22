@@ -1,15 +1,39 @@
 import type { Translate } from '@shared/i18n'
-import { durationText, formatCoords, type Photo } from '@shared/photo'
+import { formatWallTime } from '@shared/date-format'
+import { durationText, fileSizeParts, formatCoords, type Photo } from '@shared/photo'
+
+/** Regional format of the system for dates (tz.md, п. 4.13); set once at start. */
+let dateLocale = 'en-US'
+
+export function setDateLocale(locale: string): void {
+  dateLocale = locale
+}
 
 /**
- * Date as shown to the user: shooting date, or the date from the file name or the file date,
- * marked as such (tz.md, пп. 4.2, 4.13).
+ * Date as shown to the user, in the regional format of the system; where it was taken from is
+ * not marked (tz.md, п. 4.13). A date from the file name without a time is shown without one.
  */
 export function photoDate(p: Photo, t: Translate): string {
   if (!p.date) return t('photo.noDate')
-  if (p.dateSource === 'file') return t('photo.fileDate', { date: p.date })
-  if (p.dateSource === 'name') return t('photo.nameDate', { date: p.date.endsWith(' 00:00:00') ? p.date.slice(0, 10) : p.date })
-  return p.date
+  return formatWallTime(p.date, dateLocale, p.dateSource === 'name' && p.date.endsWith(' 00:00:00'))
+}
+
+/** "6,4 МБ" in the interface language (status bar, п. 4.13). */
+export function fileSize(bytes: number, t: Translate): string {
+  const { value, digits, unit } = fileSizeParts(bytes)
+  const n = value.toLocaleString(t('locale'), { minimumFractionDigits: digits, maximumFractionDigits: digits })
+  return t(unit, { n })
+}
+
+/**
+ * The current photo in the status bar (п. 4.13): the name, then dim parts — date, size, length
+ * of a video.
+ */
+export function statusParts(p: Photo, t: Translate): { name: string; rest: string[] } {
+  const rest = [photoDate(p, t)]
+  if (p.size !== undefined) rest.push(fileSize(p.size, t))
+  if (p.video?.duration != null) rest.push(durationText(p.video.duration))
+  return { name: p.name, rest }
 }
 
 /** Name and date, and the length of a video: "MVI_0592.MOV · 2010-08-21 05:32:16 · 0:15". */

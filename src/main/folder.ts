@@ -55,6 +55,7 @@ const COORD_TAGS = [
 const TAGS = [
   '-File:FileName',
   '-File:FileModifyDate',
+  '-File:FileSize',
   '-File:FileType',
   '-File:MIMEType',
   '-EXIF:DateTimeOriginal',

@@ -336,7 +336,7 @@ export class MapView {
     const m = L.marker(L.latLng(p.coords.lat, p.coords.lon), {
       icon: this.iconFor(p.id, this.selected.has(p.id)),
       zIndexOffset: this.zFor(p.id),
-      // A video cannot be moved yet (tz.md, п. 9.3: 0.21.0).
+      // A video cannot be moved yet (tz.md, п. 9.3: 0.22.0).
       draggable: canEdit(p),
       autoPan: true
     })

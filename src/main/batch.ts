@@ -1,6 +1,6 @@
 import { statSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { ELEVATION_BATCH } from '@shared/elevation'
+import { checkedAltitude, ELEVATION_BATCH, needsAltitude } from '@shared/elevation'
 import { pointKey } from '@shared/geocode'
 import { canEdit, sameAddress, sameAltitude, type Address, type LatLon, type Photo } from '@shared/photo'
 import { samePath } from '@shared/recent'
@@ -119,10 +119,11 @@ export async function runBatch(
       for (const dir of scan.unreadable) deps.log.warn(`Batch: subfolder skipped, cannot be read: ${dir}`)
       scan.photos.forEach((photo, i) => {
         if (!entry.all && !entry.files.some((f) => samePath(f, photo.path))) return
-        // Videos are not written yet (tz.md, п. 9.3: 0.21.0).
+        // Videos are not written yet (tz.md, п. 9.3: 0.22.0).
         if (!canEdit(photo)) return
         const needAddress = opts.address && !!photo.coords && (opts.overwrite || !photo.address)
-        const needAltitude = opts.altitude && !!photo.coords && (opts.overwrite || photo.altitude === null)
+        // A 0 is checked against the terrain (tz.md, п. 5.6).
+        const needAltitude = opts.altitude && !!photo.coords && (opts.overwrite || needsAltitude(photo.altitude))
         if (!needAddress && !needAltitude) {
           skipped++
           return
@@ -222,7 +223,9 @@ export async function runBatch(
   for (const it of items) {
     const key = pointKey(it.photo.coords!)
     const address = it.needAddress && addresses.has(key) ? addresses.get(key)! : it.photo.address
-    const altitude = it.needAltitude && altitudes.has(key) ? altitudes.get(key)! : it.photo.altitude
+    const found = it.needAltitude ? altitudes.get(key) : undefined
+    const altitude =
+      found === undefined ? it.photo.altitude : opts.overwrite ? found : checkedAltitude(it.photo.altitude, found) ?? it.photo.altitude
     const reasons = [
       ...(it.needAddress && addressErrors.has(key) ? [addressErrors.get(key)!] : []),
       ...(it.needAltitude && altitudeErrors.has(key) ? [altitudeErrors.get(key)!] : [])

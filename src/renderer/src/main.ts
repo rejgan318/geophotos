@@ -5,7 +5,7 @@ import { formatDuration } from '@shared/duration'
 import { makeTranslate } from '@shared/i18n'
 import type { MapMode, ViewMode } from '@shared/ipc'
 import type { Address, FolderData, LatLon } from '@shared/photo'
-import { photoDate } from './describe'
+import { setDateLocale, statusParts } from './describe'
 import { MapView } from './map'
 import { PhotoView } from './viewer'
 import { HelpView } from './help'
@@ -36,6 +36,7 @@ function isTextInput(target: EventTarget | null): boolean {
 async function start(): Promise<void> {
   const init = await window.geophotos.init()
   const t = makeTranslate(init.strings)
+  setDateLocale(init.dateLocale)
 
   // Marker colors from the settings, shared by the map and the strip badges (tz.md, пп. 4.3, 4.8.1).
   document.documentElement.style.setProperty('--marker-color', init.map.markers.color)
@@ -62,12 +63,27 @@ async function start(): Promise<void> {
 
   const showStatus = (): void => {
     const p = sel.current === null ? undefined : folder?.photos[sel.current]
-    const many = sel.ids.size > 1 ? `${t('status.selected', { count: sel.ids.size })} · ` : ''
     if (!folder) statusPhoto.textContent = t('status.noFolder')
     else if (!p) statusPhoto.textContent = t('status.noSelection')
-    // Name and date only (tz.md, п. 4.13): the coordinates are copied by Ctrl+C, "modified" is
-    // the pencil badge in the strip.
-    else statusPhoto.textContent = `${many}${p.name} · ${photoDate(p, t)}`
+    // Name, then dim: date, size, length of a video (tz.md, п. 4.13). The coordinates are copied
+    // by Ctrl+C, "modified" is the pencil badge in the strip.
+    else {
+      const span = (cls: string, text: string): HTMLSpanElement => {
+        const s = document.createElement('span')
+        s.className = cls
+        s.textContent = text
+        return s
+      }
+      const { name, rest } = statusParts(p, t)
+      const parts: HTMLElement[] = []
+      if (sel.ids.size > 1) parts.push(span('st-count', t('status.selected', { count: sel.ids.size })))
+      parts.push(span('st-name', name))
+      rest.forEach((text, i) => {
+        if (i > 0) parts.push(span('st-sep', '·'))
+        parts.push(span('st-meta', text))
+      })
+      statusPhoto.replaceChildren(...parts)
+    }
   }
 
   // The counter is three buttons that filter the strip; a second click on the active one

@@ -66,6 +66,8 @@ export interface InitData {
   }
   /** Scheme of thumbnail URLs: `${thumbScheme}://f<generation>/<photo id>`. */
   thumbScheme: string
+  /** Locale of the regional format of the system: dates are shown in it (tz.md, п. 4.13). */
+  dateLocale: string
 }
 
 /** What the window reports for the next run (tz.md, п. 7.1): the map and the strip scroll. */

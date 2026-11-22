@@ -19,13 +19,36 @@ export function parseElevations(json: unknown, count: number): (number | null)[]
 }
 
 /**
- * Points still to ask the altitude for (п. 5.6): photos with coordinates and no altitude, except
- * points that already got no answer in this folder. In strip order.
+ * An altitude of exactly 0 is often written by a device that did not know it (tz.md, п. 5.6): it
+ * is checked against the terrain and replaced when the terrain is at least this far from the sea
+ * level, metres. Near the sea 0 may be right and stays.
+ */
+export const ZERO_ALTITUDE_CHECK_M = 10
+
+/** Whether the altitude of a photo is to be asked: none, or a 0 to check (п. 5.6). */
+export function needsAltitude(altitude: number | null): boolean {
+  return altitude === null || altitude === 0
+}
+
+/**
+ * The altitude a photo gets from the terrain `found` at its point (п. 5.6): a missing one is
+ * taken as is; a 0 is replaced only if the terrain shows it is wrong. Null — keep what it has.
+ */
+export function checkedAltitude(current: number | null, found: number): number | null {
+  if (current === null) return found
+  if (current === 0) return Math.abs(found) >= ZERO_ALTITUDE_CHECK_M ? found : null
+  return null
+}
+
+/**
+ * Points still to ask the altitude for (п. 5.6): photos with coordinates and no altitude, or an
+ * altitude of 0 to check, except points that already got no answer (or were checked) in this
+ * folder. In strip order.
  */
 export function pointsWithoutAltitude(photos: readonly Photo[], failed: ReadonlySet<string>): Map<string, LatLon> {
   const points = new Map<string, LatLon>()
   for (const p of photos) {
-    if (!p.coords || !canEdit(p) || p.altitude !== null) continue
+    if (!p.coords || !canEdit(p) || !needsAltitude(p.altitude)) continue
     const key = pointKey(p.coords)
     if (!failed.has(key) && !points.has(key)) points.set(key, p.coords)
   }

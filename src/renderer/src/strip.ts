@@ -92,7 +92,7 @@ export class Strip {
   private makeItem(p: Photo): HTMLElement {
     const item = document.createElement('div')
     item.className = 'thumb'
-    // A video cannot be placed yet (tz.md, п. 9.3: 0.21.0); photos can be dropped onto it.
+    // A video cannot be placed yet (tz.md, п. 9.3: 0.22.0); photos can be dropped onto it.
     item.draggable = canEdit(p)
     item.dataset['id'] = String(p.id)
 

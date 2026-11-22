@@ -1,4 +1,33 @@
 import { describe, expect, it } from 'vitest'
+import { checkedAltitude, needsAltitude, pointsWithoutAltitude as pointsToAsk } from '@shared/elevation'
+
+describe('an altitude of 0 is checked against the terrain (tz.md, п. 5.6)', () => {
+  it('which altitudes are asked', () => {
+    expect(needsAltitude(null)).toBe(true)
+    expect(needsAltitude(0)).toBe(true)
+    expect(needsAltitude(0.4)).toBe(false)
+    expect(needsAltitude(-3)).toBe(false)
+  })
+
+  it('a 0 is replaced only where the terrain is at least 10 m from the sea level', () => {
+    expect(checkedAltitude(null, 3)).toBe(3)
+    expect(checkedAltitude(0, 112)).toBe(112)
+    expect(checkedAltitude(0, -28)).toBe(-28)
+    expect(checkedAltitude(0, 9.9)).toBeNull()
+    expect(checkedAltitude(0, 0)).toBeNull()
+    expect(checkedAltitude(150, 112)).toBeNull()
+  })
+
+  it('photos with 0 are in the queue; a checked point is not asked again', () => {
+    const p = (id: number, altitude: number | null): Photo => ({
+      id, name: `${id}.jpg`, path: `${id}.jpg`, date: null, dateSource: 'shot', coords: { lat: id, lon: 1 },
+      coordSource: 'exif', address: null, altitude, modified: false
+    })
+    const photos = [p(1, 0), p(2, null), p(3, 290)]
+    expect([...pointsToAsk(photos, new Set()).keys()]).toHaveLength(2)
+    expect([...pointsToAsk(photos, new Set(['1.0000000,1.0000000'])).keys()]).toEqual(['2.0000000,1.0000000'])
+  })
+})
 import { elevationUrl, parseElevations, pointsWithoutAltitude } from '@shared/elevation'
 import { pointKey } from '@shared/geocode'
 import type { LatLon, Photo } from '@shared/photo'

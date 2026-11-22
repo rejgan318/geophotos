@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { formatWallTime } from '@shared/date-format'
 import { dateFromName, isCameraVideo, videoDate, wallTime, zoneAt } from '@shared/dates'
 import { firstTrackPoint, pickAltitude, pickCoords, pickDate, readError, toPhoto, videoDuration } from '@shared/metadata'
-import { canEdit, durationText } from '@shared/photo'
+import { canEdit, durationText, fileSizeParts } from '@shared/photo'
 import { assignAddress, assignCoords, dropOnPhoto } from '@shared/edits'
 import { pointsWithoutAddress } from '@shared/geocode'
 import { pointsWithoutAltitude } from '@shared/elevation'
@@ -94,6 +95,23 @@ describe('time of videos (tz.md, п. 4.2)', () => {
   })
 })
 
+describe('dates in the regional format (п. 4.13)', () => {
+  it('as the locale writes them, the wall time unchanged', () => {
+    expect(formatWallTime('2010-07-03 21:19:02', 'ru-RU')).toBe('03.07.2010 21:19:02')
+    expect(formatWallTime('2010-07-03 21:19:02', 'uk-UA')).toBe('03.07.2010 21:19:02')
+    expect(formatWallTime('2010-07-03 21:19:02', 'de-DE')).toBe('03.07.2010 21:19:02')
+    expect(formatWallTime('2010-07-03 21:19:02', 'en-US')).toMatch(/^07\/03\/2010 0?9:19:02\sPM$/)
+    expect(formatWallTime('2010-07-03 21:19:02', 'en-GB')).toBe('03/07/2010 21:19:02')
+    // A night that does not exist in summer-time zones is shown as written.
+    expect(formatWallTime('2019-03-31 03:30:00', 'ru-RU')).toBe('31.03.2019 03:30:00')
+  })
+
+  it('date only; a bad value as it is', () => {
+    expect(formatWallTime('1998-03-19 00:00:00', 'ru-RU', true)).toBe('19.03.1998')
+    expect(formatWallTime('nonsense', 'ru-RU')).toBe('nonsense')
+  })
+})
+
 describe('date from the file name (п. 4.2)', () => {
   it('date and time', () => {
     expect(dateFromName('20190816_192927.mp4')).toBe('2019-08-16 19:29:27')
@@ -167,6 +185,19 @@ describe('video metadata (п. 3.3.6)', () => {
     expect(durationText(16.24)).toBe('0:16')
     expect(durationText(339)).toBe('5:39')
     expect(durationText(3723)).toBe('1:02:03')
+  })
+
+  it('file size for the status bar (п. 4.13): 1024-based, one decimal under 10', () => {
+    expect(fileSizeParts(512)).toEqual({ value: 512, digits: 0, unit: 'size.b' })
+    expect(fileSizeParts(6669869)).toEqual({ value: 6.4, digits: 1, unit: 'size.mb' })
+    expect(fileSizeParts(90473565)).toEqual({ value: 86, digits: 0, unit: 'size.mb' })
+    expect(fileSizeParts(310102360)).toEqual({ value: 296, digits: 0, unit: 'size.mb' })
+    expect(fileSizeParts(2.5 * 1024 ** 3)).toEqual({ value: 2.5, digits: 1, unit: 'size.gb' })
+  })
+
+  it('the file size is read', () => {
+    expect(toPhoto('a.jpg', 'a.jpg', { 'File:MIMEType': 'image/jpeg', 'File:FileSize': 6669869 }, undefined).size).toBe(6669869)
+    expect(toPhoto('a.jpg', 'a.jpg', { 'File:MIMEType': 'image/jpeg' }, undefined).size).toBeUndefined()
   })
 
   it('toPhoto of a video', () => {

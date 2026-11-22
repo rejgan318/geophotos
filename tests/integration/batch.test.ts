@@ -44,6 +44,21 @@ describe('batch mode (tz.md, п. 10)', () => {
   const tmp = tempDir()
   afterAll(() => tmp.remove())
 
+  it('an altitude of 0 is checked: replaced where the terrain is high, kept near the sea (п. 5.6)', async () => {
+    const dir = join(tmp.dir, 'zero')
+    mkdirSync(dir, { recursive: true })
+    const zero = ['-EXIF:GPSAltitude=0', '-EXIF:GPSAltitudeRef=0']
+    // The fake terrain is the latitude ×10: 50 → 500 m, 0.5 → 5 m.
+    await photoAt(join(dir, 'hill.jpg'), { lat: 50, lon: 36 }, zero)
+    await photoAt(join(dir, 'shore.jpg'), { lat: 0.5, lon: 36 }, zero)
+    const calls = { reverse: 0, elevations: 0 }
+    const out = await runBatch([dir], { address: false, altitude: true, subfolders: false, overwrite: false }, deps(calls), () => {}, () => false)
+    expect(out).toEqual({ written: 1, skipped: 1, failed: [], cancelled: false })
+    const photos = (await scanFolder(dir, et)).photos
+    expect(photos.find((p) => p.name === 'hill.jpg')?.altitude).toBe(500)
+    expect(photos.find((p) => p.name === 'shore.jpg')?.altitude).toBe(0)
+  })
+
   it('only photos with coordinates; existing data kept; one request per point; subfolders on demand', async () => {
     const dir = join(tmp.dir, 'trip')
     mkdirSync(join(dir, 'day2'), { recursive: true })
