@@ -6,8 +6,11 @@ describe('windowTitle', () => {
     expect(windowTitle()).toBe(APP_NAME)
   })
 
-  it('shows the folder and marks unsaved changes', () => {
-    expect(windowTitle('D:\\Trip')).toBe('D:\\Trip — GeoPhotos')
-    expect(windowTitle('D:\\Trip', true)).toBe('* D:\\Trip — GeoPhotos')
+  it('shows the name of the folder (not its whole path) and marks unsaved changes (tz.md, п. 4.13)', () => {
+    expect(windowTitle('D:\\Photos\\2024\\Trip')).toBe('Trip — GeoPhotos')
+    expect(windowTitle('D:\\Photos\\2024\\Trip\\')).toBe('Trip — GeoPhotos')
+    expect(windowTitle('D:\\Trip', true)).toBe('* Trip — GeoPhotos')
+    // A whole disk has no name: the drive is shown.
+    expect(windowTitle('E:\\')).toBe('E:\\ — GeoPhotos')
   })
 })
