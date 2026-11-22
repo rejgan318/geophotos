@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { pathFromArgv } from '@shared/argv'
-import { baseNameOf, formatOf, isSidecar, isSupported, sidecarNameOf } from '@shared/formats'
+import { baseNameOf, formatOf, isSidecar, isSupported, sidecarNameOf, sidecarOwners } from '@shared/formats'
 import { parseThumbUrl, thumbUrl } from '@shared/ipc'
 
 describe('formats (tz.md, п. 3.3)', () => {
@@ -24,11 +24,34 @@ describe('formats (tz.md, п. 3.3)', () => {
     expect(formatOf('a.cr2')?.preview).toBe('embedded')
   })
 
+  it('videos (п. 3.3.6): the QuickTime family into the file, the rest to the sidecar', () => {
+    for (const n of ['a.MOV', 'a.mp4', 'a.m4v', 'a.3gp', 'a.qt']) {
+      expect(formatOf(n), n).toMatchObject({ write: 'file', video: true, raw: false, preview: 'system', track: true })
+    }
+    for (const n of ['a.AVI', 'a.mpg', 'a.mpeg', 'a.mkv', 'a.wmv', 'a.vob', 'a.flv']) {
+      expect(formatOf(n), n).toMatchObject({ write: 'xmp', video: true, raw: false, preview: 'system', track: false })
+    }
+    // AVCHD streams may carry a GPS track (Sony, Panasonic).
+    expect(formatOf('a.MTS')).toMatchObject({ write: 'xmp', track: true })
+    expect(formatOf('a.m2ts')).toMatchObject({ write: 'xmp', track: true })
+    expect(formatOf('a.jpg')).toMatchObject({ video: false, track: false })
+  })
+
   it('unsupported files and sidecars', () => {
-    expect(isSupported('a.mp4')).toBe(false)
+    expect(isSupported('a.mp3')).toBe(false)
+    expect(isSupported('a.mod')).toBe(false)
     expect(isSupported('a.xmp')).toBe(false)
     expect(isSupported('noext')).toBe(false)
     expect(isSidecar('a.XMP')).toBe(true)
+  })
+
+  it('who owns the sidecar (п. 3.7): RAW, else a video written to the sidecar, else everyone', () => {
+    expect(sidecarOwners(['IMG_1.CR2', 'IMG_1.JPG', 'IMG_1.AVI'])).toEqual(new Set(['IMG_1.CR2']))
+    expect(sidecarOwners(['IMG_1.dng', 'IMG_1.jpg'])).toEqual(new Set(['IMG_1.dng']))
+    expect(sidecarOwners(['MVI_1.AVI', 'MVI_1.JPG'])).toEqual(new Set(['MVI_1.AVI']))
+    // An iPhone Live Photo: neither is written to the sidecar, both read it as before.
+    expect(sidecarOwners(['IMG_2.HEIC', 'IMG_2.MOV'])).toEqual(new Set(['IMG_2.HEIC', 'IMG_2.MOV']))
+    expect(sidecarOwners(['A.jpg', 'B.avi'])).toEqual(new Set(['A.jpg', 'B.avi']))
   })
 
   it('sidecar name as in Lightroom (tz.md, п. 6.4)', () => {

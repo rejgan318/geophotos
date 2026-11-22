@@ -1,9 +1,9 @@
 import type { Translate } from '@shared/i18n'
 import { thumbUrl } from '@shared/ipc'
 import { dropOnPhoto } from '@shared/edits'
-import type { FolderData, LatLon, Photo } from '@shared/photo'
+import { canEdit, type FolderData, type LatLon, type Photo } from '@shared/photo'
 import { photoTooltip } from './describe'
-import { ADDRESS_SVG, ALTITUDE_SVG, FILE_SVG, PENCIL_SVG, PIN_SVG } from './icons'
+import { ADDRESS_SVG, ALTITUDE_SVG, FILE_SVG, PENCIL_SVG, PIN_SVG, VIDEO_SVG } from './icons'
 import type { Selection } from './selection'
 
 /** Type of the data carried by a drag of photos out of the strip. */
@@ -92,7 +92,8 @@ export class Strip {
   private makeItem(p: Photo): HTMLElement {
     const item = document.createElement('div')
     item.className = 'thumb'
-    item.draggable = true
+    // A video cannot be placed yet (tz.md, п. 9.3: 0.21.0); photos can be dropped onto it.
+    item.draggable = canEdit(p)
     item.dataset['id'] = String(p.id)
 
     const img = document.createElement('img')
@@ -104,6 +105,13 @@ export class Strip {
     img.addEventListener('error', () => img.replaceWith(this.placeholder(p)), { once: true })
     item.append(img)
     if (p.error) item.classList.add('has-error')
+    if (p.video) {
+      const v = document.createElement('div')
+      v.className = 'badge-video'
+      v.title = this.t('photo.video')
+      v.innerHTML = VIDEO_SVG
+      item.append(v)
+    }
     this.decorate(item, p)
 
     item.addEventListener('click', (e) => this.h.onClick(p.id, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey }))

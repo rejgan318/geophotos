@@ -29,6 +29,8 @@ export const IPC = {
   saveState: 'save:state',
   /** invoke, window → main: find a place by name. */
   search: 'search:places',
+  /** invoke, window → main: open a video in the default program (photo view, tz.md, п. 4.14). */
+  openInPlayer: 'video:openInPlayer',
   /** invoke, window → main: data of Help → About. */
   aboutInfo: 'about:info',
   /** invoke, window → main: open a license file (links in About). */

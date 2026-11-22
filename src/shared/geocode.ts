@@ -1,4 +1,4 @@
-import type { Address, LatLon, Photo } from './photo'
+import { canEdit, type Address, type LatLon, type Photo } from './photo'
 
 /**
  * Reverse geocoding through Nominatim (tz.md, п. 5.5): the address of a point, the names in the
@@ -57,7 +57,7 @@ export function pointKey(c: LatLon): string {
 export function pointsWithoutAddress(photos: readonly Photo[], failed: ReadonlySet<string>): Map<string, LatLon> {
   const points = new Map<string, LatLon>()
   for (const p of photos) {
-    if (!p.coords || p.address) continue
+    if (!p.coords || !canEdit(p) || p.address) continue
     const key = pointKey(p.coords)
     if (!failed.has(key) && !points.has(key)) points.set(key, p.coords)
   }

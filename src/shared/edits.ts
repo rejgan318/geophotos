@@ -1,4 +1,4 @@
-import { sameAddress, sameAltitude, sameCoords, type Address, type FileMeta, type LatLon, type Photo } from './photo'
+import { canEdit, sameAddress, sameAltitude, sameCoords, type Address, type FileMeta, type LatLon, type Photo } from './photo'
 
 /** Coordinates are kept to 7 decimals (about 1 cm): more is noise from the mouse position. */
 export function roundCoords(c: LatLon): LatLon {
@@ -40,7 +40,7 @@ export function assignCoords(
   const changed: Photo[] = []
   for (const id of new Set(ids)) {
     const p = photos[id]
-    if (!p || sameCoords(p.coords, c)) continue
+    if (!p || !canEdit(p) || sameCoords(p.coords, c)) continue
     const next = { coords: c, address: null, altitude: null }
     changed.push({ ...p, ...next, modified: isModified(next, file[id]) })
   }
@@ -57,7 +57,7 @@ export function assignAddress(
   const changed: Photo[] = []
   for (const id of new Set(ids)) {
     const p = photos[id]
-    if (!p || sameAddress(p.address, address)) continue
+    if (!p || !canEdit(p) || sameAddress(p.address, address)) continue
     const next = { coords: p.coords, address, altitude: p.altitude }
     changed.push({ ...p, address, modified: isModified(next, file[id]) })
   }
@@ -74,7 +74,7 @@ export function assignAltitude(
   const changed: Photo[] = []
   for (const id of new Set(ids)) {
     const p = photos[id]
-    if (!p || sameAltitude(p.altitude, altitude)) continue
+    if (!p || !canEdit(p) || sameAltitude(p.altitude, altitude)) continue
     const next = { coords: p.coords, address: p.address, altitude }
     changed.push({ ...p, altitude, modified: isModified(next, file[id]) })
   }
@@ -96,6 +96,7 @@ export function dropOnPhoto(
   const t = photos[target]
   if (!t || !dragged.length || (dragged.length === 1 && dragged[0] === target)) return null
   if (t.coords) return { ids: [...dragged], coords: t.coords }
+  if (!canEdit(t)) return null
   const first = photos[dragged[0]!]?.coords
   if (!first || !dragged.every((id) => sameCoords(photos[id]?.coords ?? null, first))) return null
   return { ids: [target], coords: first }
@@ -137,7 +138,7 @@ function clearField(photos: readonly Photo[], file: readonly FileMeta[], ids: re
   const changed: Photo[] = []
   for (const id of ids) {
     const p = photos[id]
-    if (!p || p[field] === null) continue
+    if (!p || !canEdit(p) || p[field] === null) continue
     const q = { ...p, [field]: null }
     changed.push({ ...q, modified: isModified(q, file[id]) })
   }

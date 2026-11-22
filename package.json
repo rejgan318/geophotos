@@ -1,7 +1,7 @@
 {
   "name": "geophotos",
   "productName": "GeoPhotos",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "private": true,
   "description": "Manual geotagging of photos on a map",
   "license": "MIT",
@@ -28,6 +28,7 @@
     "vitest": "5.1.0"
   },
   "dependencies": {
+    "@photostructure/tz-lookup": "11.8.0",
     "ajv": "8.20.0",
     "electron-log": "5.4.4",
     "heic-decode": "2.1.0",

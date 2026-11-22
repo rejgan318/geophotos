@@ -199,8 +199,8 @@ body {
 }
 
 /* The top row of badges (tz.md, п. 4.3): "modified" on the left; on the right, each in its own
-   place so that none moves when another is missing: coordinates, address, then altitude (п. 5.6)
-   and one more place kept for later (right: 57px). 16px badges, 2px apart. */
+   place so that none moves when another is missing: coordinates, address, altitude (п. 5.6) and
+   video (п. 3.3.6). 16px badges, 2px apart. */
 .thumb .badge-address {
   position: absolute;
   top: 3px;
@@ -238,6 +238,51 @@ body {
   width: 11px;
   height: 11px;
   fill: var(--altitude);
+}
+
+/* A video (tz.md, пп. 3.3.6, 4.3): the last place of the top row. */
+.thumb .badge-video {
+  position: absolute;
+  top: 3px;
+  right: 57px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thumb .badge-video svg {
+  width: 11px;
+  height: 11px;
+  fill: #e8e8e8;
+}
+
+/* "Open in Player" of the photo view of a video (tz.md, п. 4.14). */
+.viewer-play {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 16px;
+  border: 1px solid #888;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #eee;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.viewer-play:hover {
+  background: rgba(40, 40, 40, 0.85);
+  border-color: #bbb;
+}
+
+.viewer-play[hidden] {
+  display: none;
 }
 
 /* A photo with coordinates under photos dragged within the strip (tz.md, п. 4.5). */

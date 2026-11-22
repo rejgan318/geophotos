@@ -1,13 +1,15 @@
 import { readdir } from 'node:fs/promises'
 import { join, relative } from 'node:path'
-import { baseNameOf, formatOf, isSidecar, isSupported, sidecarNameOf, type PreviewKind } from '@shared/formats'
+import { baseNameOf, formatOf, isSidecar, isSupported, sidecarNameOf, sidecarOwners, type PreviewKind } from '@shared/formats'
 import {
   ADDRESS_READ_ARGS,
   comparePhotos,
   pickAddress,
   pickAltitude,
   embeddedPreviewTag,
+  firstTrackPoint,
   pickCoords,
+  type TrackPoint,
   tagValue,
   toPhoto,
   xmpCoords,
@@ -46,7 +48,8 @@ const COORD_TAGS = [
   '-EXIF:GPSLongitude',
   '-EXIF:GPSLongitudeRef',
   '-XMP:GPSLatitude',
-  '-XMP:GPSLongitude'
+  '-XMP:GPSLongitude',
+  '-QuickTime:GPSCoordinates'
 ]
 
 const TAGS = [
@@ -56,6 +59,16 @@ const TAGS = [
   '-File:MIMEType',
   '-EXIF:DateTimeOriginal',
   '-XMP:DateTimeOriginal',
+  // Videos (tz.md, пп. 3.3.6, 4.2): dates, the camera, the length.
+  '-XMP:CreateDate',
+  '-QuickTime:CreateDate',
+  '-QuickTime:MediaCreateDate',
+  '-QuickTime:CreationDate',
+  '-RIFF:DateTimeOriginal',
+  '-Make',
+  '-Model',
+  '-QuickTime:CompressorVersion',
+  '-Duration',
   ...COORD_TAGS,
   ...ADDRESS_READ_ARGS,
   '-EXIF:Orientation',
@@ -141,14 +154,7 @@ async function scanOne(root: string, folder: string, exiftool: ExifTool): Promis
   const sidecarNames = names.filter(isSidecar)
   if (!photoNames.length) return []
 
-  // A sidecar belongs to the RAW file with the same name if there is one (tz.md, п. 3.7).
-  const rawBases = new Set(
-    photoNames.filter((n) => formatOf(n)?.raw).map((n) => baseNameOf(n).toLowerCase())
-  )
-  const ownsSidecar = (name: string): boolean => {
-    const base = baseNameOf(name).toLowerCase()
-    return !rawBases.has(base) || !!formatOf(name)?.raw
-  }
+  const own = sidecarOwners(photoNames)
   // Existing sidecars by base name, with their actual file names.
   const sidecarFiles = new Map(sidecarNames.map((n) => [baseNameOf(n).toLowerCase(), n]))
 
@@ -157,19 +163,29 @@ async function scanOne(root: string, folder: string, exiftool: ExifTool): Promis
     ? await readRecords(exiftool, folder, sidecarNames, SIDECAR_TAGS)
     : new Map<string, ExifRecord>()
 
+  // Videos with no coordinates anywhere else: their GPS track, read deeper (п. 3.3.6). Slow, so
+  // only for them.
+  const deep = photoNames.filter((name) => {
+    if (!formatOf(name)!.track) return false
+    const rec = records.get(name.toLowerCase())
+    const side = own.has(name) ? sidecars.get(sidecarFiles.get(baseNameOf(name).toLowerCase())?.toLowerCase() ?? '') : undefined
+    return !!rec && !rec['ExifTool:Error'] && pickCoords(rec, side).coords === null
+  })
+  const tracks = await readTracks(exiftool, folder, deep)
+
   return photoNames.map((name) => {
     const path = join(folder, name)
     const rec = records.get(name.toLowerCase())
     const format = formatOf(name)!
-    const own = ownsSidecar(name)
-    const sidecarFile = own ? sidecarFiles.get(baseNameOf(name).toLowerCase()) : undefined
+    const owns = own.has(name)
+    const sidecarFile = owns ? sidecarFiles.get(baseNameOf(name).toLowerCase()) : undefined
     const sidecarRec = sidecarFile ? sidecars.get(sidecarFile.toLowerCase()) : undefined
     const orientation = Number(tagValue(rec ?? {}, 'Orientation', 'EXIF') ?? 1)
     const source: PhotoSource = {
       path,
       write: format.write,
       xmpCoords: !!rec && xmpCoords(rec) !== null,
-      sidecar: own
+      sidecar: owns
         ? {
             path: join(folder, sidecarFile ?? sidecarNameOf(name)),
             exists: !!sidecarFile,
@@ -177,11 +193,29 @@ async function scanOne(root: string, folder: string, exiftool: ExifTool): Promis
           }
         : null,
       preview: format.preview,
-      previewTag: format.preview === 'image' ? null : embeddedPreviewTag(rec),
+      previewTag: format.preview === 'embedded' || format.preview === 'heic' ? embeddedPreviewTag(rec) : null,
       orientation: Number.isInteger(orientation) && orientation >= 1 && orientation <= 8 ? orientation : 1
     }
-    return { photo: toPhoto(relative(root, path), path, rec, sidecarRec), source }
+    const track = tracks.get(name.toLowerCase()) ?? null
+    return { photo: toPhoto(relative(root, path), path, rec, sidecarRec, { video: format.video, track }), source }
   })
+}
+
+/** The first point of the GPS track of each video, by lower-case file name (п. 3.3.6). */
+async function readTracks(exiftool: ExifTool, folder: string, names: string[]): Promise<Map<string, TrackPoint>> {
+  const map = new Map<string, TrackPoint>()
+  if (!names.length) return map
+  const tags = ['-GPSLatitude', '-GPSLongitude', '-GPSLatitudeRef', '-GPSLongitudeRef', '-GPSAltitude']
+  const recs = await exiftool
+    .json(['-ee', '-n', '-G3', '-api', 'LargeFileSupport=1', '-File:FileName', ...tags, ...names.map((n) => join(folder, n))])
+    .catch(() => [])
+  for (const rec of recs) {
+    // With -G3 the tags of the file itself are in the "Main" group.
+    const name = rec['Main:FileName'] ?? baseOfSourceFile(rec)
+    const point = firstTrackPoint(rec)
+    if (typeof name === 'string' && point) map.set(name.toLowerCase(), point)
+  }
+  return map
 }
 
 export interface RereadCoords {

@@ -33,17 +33,34 @@ function resized(img: Sharp, size: number): Promise<Buffer> {
     .toBuffer()
 }
 
+/**
+ * The thumbnail the system shows for a file (Explorer's, tz.md, п. 3.3.6), as an image file
+ * (PNG); throws when there is none. Given by main: it needs Electron.
+ */
+export type SystemThumbnail = (path: string, size: number) => Promise<Buffer>
+
+const noSystemThumbnail: SystemThumbnail = () => Promise.reject(new Error('no system thumbnails'))
+
 /** Makes one thumbnail JPEG (tz.md, п. 3.3.4). Throws when the photo cannot be shown. */
-export function makeThumbnail(source: PhotoSource, exiftool: ExifTool): Promise<Buffer> {
-  return makeImage(source, exiftool, THUMB_SIZE)
+export function makeThumbnail(source: PhotoSource, exiftool: ExifTool, system = noSystemThumbnail): Promise<Buffer> {
+  return makeImage(source, exiftool, THUMB_SIZE, system)
 }
 
 /**
  * A JPEG of the photo with the given longest side, from the same source as the thumbnail
- * (п. 3.3.4: RAW, DNG and HEIC — their embedded preview). Throws when the photo cannot be shown.
+ * (п. 3.3.4: RAW, DNG and HEIC — their embedded preview; videos — the system's frame).
+ * Throws when the photo cannot be shown.
  */
-export async function makeImage(source: PhotoSource, exiftool: ExifTool, size: number): Promise<Buffer> {
+export async function makeImage(
+  source: PhotoSource,
+  exiftool: ExifTool,
+  size: number,
+  system = noSystemThumbnail
+): Promise<Buffer> {
   const toThumb = (img: Sharp): Promise<Buffer> => resized(img, size)
+  if (source.preview === 'system') {
+    return toThumb(sharp(await system(source.path, size), { failOn: 'none' }))
+  }
   if (source.preview === 'image') {
     // Read into memory: avoids any trouble with non-Latin paths in the image library.
     return toThumb(sharp(await readFile(source.path), { failOn: 'none' }).rotate())
@@ -73,13 +90,14 @@ export class ThumbnailService {
 
   constructor(
     private readonly exiftool: ExifTool,
-    private readonly parallel = 3
+    private readonly parallel = 3,
+    private readonly system = noSystemThumbnail
   ) {}
 
   get(source: PhotoSource): Promise<Buffer> {
     let p = this.cache.get(source.path)
     if (!p) {
-      p = this.limited(() => makeThumbnail(source, this.exiftool))
+      p = this.limited(() => makeThumbnail(source, this.exiftool, this.system))
       this.cache.set(source.path, p)
     }
     return p
@@ -91,7 +109,7 @@ export class ThumbnailService {
     if (p) {
       this.large.delete(source.path)
     } else {
-      p = makeImage(source, this.exiftool, LARGE_SIZE)
+      p = makeImage(source, this.exiftool, LARGE_SIZE, this.system)
       p.catch(() => this.large.delete(source.path))
     }
     this.large.set(source.path, p)

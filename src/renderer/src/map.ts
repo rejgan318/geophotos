@@ -3,7 +3,7 @@ import 'leaflet.markercluster'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import { thumbUrl, type InitData } from '@shared/ipc'
-import type { LatLon, Photo } from '@shared/photo'
+import { canEdit, type LatLon, type Photo } from '@shared/photo'
 import type { Place } from '@shared/search'
 import type { MarkerStyle } from '@shared/settings'
 import { FILE_SVG } from './icons'
@@ -336,7 +336,8 @@ export class MapView {
     const m = L.marker(L.latLng(p.coords.lat, p.coords.lon), {
       icon: this.iconFor(p.id, this.selected.has(p.id)),
       zIndexOffset: this.zFor(p.id),
-      draggable: true,
+      // A video cannot be moved yet (tz.md, п. 9.3: 0.21.0).
+      draggable: canEdit(p),
       autoPan: true
     })
     this.photoOf.set(m, p.id)

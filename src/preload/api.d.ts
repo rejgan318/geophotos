@@ -38,6 +38,8 @@ export interface GeoPhotosApi {
   /** Addresses still to find (tz.md, п. 5.5). */
   onQueueState(cb: (state: QueueState) => void): void
   searchPlaces(query: string): Promise<SearchResult>
+  /** Opens a video in the default program of Windows (photo view, tz.md, п. 4.14). */
+  openInPlayer(id: number): Promise<void>
   aboutInfo(): Promise<AboutInfo>
   /** Opens the settings file (created if missing) or the log folder. */
   openAboutTarget(target: AboutTarget): Promise<void>

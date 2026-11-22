@@ -37,7 +37,9 @@ Latitude and longitude, the altitude, and the address (country, country code, st
 
 No `*_original` backup copies are left. Read-only files are reported and skipped.
 
-When coordinates exist in several places, they are read in this order: XMP sidecar, embedded XMP, EXIF. Videos are not supported.
+When coordinates exist in several places, they are read in this order: XMP sidecar, embedded XMP, EXIF.
+
+Videos (MOV, MP4, AVI, MPG, MTS, MKV, WMV and other formats exiftool reads) are shown in the strip with the thumbnail Windows Explorer shows, and on the map when they have coordinates (from the phone's QuickTime metadata, the XMP sidecar, or the first point of a GPS track). Space shows a large frame and an "Open in Player" button. Placing videos on the map comes in a later version.
 
 ## Requirements
 

@@ -302,7 +302,7 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     dragged: () => dragged
   })
   addSearchBox(map, t)
-  const viewer = new PhotoView(byId('viewer'), t)
+  const viewer = new PhotoView(byId('viewer'), t, (id) => void window.geophotos.openInPlayer(id))
   const help = new HelpView(t)
   const about = new AboutView(t)
   new ResizeObserver(() => map.invalidateSize()).observe(byId('map'))

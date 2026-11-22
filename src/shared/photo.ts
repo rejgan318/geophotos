@@ -49,7 +49,7 @@ export function altitudeText(a: number): string {
 }
 
 /** Where the shown coordinates were read from (tz.md, п. 3.7). */
-export type CoordSource = 'sidecar' | 'xmp' | 'exif'
+export type CoordSource = 'sidecar' | 'xmp' | 'quicktime' | 'exif' | 'track'
 
 export interface Photo {
   /** Index in the folder's photo list; stable while the folder is open. */
@@ -58,8 +58,11 @@ export interface Photo {
   path: string
   /** Local wall time "YYYY-MM-DD HH:MM:SS"; null if neither shooting nor file date is known. */
   date: string | null
-  /** `shot` — date of shooting; `file` — file modification time used instead (п. 4.2). */
-  dateSource: 'shot' | 'file'
+  /**
+   * `shot` — date of shooting; `name` — taken from the file name; `file` — file modification time
+   * used instead (п. 4.2).
+   */
+  dateSource: DateSource
   coords: LatLon | null
   coordSource: CoordSource | null
   /** Place names (tz.md, п. 5.5); null — none. Removed together with changed coordinates. */
@@ -70,6 +73,27 @@ export interface Photo {
   modified: boolean
   /** Read error reported by exiftool (broken file etc.). */
   error?: string
+  /** A video (tz.md, п. 3.3.6): its length in seconds, null if unknown. Absent for photos. */
+  video?: { duration: number | null }
+}
+
+export type DateSource = 'shot' | 'name' | 'file'
+
+/**
+ * Whether the program may change the photo's coordinates, address and altitude. Videos are only
+ * shown in 0.20.0; they become editable in 0.21.0 (tz.md, п. 9.3).
+ */
+export function canEdit(p: Pick<Photo, 'video'>): boolean {
+  return !p.video
+}
+
+/** "0:47", "1:02:03": length of a video (tz.md, п. 4.13). */
+export function durationText(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const ss = String(s % 60).padStart(2, '0')
+  return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`
 }
 
 export function sameCoords(a: LatLon | null, b: LatLon | null): boolean {

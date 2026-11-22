@@ -5,11 +5,34 @@ import { join, resolve } from 'node:path'
 import sharp from 'sharp'
 import { ExifTool } from '../../src/main/exiftool'
 
-/** Real test photos (make-project.md, п. 7); tests that need them are skipped if absent. */
+/**
+ * A folder of test data in `data` next to the project (D:\dev\data for D:\dev\geophotos), or one
+ * level higher (C:\dev\data for C:\dev\Claude\geophotos).
+ */
+function dataDir(sub: string): string {
+  const near = resolve(import.meta.dirname, '../../../data', sub)
+  const far = resolve(import.meta.dirname, '../../../../data', sub)
+  return existsSync(near) || !existsSync(far) ? near : far
+}
+
+/**
+ * Real test photos (make-project.md, п. 7): `geophotos-testdata\master` (first computer) or
+ * `geophotos\photo-sample\master` (second one). Tests that need them are skipped if absent.
+ */
 export const MASTER_DIR =
-  process.env['GEOPHOTOS_TEST_DIR'] ?? resolve(import.meta.dirname, '../../../data/geophotos-testdata/master')
+  process.env['GEOPHOTOS_TEST_DIR'] ??
+  [dataDir('geophotos-testdata/master'), dataDir('geophotos/photo-sample/master')].find((d) => existsSync(d)) ??
+  dataDir('geophotos-testdata/master')
 
 export const hasMaster = existsSync(MASTER_DIR) && readdirSync(MASTER_DIR).length > 0
+
+/**
+ * The user's sample videos (tz.md, п. 3.3.6; make-project.md, п. 7): read only, never changed.
+ * Tests that need them are skipped if absent.
+ */
+export const VIDEO_DIR = process.env['GEOPHOTOS_VIDEO_DIR'] ?? dataDir('geophotos/video-sample')
+
+export const hasVideos = existsSync(VIDEO_DIR) && readdirSync(VIDEO_DIR).length > 0
 
 export const EXIFTOOL = process.env['GEOPHOTOS_EXIFTOOL'] ?? 'exiftool'
 

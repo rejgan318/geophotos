@@ -2,7 +2,7 @@ import type { Translate } from '@shared/i18n'
 import { thumbUrl } from '@shared/ipc'
 import type { Photo } from '@shared/photo'
 import { addressText, altitudeText } from '@shared/photo'
-import { photoCoords, photoDate } from './describe'
+import { nameLine, photoCoords } from './describe'
 import { FILE_SVG } from './icons'
 
 /**
@@ -13,11 +13,15 @@ export class PhotoView {
   private readonly img: HTMLImageElement
   private readonly caption: HTMLElement
   private readonly placeholder: HTMLElement
+  private readonly play: HTMLButtonElement
   private shownUrl = ''
+  private photoId: number | null = null
 
   constructor(
     private readonly el: HTMLElement,
-    private readonly t: Translate
+    private readonly t: Translate,
+    /** "Open in Player" of a video (п. 4.14). */
+    onPlay: (id: number) => void
   ) {
     this.img = document.createElement('img')
     this.img.alt = ''
@@ -27,7 +31,14 @@ export class PhotoView {
     this.placeholder = document.createElement('div')
     this.placeholder.className = 'viewer-placeholder'
     this.placeholder.hidden = true
-    el.append(this.img, this.placeholder, this.caption)
+    this.play = document.createElement('button')
+    this.play.className = 'viewer-play'
+    this.play.textContent = t('viewer.openInPlayer')
+    this.play.hidden = true
+    this.play.addEventListener('click', () => {
+      if (this.photoId !== null) onPlay(this.photoId)
+    })
+    el.append(this.img, this.placeholder, this.caption, this.play)
     this.img.addEventListener('load', () => {
       this.img.hidden = false
       this.placeholder.hidden = true
@@ -48,6 +59,8 @@ export class PhotoView {
 
   /** Shows a photo; the image is asked for only while the view is visible. */
   show(photo: Photo | null, generation: number): void {
+    this.photoId = photo?.id ?? null
+    this.play.hidden = !photo?.video
     if (!photo) {
       this.caption.replaceChildren()
       this.img.hidden = true
@@ -56,9 +69,10 @@ export class PhotoView {
       this.placeholder.hidden = true
       return
     }
-    // Name and date; under them the coordinates with the altitude and the address, if any (п. 4.14).
+    // Name and date (and a video's length); under them the coordinates with the altitude and the
+    // address, if any (п. 4.14).
     const coords = photoCoords(photo, this.t) + (photo.altitude === null ? '' : ` · ${altitudeText(photo.altitude)}`)
-    const lines = [`${photo.name} · ${photoDate(photo, this.t)}`, coords]
+    const lines = [nameLine(photo, this.t), coords]
     if (photo.address) lines.push(addressText(photo.address))
     this.caption.replaceChildren(
       ...lines.map((text) => {

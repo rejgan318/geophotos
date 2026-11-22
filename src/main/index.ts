@@ -1,6 +1,6 @@
 import { statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, protocol, screen, session, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, protocol, screen, session, shell } from 'electron'
 import { windowTitle } from '@shared/app-info'
 import { pathFromArgv } from '@shared/argv'
 import { isBatch, parseBatchArgs } from '@shared/batch-args'
@@ -170,7 +170,7 @@ async function startup(): Promise<boolean> {
     return false
   }
   exiftool = new ExifTool(settings.exiftoolPath)
-  thumbnails = new ThumbnailService(exiftool)
+  thumbnails = new ThumbnailService(exiftool, 3, systemThumbnail)
   placeSearch = new PlaceSearch(settings.search.url, userAgent(), settings.language)
   geocoder = new Geocoder(settings.geocode.url, userAgent(), settings.language, settings.geocode.minIntervalMs)
   elevation = new ElevationService(settings.elevation.url, userAgent())
@@ -975,6 +975,27 @@ async function openSettingsFile(): Promise<void> {
   }
 }
 
+/**
+ * The frame Explorer shows for a video (tz.md, п. 3.3.6), as PNG. Windows renders it with the
+ * codecs of the system and keeps it in its own thumbnail cache.
+ */
+async function systemThumbnail(path: string, size: number): Promise<Buffer> {
+  const img = await nativeImage.createThumbnailFromPath(path, { width: size, height: size })
+  if (img.isEmpty()) throw new Error('empty system thumbnail')
+  return img.toPNG()
+}
+
+/** "Open in Player" of the photo view (п. 4.14): the video in the default program of Windows. */
+async function openInPlayer(id: unknown): Promise<void> {
+  const photo = typeof id === 'number' ? current?.data.photos[id] : undefined
+  if (!photo?.video) return
+  const err = await shell.openPath(photo.path)
+  if (err) {
+    log.error(`Cannot open ${photo.path} in the player: ${err}`)
+    if (win) void dialog.showMessageBox(win, { type: 'error', message: `${err}\n${photo.path}`, buttons: [t('dialog.ok')] })
+  } else log.info(`Opened in the player: ${photo.path}`)
+}
+
 function serveThumbnails(): void {
   protocol.handle(THUMB_SCHEME, async (req) => {
     const ref = parseThumbUrl(req.url)
@@ -1200,6 +1221,7 @@ void app.whenReady().then(async () => {
   ipcMain.on(IPC.viewState, (_e, v: unknown) => {
     viewState = validViewState(v) ?? viewState
   })
+  ipcMain.handle(IPC.openInPlayer, (_e, id: unknown) => openInPlayer(id))
   ipcMain.handle(IPC.aboutInfo, () => aboutInfo())
   // Only known places: the window names a target, never a path.
   ipcMain.handle(IPC.aboutOpen, async (_e, target: unknown) => {
