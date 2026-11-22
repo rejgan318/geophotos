@@ -568,7 +568,10 @@ export class MapView {
     } else {
       this.place.setLatLng(ll)
     }
-    this.place.unbindTooltip().bindTooltip(place.name, { direction: 'top', offset: [0, -14] })
+    // As text: a string given to Leaflet is HTML, and the name comes from the search service.
+    const label = document.createElement('span')
+    label.textContent = place.name
+    this.place.unbindTooltip().bindTooltip(label, { direction: 'top', offset: [0, -14] })
     if (place.bounds) {
       const [s, w, n, e] = place.bounds
       this.map.fitBounds(L.latLngBounds([s, w], [n, e]), { maxZoom: 17 })

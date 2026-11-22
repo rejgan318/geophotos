@@ -1,4 +1,25 @@
 import { describe, expect, it } from 'vitest'
+import { parseAddress as parseAnswer } from '@shared/geocode'
+import { validSetCoords } from '@shared/ipc'
+import { oneLine } from '@shared/photo'
+
+describe('place names stay on one line (security review)', () => {
+  it('line breaks and control characters become spaces', () => {
+    expect(oneLine('Kyiv\n-if\nsystem(1)')).toBe('Kyiv -if system(1)')
+    expect(oneLine(' a\r\n\tb\u0000c d ')).toBe('a b c d')
+    expect(oneLine('Харків')).toBe('Харків')
+  })
+
+  it('an answer of the address service', () => {
+    expect(parseAnswer({ address: { city: 'Kyiv\n-if\n1', country: 'UA' } })?.city).toBe('Kyiv -if 1')
+  })
+
+  it('a pasted address from the window with a line break is refused', () => {
+    const address = { country: '', countryCode: '', state: '', city: 'Kyiv\n-if\n1', location: '' }
+    expect(validSetCoords({ ids: [0], coords: { lat: 1, lon: 2 }, copied: { address, altitude: null } })).toBe(false)
+    expect(validSetCoords({ ids: [0], coords: { lat: 1, lon: 2 }, copied: { address: { ...address, city: 'Kyiv' }, altitude: null } })).toBe(true)
+  })
+})
 import { parseAddress, pointKey, pointsWithoutAddress, reverseUrl } from '@shared/geocode'
 import type { LatLon, Photo } from '@shared/photo'
 

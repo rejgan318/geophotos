@@ -20,6 +20,15 @@ export interface Address {
 
 export const ADDRESS_FIELDS = ['country', 'countryCode', 'state', 'city', 'location'] as const
 
+/**
+ * A place name on one line: line breaks, tabs and control characters become spaces. A name with
+ * a line break could not be written safely (see `ExifTool.run`), and is never meant to have one.
+ */
+export function oneLine(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').replace(/ {2,}/g, ' ').trim()
+}
+
 export function sameAddress(a: Address | null, b: Address | null): boolean {
   if (!a || !b) return a === b
   return ADDRESS_FIELDS.every((f) => a[f] === b[f])

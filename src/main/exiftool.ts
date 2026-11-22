@@ -32,8 +32,17 @@ export class ExifTool {
 
   constructor(private readonly exiftoolPath: string) {}
 
-  /** Runs one exiftool command; resolves with raw stdout (binary-safe) and stderr. */
+  /**
+   * Runs one exiftool command; resolves with raw stdout (binary-safe) and stderr.
+   * Arguments go to exiftool one per line: a line break inside a value (an address from a file or
+   * from a service) would make the rest of it exiftool options, and `-if` runs Perl code. Such a
+   * command is refused.
+   */
   run(args: string[]): Promise<{ stdout: Buffer; stderr: string }> {
+    const bad = args.find((a) => /[\r\n\0]/.test(a))
+    if (bad !== undefined) {
+      return Promise.reject(new Error(`An exiftool argument contains a line break: ${JSON.stringify(bad.slice(0, 80))}`))
+    }
     return new Promise((resolve, reject) => {
       this.queue.push({ id: this.nextId++, args, resolve, reject })
       this.pump()

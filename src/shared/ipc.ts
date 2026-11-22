@@ -114,7 +114,9 @@ function validCopied(v: unknown): boolean {
   const a = r['address']
   if (a === null) return true
   if (!a || typeof a !== 'object') return false
-  return ADDRESS_KEYS.every((k) => typeof (a as Record<string, unknown>)[k] === 'string')
+  // No line breaks or control characters: they would become exiftool options (ExifTool.run).
+  // eslint-disable-next-line no-control-regex
+  return ADDRESS_KEYS.every((k) => { const s = (a as Record<string, unknown>)[k]; return typeof s === 'string' && !/[\u0000-\u001f\u007f\u2028\u2029]/.test(s) })
 }
 
 export interface PhotosChanged {

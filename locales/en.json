@@ -38,7 +38,7 @@
 
   "error.exiftool.title": "exiftool not found",
   "error.exiftool.message": "exiftool not found: {path}",
-  "error.exiftool.detail": "Install exiftool (the Windows installer is on exiftool.org) and start GeoPhotos again, or set the path to exiftool.exe in the settings file (field \"exiftoolPath\"):\n{settings}\n\nThe program will close.",
+  "error.exiftool.detail": "Install exiftool (the Windows installer is on exiftool.org) and start GeoPhotos again. Or put exiftool next to GeoPhotos.exe: exiftool.exe together with its folder exiftool_files (from the zip of exiftool.org rename \"exiftool(-k).exe\" to exiftool.exe). Or set the path to exiftool.exe in the settings file (field \"exiftoolPath\"):\n{settings}\n\nThe program will close.",
   "error.exiftool.download": "Download exiftool",
   "error.exiftool.openSettings": "Open Settings File",
   "dialog.close": "Close",

@@ -38,7 +38,7 @@
 
   "error.exiftool.title": "exiftool не знайдено",
   "error.exiftool.message": "exiftool не знайдено: {path}",
-  "error.exiftool.detail": "Встановіть exiftool (інсталятор для Windows — на exiftool.org) і запустіть GeoPhotos знову або вкажіть шлях до exiftool.exe у файлі налаштувань (поле \"exiftoolPath\"):\n{settings}\n\nПрограму буде закрито.",
+  "error.exiftool.detail": "Встановіть exiftool (інсталятор для Windows — на exiftool.org) і запустіть GeoPhotos знову. Або покладіть exiftool поруч із GeoPhotos.exe: exiftool.exe разом з його папкою exiftool_files (у zip з exiftool.org файл «exiftool(-k).exe» перейменуйте на exiftool.exe). Або вкажіть шлях до exiftool.exe у файлі налаштувань (поле \"exiftoolPath\"):\n{settings}\n\nПрограму буде закрито.",
   "error.exiftool.download": "Завантажити exiftool",
   "error.exiftool.openSettings": "Відкрити файл налаштувань",
   "dialog.close": "Закрити",

@@ -1,4 +1,4 @@
-import type { Address, LatLon, Photo } from './photo'
+import { oneLine, type Address, type LatLon, type Photo } from './photo'
 
 /**
  * Reverse geocoding through Nominatim (tz.md, п. 5.5): the address of a point, the names in the
@@ -17,7 +17,8 @@ export function reverseUrl(base: string, c: LatLon, language: string): string {
   return `${root}/reverse?${params.toString()}`
 }
 
-const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+/** A field of the answer on one line: a line break in it must never reach exiftool (`oneLine`). */
+const str = (v: unknown): string => (typeof v === 'string' ? oneLine(v) : '')
 const first = (a: Record<string, unknown>, keys: string[]): string => {
   for (const k of keys) if (str(a[k])) return str(a[k])
   return ''

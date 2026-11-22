@@ -1,5 +1,5 @@
 import { dateFromName, videoDate } from './dates'
-import { ADDRESS_FIELDS, type Address, type CoordSource, type DateSource, type LatLon, type Photo } from './photo'
+import { ADDRESS_FIELDS, oneLine, type Address, type CoordSource, type DateSource, type LatLon, type Photo } from './photo'
 
 /** One file's record from `exiftool -j -n -G0`: keys like "EXIF:GPSLatitude". */
 export type ExifRecord = Record<string, unknown>
@@ -174,7 +174,7 @@ function addressIn(rec: ExifRecord, kind: 'xmp' | 'iptc'): Address | null {
   for (const f of ADDRESS_FIELDS) {
     const tag = ADDRESS_TAGS[kind][f].split(':')[1]!
     const v = tagValue(rec, tag, group)
-    a[f] = v === undefined || v === null ? '' : String(v).trim()
+    a[f] = v === undefined || v === null ? '' : oneLine(String(v))
     if (a[f]) any = true
   }
   if (a.countryCode) a.countryCode = a.countryCode.toUpperCase()
