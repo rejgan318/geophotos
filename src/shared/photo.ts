@@ -84,6 +84,11 @@ export interface Photo {
   error?: string
   /** Size of the file, bytes (status bar, tz.md, п. 4.13); absent if unknown. */
   size?: number
+  /**
+   * A live photo (tz.md, п. 3.3.7): a short video inside the file (Motion Photo) or next to it
+   * (iPhone Live Photo, the MOV of the pair). Absent for others.
+   */
+  live?: true
   /** A video (tz.md, п. 3.3.6): its length in seconds, null if unknown. Absent for photos. */
   video?: { duration: number | null }
 }

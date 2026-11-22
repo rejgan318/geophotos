@@ -93,7 +93,11 @@ export async function savePhotos(
       if (!photo.coords && photo.coordSource === 'track') {
         throw new Error('The coordinates are in the GPS track of the video, which the program does not remove')
       }
-      const steps = writePlan(source, photo.coords, photo.address, photo.altitude)
+      // The MOV of an iPhone Live Photo gets the same as the photo (tz.md, п. 3.3.7).
+      const steps = [
+        ...writePlan(source, photo.coords, photo.address, photo.altitude),
+        ...(source.live?.kind === 'pair' ? writePlan(source.live.video, photo.coords, photo.address, photo.altitude) : [])
+      ]
       for (const step of steps) await runStep(exiftool, step)
       written.push(item)
       log.info(

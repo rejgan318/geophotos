@@ -35,7 +35,8 @@ describe.skipIf(!hasMaster)('test photos (master set)', () => {
   afterAll(() => tmp.remove())
 
   it('all photos are found, sidecars are not photos', () => {
-    expect(photos).toHaveLength(13)
+    // IMG_9119.MOV goes with IMG_9119.HEIC (a Live Photo, tz.md, п. 3.3.7).
+    expect(photos).toHaveLength(15)
     expect(photos.some((p) => p.name.endsWith('.xmp'))).toBe(false)
     expect(photos.filter((p) => p.error)).toEqual([])
   })
@@ -51,7 +52,16 @@ describe.skipIf(!hasMaster)('test photos (master set)', () => {
     expect(byName('IMG_2743.JPG').coordSource).toBe('exif')
     expect(byName('IMG_2743.CR2').coords).toBeNull()
     expect(byName('without-coord.jpg').coords).toBeNull()
-    expect(photos.filter((p) => p.coords)).toHaveLength(4)
+    // A motion photo of Xiaomi 15 Ultra (added 2026-11-22): an ordinary JPEG with EXIF GPS.
+    expect(byName('MVIMG_20261122_212538.jpg')).toMatchObject({ coordSource: 'exif', date: '2026-11-22 21:25:38' })
+    expect(byName('MVIMG_20261122_212538.jpg').coords?.lat).toBeCloseTo(49.8627, 3)
+    // An iPhone Live Photo (added 2026-11-22): one item, the MOV goes with the HEIC (п. 3.3.7).
+    expect(byName('IMG_9119.HEIC')).toMatchObject({ coordSource: 'exif', date: '2026-11-12 16:45:55', live: true })
+    expect(photos.find((p) => p.name === 'IMG_9119.MOV')).toBeUndefined()
+    // A Motion Photo of Xiaomi: the video inside.
+    expect(byName('MVIMG_20261122_212538.jpg').live).toBe(true)
+    expect(photos.filter((p) => p.live)).toHaveLength(2)
+    expect(photos.filter((p) => p.coords)).toHaveLength(6)
   })
 
   it('non-Latin and space in names are read', () => {

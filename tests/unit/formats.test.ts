@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { pathFromArgv } from '@shared/argv'
 import { baseNameOf, formatOf, isSidecar, isSupported, sidecarNameOf, sidecarOwners } from '@shared/formats'
-import { parseThumbUrl, thumbUrl } from '@shared/ipc'
+import { liveUrl, parseThumbUrl, thumbUrl } from '@shared/ipc'
 
 describe('formats (tz.md, п. 3.3)', () => {
   it('ordinary formats and DNG are written into the file', () => {
@@ -78,9 +78,10 @@ describe('launch parameter: folder or photo', () => {
 
 describe('thumbnail URLs', () => {
   it('round trip', () => {
-    expect(parseThumbUrl(thumbUrl(3, 12))).toEqual({ generation: 3, id: 12, large: false })
-    expect(parseThumbUrl('thumb://f3/12/')).toEqual({ generation: 3, id: 12, large: false })
-    expect(parseThumbUrl(thumbUrl(3, 12, true))).toEqual({ generation: 3, id: 12, large: true })
+    expect(parseThumbUrl(thumbUrl(3, 12))).toEqual({ generation: 3, id: 12, large: false, live: false })
+    expect(parseThumbUrl('thumb://f3/12/')).toEqual({ generation: 3, id: 12, large: false, live: false })
+    expect(parseThumbUrl(thumbUrl(3, 12, true))).toEqual({ generation: 3, id: 12, large: true, live: false })
+    expect(parseThumbUrl(liveUrl(3, 12))).toEqual({ generation: 3, id: 12, large: false, live: true })
     expect(parseThumbUrl('https://x')).toBeNull()
   })
 })

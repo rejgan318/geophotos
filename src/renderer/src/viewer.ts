@@ -1,5 +1,5 @@
 import type { Translate } from '@shared/i18n'
-import { thumbUrl } from '@shared/ipc'
+import { liveUrl, thumbUrl } from '@shared/ipc'
 import type { Photo } from '@shared/photo'
 import { addressText, altitudeText } from '@shared/photo'
 import { nameLine, photoCoords } from './describe'
@@ -55,6 +55,11 @@ export class PhotoView {
 
   setVisible(on: boolean): void {
     this.el.hidden = !on
+    if (!on) {
+      this.stopLive()
+      // Shown again: the video plays again.
+      this.shownUrl = ''
+    }
   }
 
   /** Shows a photo; the image is asked for only while the view is visible. */
@@ -62,6 +67,7 @@ export class PhotoView {
     this.photoId = photo?.id ?? null
     this.play.hidden = !photo?.video
     if (!photo) {
+      this.stopLive()
       this.caption.replaceChildren()
       this.img.hidden = true
       this.img.removeAttribute('src')
@@ -89,7 +95,26 @@ export class PhotoView {
     const url = thumbUrl(generation, photo.id, true)
     if (url === this.shownUrl) return
     this.shownUrl = url
+    this.stopLive()
     // The previous image stays until the next one is ready, so switching does not flash.
     this.img.src = url
+    // A live photo plays its video once, muted, then the photo stays (tz.md, п. 3.3.7).
+    if (photo.live) this.playLive(liveUrl(generation, photo.id))
+  }
+
+  private playLive(src: string): void {
+    const v = document.createElement('video')
+    v.className = 'viewer-live'
+    v.muted = true
+    v.playsInline = true
+    v.src = src
+    v.addEventListener('ended', () => v.remove())
+    v.addEventListener('error', () => v.remove())
+    this.el.insertBefore(v, this.caption)
+    void v.play().catch(() => v.remove())
+  }
+
+  private stopLive(): void {
+    this.el.querySelector('video.viewer-live')?.remove()
   }
 }

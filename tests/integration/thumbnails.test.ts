@@ -29,6 +29,8 @@ describe.skipIf(!hasMaster)('thumbnails of every test photo (tz.md, п. 3.3.4)',
   it('each photo gets a JPEG thumbnail', async () => {
     for (const [i, photo] of folder.photos.entries()) {
       const source = folder.sources[i]!
+      // Videos get the thumbnail of Windows, which needs Electron (tz.md, п. 3.3.6).
+      if (source.preview === 'system') continue
       await expectThumb(await makeThumbnail(source, et)).catch((e: unknown) => {
         throw new Error(`${photo.name}: ${String(e)}`)
       })
@@ -37,6 +39,7 @@ describe.skipIf(!hasMaster)('thumbnails of every test photo (tz.md, п. 3.3.4)',
 
   it('the photo view gets a large image of every photo, up to LARGE_SIZE (tz.md, п. 9.3)', async () => {
     for (const [i, photo] of folder.photos.entries()) {
+      if (folder.sources[i]!.preview === 'system') continue
       const m = await sharp(await makeImage(folder.sources[i]!, et, LARGE_SIZE)).metadata()
       const side = Math.max(m.width ?? 0, m.height ?? 0)
       expect(m.format, photo.name).toBe('jpeg')

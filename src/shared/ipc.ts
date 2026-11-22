@@ -205,10 +205,15 @@ export function thumbUrl(generation: number, id: number, large = false): string 
   return `${THUMB_SCHEME}://f${generation}/${id}${large ? '/large' : ''}`
 }
 
+/** The short video of a live photo (tz.md, п. 3.3.7), served the same way as the thumbnails. */
+export function liveUrl(generation: number, id: number): string {
+  return `${THUMB_SCHEME}://f${generation}/${id}/live`
+}
+
 /** Parses a thumbnail URL back; null if it is not one. */
-export function parseThumbUrl(url: string): { generation: number; id: number; large: boolean } | null {
-  const m = /^thumb:\/\/f(\d+)\/(\d+)(\/large)?\/?$/.exec(url)
-  return m ? { generation: Number(m[1]), id: Number(m[2]), large: !!m[3] } : null
+export function parseThumbUrl(url: string): { generation: number; id: number; large: boolean; live: boolean } | null {
+  const m = /^thumb:\/\/f(\d+)\/(\d+)(\/large|\/live)?\/?$/.exec(url)
+  return m ? { generation: Number(m[1]), id: Number(m[2]), large: m[3] === '/large', live: m[3] === '/live' } : null
 }
 
 /** Checks a set-coordinates request coming from the window. */

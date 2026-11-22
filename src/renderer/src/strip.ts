@@ -1,9 +1,9 @@
 import type { Translate } from '@shared/i18n'
-import { thumbUrl } from '@shared/ipc'
+import { liveUrl, thumbUrl } from '@shared/ipc'
 import { dropOnPhoto } from '@shared/edits'
 import { type FolderData, type LatLon, type Photo } from '@shared/photo'
 import { photoTooltip } from './describe'
-import { ADDRESS_SVG, ALTITUDE_SVG, FILE_SVG, PENCIL_SVG, PIN_SVG, VIDEO_SVG } from './icons'
+import { ADDRESS_SVG, ALTITUDE_SVG, FILE_SVG, LIVE_SVG, PENCIL_SVG, PIN_SVG, VIDEO_SVG } from './icons'
 import type { Selection } from './selection'
 
 /** Type of the data carried by a drag of photos out of the strip. */
@@ -110,6 +110,17 @@ export class Strip {
       v.title = this.t('photo.video')
       v.innerHTML = VIDEO_SVG
       item.append(v)
+    }
+    // A live photo (tz.md, п. 3.3.7): the badge in the place of the video one; its video plays
+    // round while the mouse is over it.
+    if (p.live) {
+      const b = document.createElement('div')
+      b.className = 'badge-video badge-live'
+      b.title = this.t('photo.live')
+      b.innerHTML = LIVE_SVG
+      item.append(b)
+      item.addEventListener('mouseenter', () => this.playLive(item, p.id, true))
+      item.addEventListener('mouseleave', () => this.stopLive(item))
     }
     this.decorate(item, p)
 
@@ -258,6 +269,35 @@ export class Strip {
     }
   }
 
+  /**
+   * Plays the video of a live photo over its thumbnail, muted (п. 3.3.7): round while hovered
+   * (`loop`), or once when it becomes the current photo. Nothing if the video cannot be played:
+   * the thumbnail stays.
+   */
+  private playLive(item: HTMLElement, id: number, loop: boolean): void {
+    let video = item.querySelector<HTMLVideoElement>('video.live-video')
+    if (video) {
+      video.loop = loop
+      if (video.paused || video.ended) void video.play().catch(() => {})
+      return
+    }
+    video = document.createElement('video')
+    video.className = 'live-video'
+    video.muted = true
+    video.playsInline = true
+    video.loop = loop
+    video.src = liveUrl(this.generation, id)
+    const v = video
+    v.addEventListener('ended', () => v.remove())
+    v.addEventListener('error', () => v.remove())
+    item.append(v)
+    void v.play().catch(() => v.remove())
+  }
+
+  private stopLive(item: HTMLElement): void {
+    item.querySelector('video.live-video')?.remove()
+  }
+
   /** Marks the selected photos; the strip scrolls so that the current one is visible. */
   setSelection(sel: Selection): void {
     for (const id of this.selected) if (!sel.ids.has(id)) this.items.get(id)?.classList.remove('selected')
@@ -270,5 +310,8 @@ export class Strip {
     if (!item) return
     item.classList.add('current')
     if (moved) item.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    // A live photo that has just become the current one plays its video once (п. 3.3.7), unless
+    // the mouse is already playing it.
+    if (moved && this.photos[sel.current!]?.live && !item.matches(':hover')) this.playLive(item, sel.current!, false)
   }
 }

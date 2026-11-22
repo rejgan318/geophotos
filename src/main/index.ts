@@ -1,4 +1,5 @@
 import { statSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, protocol, screen, session, shell } from 'electron'
 import { windowTitle } from '@shared/app-info'
@@ -513,6 +514,7 @@ async function openFolder(
 
   generation++
   thumbnails.clear()
+  liveVideos.clear()
   const chosen = selectPath ? scanned.photos.find((p) => samePath(p.path, selectPath)) : undefined
   current = {
     data: { folder, photos: scanned.photos, generation, selected: chosen?.id ?? null },
@@ -1164,11 +1166,54 @@ async function openInPlayer(id: unknown): Promise<void> {
   } else log.info(`Opened in the player: ${photo.path}`)
 }
 
+/** Videos of live photos, a few kept in memory: the strip plays them again on every hover. */
+const liveVideos = new Map<string, Promise<Buffer>>()
+
+/**
+ * The video of a live photo (tz.md, п. 3.3.7): taken out of the file by exiftool, or the MOV of
+ * the pair. Ranges are answered, as video players ask for them.
+ */
+async function serveLive(source: PhotoSource, range: string | null): Promise<Response> {
+  const live = source.live
+  if (!live) return new Response(null, { status: 404 })
+  let p = liveVideos.get(source.path)
+  if (!p) {
+    p = live.kind === 'pair'
+      ? readFile(live.video.path)
+      : exiftool.binary(source.path, live.tag).then((b) => {
+          if (!b) throw new Error('no video inside')
+          return b
+        })
+    liveVideos.set(source.path, p)
+    while (liveVideos.size > 8) liveVideos.delete(liveVideos.keys().next().value!)
+  }
+  try {
+    const all = await p
+    const headers = { 'content-type': 'video/mp4', 'accept-ranges': 'bytes', 'cache-control': 'no-store' }
+    const m = range ? /^bytes=(\d*)-(\d*)$/.exec(range) : null
+    if (m && (m[1] || m[2])) {
+      const start = m[1] ? Number(m[1]) : Math.max(0, all.length - Number(m[2]))
+      const end = m[1] && m[2] ? Math.min(Number(m[2]), all.length - 1) : all.length - 1
+      if (start >= all.length || start > end) return new Response(null, { status: 416, headers: { 'content-range': `bytes */${all.length}` } })
+      return new Response(new Uint8Array(all.subarray(start, end + 1)), {
+        status: 206,
+        headers: { ...headers, 'content-range': `bytes ${start}-${end}/${all.length}`, 'content-length': String(end - start + 1) }
+      })
+    }
+    return new Response(new Uint8Array(all), { headers: { ...headers, 'content-length': String(all.length) } })
+  } catch (e) {
+    liveVideos.delete(source.path)
+    log.verbose(`No live video for ${source.path}: ${String(e)}`)
+    return new Response(null, { status: 404 })
+  }
+}
+
 function serveThumbnails(): void {
   protocol.handle(THUMB_SCHEME, async (req) => {
     const ref = parseThumbUrl(req.url)
     const source = ref && current?.data.generation === ref.generation ? current.sources[ref.id] : undefined
     if (!ref || !source) return new Response(null, { status: 404 })
+    if (ref.live) return serveLive(source, req.headers.get('range'))
     try {
       const jpeg = ref.large ? await thumbnails.getLarge(source) : await thumbnails.get(source)
       return new Response(new Uint8Array(jpeg), {

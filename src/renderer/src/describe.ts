@@ -50,6 +50,7 @@ export function photoCoords(p: Photo, t: Translate): string {
 /** Tooltip of a thumbnail: name, date, coordinates (and a read error, if any). */
 export function photoTooltip(p: Photo, t: Translate): string {
   const lines = [p.name, photoDate(p, t), photoCoords(p, t)]
+  if (p.live) lines.splice(1, 0, t('photo.live'))
   if (p.video) {
     lines.splice(1, 0, p.video.duration === null ? t('photo.video') : t('photo.videoLength', { length: durationText(p.video.duration) }))
   }

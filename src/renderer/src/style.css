@@ -260,6 +260,37 @@ body {
   fill: #e8e8e8;
 }
 
+/* A live photo (tz.md, п. 3.3.7): its badge takes the place of the video one; the video plays
+   over the thumbnail, under the badges. */
+.thumb .badge-live svg {
+  fill: #ffd34d;
+  color: #ffd34d;
+  width: 13px;
+  height: 13px;
+}
+
+.thumb .live-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.thumb > div[class^='badge'] {
+  z-index: 1;
+}
+
+#viewer .viewer-live {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: transparent;
+}
+
 /* "Open in Player" of the photo view of a video (tz.md, п. 4.14). */
 .viewer-play {
   position: absolute;

@@ -15,6 +15,7 @@ import {
   xmpCoords,
   type ExifRecord
 } from '@shared/metadata'
+import { contentId, embeddedLiveTag, LIVE_VIDEO_TAGS, livePairs } from '@shared/live'
 import type { Address, CoordSource, LatLon, Photo } from '@shared/photo'
 import type { WriteInfo } from '@shared/write-plan'
 import type { ExifTool } from './exiftool'
@@ -29,6 +30,11 @@ export interface PhotoSource extends WriteInfo {
   previewTag: string | null
   /** EXIF orientation (1–8) of the file; embedded previews are stored unrotated. */
   orientation: number
+  /**
+   * A live photo (tz.md, п. 3.3.7): the tag of the video inside the file, or the MOV of an iPhone
+   * pair — written together with the photo (its WriteInfo). Null for others.
+   */
+  live: { kind: 'embedded'; tag: string } | { kind: 'pair'; video: WriteInfo } | null
 }
 
 export interface ScannedFolder {
@@ -77,6 +83,9 @@ const TAGS = [
   '-JpgFromRaw',
   '-OtherImage',
   '-ThumbnailImage',
+  // Live photos (tz.md, п. 3.3.7): the video inside, the identifier of an iPhone pair.
+  ...LIVE_VIDEO_TAGS.map((t) => `-${t}`),
+  '-ContentIdentifier',
   '-ExifTool:Error'
 ]
 
@@ -164,20 +173,38 @@ async function scanOne(root: string, folder: string, exiftool: ExifTool): Promis
     ? await readRecords(exiftool, folder, sidecarNames, SIDECAR_TAGS)
     : new Map<string, ExifRecord>()
 
+  // iPhone Live Photos (п. 3.3.7): the MOV of a pair is not an item of its own, it goes with the photo.
+  const pairs = livePairs(
+    photoNames.map((name) => ({ name, video: formatOf(name)!.video, contentId: contentId(records.get(name.toLowerCase())) }))
+  )
+  const pairedVideos = new Set(pairs.values())
+
   // Videos with no coordinates anywhere else: their GPS track, read deeper (п. 3.3.6). Slow, so
   // only for them.
   const deep = photoNames.filter((name) => {
-    if (!formatOf(name)!.track) return false
+    if (!formatOf(name)!.track || pairedVideos.has(name)) return false
     const rec = records.get(name.toLowerCase())
     const side = own.has(name) ? sidecars.get(sidecarFiles.get(baseNameOf(name).toLowerCase())?.toLowerCase() ?? '') : undefined
     return !!rec && !rec['ExifTool:Error'] && pickCoords(rec, side).coords === null
   })
   const tracks = await readTracks(exiftool, folder, deep)
 
-  return photoNames.map((name) => {
+  return photoNames.filter((name) => !pairedVideos.has(name)).map((name) => {
     const path = join(folder, name)
     const rec = records.get(name.toLowerCase())
     const format = formatOf(name)!
+    const pairName = pairs.get(name)
+    const pairRec = pairName ? records.get(pairName.toLowerCase()) : undefined
+    const embedded = format.video ? null : embeddedLiveTag(rec)
+    const live: PhotoSource['live'] = pairName
+      ? {
+          kind: 'pair',
+          // Written with the photo; the sidecar of the name, if any, is the photo's.
+          video: { path: join(folder, pairName), write: formatOf(pairName)!.write, video: true, xmpCoords: !!pairRec && xmpCoords(pairRec) !== null, sidecar: null }
+        }
+      : embedded
+        ? { kind: 'embedded', tag: embedded }
+        : null
     const owns = own.has(name)
     const sidecarFile = owns ? sidecarFiles.get(baseNameOf(name).toLowerCase()) : undefined
     const sidecarRec = sidecarFile ? sidecars.get(sidecarFile.toLowerCase()) : undefined
@@ -196,10 +223,12 @@ async function scanOne(root: string, folder: string, exiftool: ExifTool): Promis
         : null,
       preview: format.preview,
       previewTag: format.preview === 'embedded' || format.preview === 'heic' ? embeddedPreviewTag(rec) : null,
-      orientation: Number.isInteger(orientation) && orientation >= 1 && orientation <= 8 ? orientation : 1
+      orientation: Number.isInteger(orientation) && orientation >= 1 && orientation <= 8 ? orientation : 1,
+      live
     }
     const track = tracks.get(name.toLowerCase()) ?? null
-    return { photo: toPhoto(relative(root, path), path, rec, sidecarRec, { video: format.video, track }), source }
+    const photo = toPhoto(relative(root, path), path, rec, sidecarRec, { video: format.video, track })
+    return { photo: live ? { ...photo, live: true as const } : photo, source }
   })
 }
 
