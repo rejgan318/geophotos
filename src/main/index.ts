@@ -26,6 +26,7 @@ import {
   validUiState,
   validViewState,
   type AboutInfo,
+  type BatchState,
   type ViewState
 } from '@shared/ipc'
 import { addressText, formatCoords, type FileMeta, type Photo } from '@shared/photo'
@@ -34,7 +35,8 @@ import { mapSources, type Settings } from '@shared/settings'
 import { windowOnScreen } from '@shared/window-place'
 import { ExifTool, exiftoolVersion } from './exiftool'
 import { hasSubfolders, scanFolder, type PhotoSource } from './folder'
-import { loadStrings } from './locales'
+import { listLanguages, loadStrings } from './locales'
+import { AUTO_LANGUAGE, resolveLanguage } from '@shared/language'
 import { log, setupLog } from './logger'
 import { buildMenu, MENU_ID } from './menu'
 import { savePhotos, type SaveFailure } from './save'
@@ -45,6 +47,7 @@ import { runBatch, type BatchOptions } from './batch'
 import { ElevationService } from './elevation'
 import { Geocoder } from './geocode'
 import { ThumbnailService } from './thumbnails'
+import { canWriteIn, installExiftool } from './exiftool-install'
 
 // Must happen before `ready`: thumbnails are served to the window by this scheme.
 protocol.registerSchemesAsPrivileged([
@@ -72,6 +75,12 @@ interface OpenFolder {
 }
 
 let settings: Settings
+/** Languages there are locale files for (Tools → Language, tz.md, п. 2.3). */
+let languages: { code: string; name: string }[] = []
+/** Tools → Language → Restart: the program starts again once it has really closed. */
+let restartOnQuit = false
+/** The language last chosen in Tools → Language in this run; null — none yet. */
+let languageChoice: string | null = null
 let strings: Strings
 let t: Translate
 let exiftool: ExifTool
@@ -134,6 +143,10 @@ async function startup(): Promise<boolean> {
     return false
   }
 
+  // Nothing chosen yet ("auto"): the language of Windows, if the program has it (tz.md, п. 2.3).
+  languages = listLanguages(paths.locales)
+  const chosen = settings.language
+  settings = { ...settings, language: resolveLanguage(chosen, app.getPreferredSystemLanguages(), languages.map((l) => l.code)) }
   const loaded = loadStrings(paths.locales, settings.language)
   strings = loaded.strings
   t = makeTranslate(strings)
@@ -141,6 +154,7 @@ async function startup(): Promise<boolean> {
 
   setupLog(paths.logs, { ...settings.log, console: dev })
   log.info(`GeoPhotos ${app.getVersion()} started; settings: ${paths.user}`)
+  if (chosen === AUTO_LANGUAGE) log.info(`Language: ${settings.language} (Windows: ${app.getPreferredSystemLanguages().join(', ')})`)
 
   if (userProblems.length) {
     const detail = userProblems.map(formatProblem).join('\n')
@@ -191,19 +205,113 @@ async function findExiftool(configured: string): Promise<{ path: string; version
     }
   }
   log.error(`exiftool not found (${configured}, nor in the usual places)`)
-  const choice = dialog.showMessageBoxSync({
-    type: 'error',
-    title: t('error.exiftool.title'),
-    message: t('error.exiftool.message', { path: configured }),
-    detail: t('error.exiftool.detail', { settings: paths.user }),
-    buttons: [t('error.exiftool.download'), t('error.exiftool.openSettings'), t('dialog.close')],
-    defaultId: 0,
-    cancelId: 2,
-    noLink: true
+  // The choice comes again after a failed install or a wrong file, until something works or Close.
+  for (;;) {
+    const choice = dialog.showMessageBoxSync({
+      type: 'error',
+      title: t('error.exiftool.title'),
+      message: t('error.exiftool.message', { path: configured }),
+      detail: t('error.exiftool.detail'),
+      buttons: [t('error.exiftool.install'), t('error.exiftool.download'), t('error.exiftool.choose'), t('dialog.close')],
+      defaultId: 0,
+      cancelId: 3,
+      noLink: true
+    })
+    if (choice === 0) {
+      const done = await installForGeoPhotos()
+      if (done) return done
+      continue
+    }
+    if (choice === 1) {
+      await shell.openExternal(EXIFTOOL_DOWNLOAD_URL).catch((e: unknown) => log.error(`Cannot open ${EXIFTOOL_DOWNLOAD_URL}: ${String(e)}`))
+      return null
+    }
+    if (choice === 2) {
+      const done = await chooseExiftool()
+      if (done) return done
+      continue
+    }
+    return null
+  }
+}
+
+/** Remembers the path of exiftool in the settings file (tz.md, п. 2.2); a failure is logged only. */
+function saveExiftoolPath(path: string): void {
+  try {
+    setUserSetting(paths.user, paths.schema, paths.defaults, ['exiftoolPath'], path)
+    log.info(`exiftool path saved in ${paths.user}: ${path}`)
+  } catch (e) {
+    log.error(`Cannot save the exiftool path in ${paths.user}: ${String(e)}`)
+  }
+}
+
+/** "Choose exiftool.exe…": the file is run before it is taken; a wrong one is told. */
+async function chooseExiftool(): Promise<{ path: string; version: string } | null> {
+  const files = dialog.showOpenDialogSync({
+    title: t('error.exiftool.choose'),
+    properties: ['openFile'],
+    filters: [{ name: 'exiftool.exe', extensions: ['exe'] }]
   })
-  if (choice === 0) await shell.openExternal(EXIFTOOL_DOWNLOAD_URL).catch((e: unknown) => log.error(`Cannot open ${EXIFTOOL_DOWNLOAD_URL}: ${String(e)}`))
-  if (choice === 1) await openSettingsFile()
-  return null
+  const path = files?.[0]
+  if (!path) return null
+  try {
+    const version = await exiftoolVersion(path)
+    log.info(`exiftool ${version} chosen: ${path}`)
+    saveExiftoolPath(path)
+    return { path, version }
+  } catch (e) {
+    log.warn(`The chosen file is not a working exiftool: ${path}: ${String(e)}`)
+    dialog.showMessageBoxSync({ type: 'error', title: t('error.exiftool.title'), message: t('error.exiftool.notExiftool', { path }), detail: String(e), buttons: [t('dialog.ok')] })
+    return null
+  }
+}
+
+/** True while exiftool is being installed: its progress window may be the only one. */
+let installingExiftool = false
+
+/**
+ * "Install for GeoPhotos" (п. 2.2): next to GeoPhotos.exe, or in the user's profile when the
+ * folder of the program is read-only (the path then goes to the settings). The progress is shown
+ * in the window of the batch mode, with Cancel.
+ */
+async function installForGeoPhotos(): Promise<{ path: string; version: string } | null> {
+  const programDir = dirname(process.execPath)
+  const inProgram = await canWriteIn(programDir)
+  const dir = inProgram ? programDir : join(process.env['LOCALAPPDATA'] ?? app.getPath('userData'), 'GeoPhotos', 'exiftool')
+  const abort = new AbortController()
+  installingExiftool = true
+  const w = createBatchWindow()
+  try {
+    await new Promise<void>((r) => w.webContents.once('did-finish-load', () => r()))
+    const onCancel = (): void => abort.abort()
+    ipcMain.on(IPC.batchCancel, onCancel)
+    w.on('close', () => abort.abort())
+    const report = (done: number, total: number): void => {
+      if (w.isDestroyed()) return
+      const mb = (n: number): number => Math.round(n / 1048576)
+      w.webContents.send(IPC.batchState, { phase: 'exiftool', done, total, phaseDone: mb(done), phaseTotal: mb(total), seconds: null } satisfies BatchState)
+      w.setProgressBar(total ? done / total : 2)
+    }
+    report(0, 0)
+    try {
+      const res = await installExiftool(dir, { fetch, userAgent: userAgent(), onProgress: report, signal: abort.signal, log })
+      if (!inProgram) saveExiftoolPath(res.path)
+      return res
+    } finally {
+      ipcMain.off(IPC.batchCancel, onCancel)
+    }
+  } catch (e) {
+    const cancelled = abort.signal.aborted
+    log.error(`exiftool not installed${cancelled ? ' (cancelled)' : ''}: ${String(e)}`)
+    if (!w.isDestroyed()) w.destroy()
+    if (!cancelled) {
+      dialog.showMessageBoxSync({ type: 'error', title: t('error.exiftool.title'), message: t('error.exiftool.installFailed'), detail: String(e), buttons: [t('dialog.ok')] })
+    }
+    return null
+  } finally {
+    if (!w.isDestroyed()) w.destroy()
+    installingExiftool = false
+  }
 }
 
 /** The program names itself to OpenStreetMap services (tile and Nominatim usage policies). */
@@ -487,13 +595,15 @@ function updateMenu(recent: string[]): void {
         showOnMap: () => win?.webContents.send(IPC.command, { type: 'showOnMap' }),
         toggleAddress: () => toggleAddress(),
         toggleAltitude: () => toggleAltitude(),
+        setLanguage: (code) => void setLanguage(code),
         toggleThumbnails: () => win?.webContents.send(IPC.command, { type: 'toggleThumbnails' }),
         setFilter: (filter: StripFilter) => win?.webContents.send(IPC.command, { type: 'setFilter', filter }),
         shortcuts: () => win?.webContents.send(IPC.command, { type: 'toggleHelp' }),
         about: () => win?.webContents.send(IPC.command, { type: 'showAbout' })
       },
       recent,
-      dev
+      dev,
+      { list: languages, current: settings.language }
     )
   )
   refreshEditState()
@@ -689,6 +799,28 @@ async function runAltitudes(): Promise<void> {
     altitudeRunning = false
     reportQueue()
   }
+}
+
+/**
+ * Tools → Language (tz.md, п. 2.3): saved in the settings file, and the program restarts at once
+ * (settings apply at start, п. 8.5): it closes the usual way (unsaved changes are asked about) and
+ * comes back with its folder as at any start.
+ */
+async function setLanguage(code: string): Promise<void> {
+  // Compared with the last choice, not the running language: choosing back must be saved too.
+  if (code === (languageChoice ?? settings.language)) return
+  try {
+    setUserSetting(paths.user, paths.schema, paths.defaults, ['language'], code)
+    languageChoice = code
+    log.info(`Language "${code}" saved in ${paths.user}`)
+  } catch (e) {
+    log.error(`Cannot save the language in ${paths.user}: ${String(e)}`)
+    if (win) void dialog.showMessageBox(win, { type: 'error', message: String(e), buttons: [t('dialog.ok')] })
+    updateMenu(recentFolders)
+    return
+  }
+  restartOnQuit = true
+  app.quit()
 }
 
 /** Tools → Get Altitude (п. 5.6): on — altitudes for all photos of the folder that need one. */
@@ -1085,9 +1217,15 @@ function createWindow(): BrowserWindow {
     keepPlace()
     if (closeConfirmed || (!isDirty() && !saving && !pendingPhotos().length)) return
     e.preventDefault()
-    if (saving || asking) return
+    if (saving || asking) {
+      restartOnQuit = false
+      return
+    }
     void confirmExit().then((how) => {
-      if (how === 'stay') return
+      if (how === 'stay') {
+        restartOnQuit = false
+        return
+      }
       closeConfirmed = true
       if (how === 'background') void finishInBackground(w)
       else w.close()
@@ -1196,11 +1334,12 @@ async function runBatchWindow(paths: string[], opts: BatchOptions): Promise<numb
 }
 
 void app.whenReady().then(async () => {
+  // Before startup: the progress window of installing exiftool asks for its texts (tz.md, п. 2.2).
+  ipcMain.handle(IPC.batchInit, () => ({ strings }))
   if (!(await startup())) {
     app.exit(1)
     return
   }
-  ipcMain.handle(IPC.batchInit, () => ({ strings }))
 
   // Batch mode (tz.md, п. 10): the batch window only; wrong parameters are told and the program ends.
   if (batchArgs) {
@@ -1288,8 +1427,12 @@ void app.whenReady().then(async () => {
   win.on('closed', () => (win = null))
 })
 
-app.on('window-all-closed', () => app.quit())
+// The progress window of installing exiftool closes before the main window opens (tz.md, п. 2.2).
+app.on('window-all-closed', () => {
+  if (!installingExiftool) app.quit()
+})
 app.on('will-quit', () => {
+  if (restartOnQuit) app.relaunch()
   // The batch mode does not touch the state of the main window (last folder, map…).
   if (!batchOnly) rememberSession()
   exiftool?.close()

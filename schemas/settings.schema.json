@@ -12,9 +12,9 @@
     },
     "language": {
       "type": "string",
-      "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
-      "default": "en",
-      "description": "Interface language: the name of a file in the locales folder without .json, for example \"en\", \"ru\" or \"uk\"."
+      "pattern": "^(auto|[a-z]{2}(-[A-Z]{2})?)$",
+      "default": "auto",
+      "description": "Interface language: \"auto\" — the language of Windows if the program has it, else English; or the name of a file in the locales folder without .json, for example \"en\", \"ru\" or \"uk\". Also chosen in Tools → Language."
     },
     "exiftoolPath": {
       "type": "string",

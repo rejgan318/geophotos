@@ -179,7 +179,8 @@ export interface QueueState {
 
 /** Progress of the batch mode (tz.md, п. 10): the phase, steps, about how long is left. */
 export interface BatchState {
-  phase: 'scan' | 'address' | 'altitude' | 'write'
+  /** xiftool — installing exiftool (tz.md, п. 2.2): phaseDone / phaseTotal are megabytes. */
+  phase: 'scan' | 'address' | 'altitude' | 'write' | 'exiftool'
   done: number
   total: number
   phaseDone: number

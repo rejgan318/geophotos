@@ -2,7 +2,7 @@
   // Default settings. Do not edit: change the user file instead
   // (File → Open Settings File). Field descriptions are in the schema.
   "$schema": "../schemas/settings.schema.json",
-  "language": "en",
+  "language": "auto",
   "exiftoolPath": "exiftool",
   "map": {
     "initialView": { "lat": 49.8419, "lon": 24.0315, "zoom": 5 },

@@ -18,6 +18,7 @@ export interface MenuHandlers {
   setFilter(filter: StripFilter): void
   toggleAddress(): void
   toggleAltitude(): void
+  setLanguage(code: string): void
   shortcuts(): void
   about(): void
 }
@@ -41,7 +42,13 @@ export const MENU_ID = {
 } as const
 
 /** Traditional window menu (tz.md, п. 4.9). Reload and developer tools exist only in development. */
-export function buildMenu(t: Translate, h: MenuHandlers, recent: string[], dev: boolean): Menu {
+export function buildMenu(
+  t: Translate,
+  h: MenuHandlers,
+  recent: string[],
+  dev: boolean,
+  languages: { list: { code: string; name: string }[]; current: string } = { list: [], current: '' }
+): Menu {
   const recentItems: MenuItemConstructorOptions[] = recent.length
     ? [
         // "&" would turn the next letter of a path into a shortcut: double it.
@@ -123,6 +130,17 @@ export function buildMenu(t: Translate, h: MenuHandlers, recent: string[], dev: 
     submenu: [
       { id: MENU_ID.address, label: t('menu.getAddress'), type: 'checkbox', click: h.toggleAddress },
       { id: MENU_ID.altitude, label: t('menu.getAltitude'), type: 'checkbox', click: h.toggleAltitude },
+      { type: 'separator' },
+      // Each language named in itself (tz.md, п. 2.3); applied after a restart (п. 8.5).
+      {
+        label: t('menu.language'),
+        submenu: languages.list.map(({ code, name }) => ({
+          label: name,
+          type: 'radio' as const,
+          checked: code === languages.current,
+          click: () => h.setLanguage(code)
+        }))
+      },
       { type: 'separator' },
       { label: t('menu.openSettings'), click: h.openSettings },
       { label: t('menu.openLogs'), click: h.openLogs }

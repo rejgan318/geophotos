@@ -67,7 +67,7 @@ describe('config files (tz-config.md)', () => {
 
   it('invalid user file: problems with file, field, reason; defaults used (п. 8.4)', () => {
     const { settings, userProblems } = load('{ "map": { "initialView": { "zoom": 99 } }, "lnguage": "ru" }')
-    expect(settings.language).toBe('en')
+    expect(settings.language).toBe('auto')
     expect(settings.map.initialView.zoom).toBe(5)
     const fields = userProblems.map((p) => p.field)
     expect(fields).toContain('map.initialView.zoom')
@@ -77,7 +77,7 @@ describe('config files (tz-config.md)', () => {
 
   it('syntax error is reported with line and column', () => {
     const { settings, userProblems } = load('{\n  "language": "ru"\n  "exiftoolPath": "x"\n}')
-    expect(settings.language).toBe('en')
+    expect(settings.language).toBe('auto')
     expect(userProblems[0]?.field).toMatch(/^line 3, column/)
   })
 
@@ -93,7 +93,7 @@ describe('config files (tz-config.md)', () => {
     expect(userProblems).toEqual([])
     const { $schema: _s, ...rest } = value
     expect(rest).toEqual(Object.fromEntries(Object.entries(load(null).settings).filter(([k]) => k !== '$schema')))
-    expect(settings.language).toBe('en')
+    expect(settings.language).toBe('auto')
 
     // Comments: header first, a description above fields, allowed values and ranges.
     expect(text.indexOf('// GeoPhotos user settings')).toBeLessThan(text.indexOf('"$schema"'))
@@ -112,7 +112,7 @@ describe('config files (tz-config.md)', () => {
     expect(readFileSync(file, 'utf8')).toBe('{ "language": "ru" }')
     writeFileSync(file, '{\n  "$schema": "file:///x.json"\n  // old comment\n}')
     expect(ensureUserSettingsFile(file, schemaPath, defaultsPath)).toBe(true)
-    expect(parse(readFileSync(file, 'utf8')).language).toBe('en')
+    expect(parse(readFileSync(file, 'utf8')).language).toBe('auto')
   })
 
   it('the program sets a field of the user file, keeping comments (tz.md, п. 3.2; tz-config.md, п. 5)', () => {
@@ -130,7 +130,7 @@ describe('config files (tz-config.md)', () => {
     setUserSetting(file, schemaPath, defaultsPath, ['folders', 'subfolders'], 'no')
     const value = parse(readFileSync(file, 'utf8'))
     expect(value.folders.subfolders).toBe('no')
-    expect(value.language).toBe('en')
+    expect(value.language).toBe('auto')
   })
 
   it('tile sources without url are skipped', () => {

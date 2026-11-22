@@ -44,7 +44,7 @@ Videos (MOV, MP4, AVI, MPG, MTS, MKV, WMV and other formats exiftool reads) are 
 ## Requirements
 
 - Windows 10 or 11.
-- [ExifTool](https://exiftool.org/) (checked with 13.62 and 13.64). Any of:
+- [ExifTool](https://exiftool.org/) (checked with 13.62 and 13.64). If GeoPhotos does not find it at start, it offers **Install for GeoPhotos**: it downloads the official Windows zip, checks its SHA-256 against exiftool.org and puts exiftool next to `GeoPhotos.exe`. Or any of:
   - install it with the Windows installer (or `winget install OliverBetz.ExifTool`); GeoPhotos finds it in `PATH` or where the installer puts it;
   - put it next to `GeoPhotos.exe`: `exiftool.exe` **together with its folder `exiftool_files`** (the exe alone does not run). From the zip of exiftool.org rename `exiftool(-k).exe` to `exiftool.exe`;
   - set `exiftoolPath` in the settings file to the full path of `exiftool.exe`.

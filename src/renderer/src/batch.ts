@@ -32,7 +32,9 @@ async function start(): Promise<void> {
   })
 
   window.geophotos.onBatchState((s: BatchState) => {
-    phase.textContent = t(`batch.phase.${s.phase}`, { done: s.phaseDone, total: s.phaseTotal })
+    // The same window shows installing exiftool (tz.md, п. 2.2).
+    if (s.phase === 'exiftool') document.title = `GeoPhotos — ${t('install.title')}`
+    phase.textContent = t(s.phase === 'exiftool' && !s.phaseTotal ? 'batch.phase.exiftoolStart' : `batch.phase.${s.phase}`, { done: s.phaseDone, total: s.phaseTotal })
     if (s.total) bar.value = s.done / s.total
     else bar.removeAttribute('value')
     eta.textContent = s.seconds === null ? '' : t('batch.eta', { time: formatDuration(s.seconds, t) })
