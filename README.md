@@ -1,5 +1,7 @@
 # GeoPhotos
 
+**English** | [Русский](README.ru.md) | [Українська](README.uk.md)
+
 Manual geotagging of photos on a map for Windows, modelled on the Map module of Adobe Lightroom.
 
 You open a folder from a trip, see the photos that already have coordinates (usually the ones from the phone) on the map, find where every other shot was taken and drag its thumbnail there. Then you save, and the coordinates are written into the files, or into XMP sidecars for RAW, so that Lightroom, Immich and other programs read them.
@@ -37,7 +39,7 @@ GeoPhotos needs no installer: it is a folder you copy to your computer.
 - **Photo view (Space):** a large preview in place of the map.
 - **Save:** *Save* writes all modified photos, *Save Selected* only the selected ones. Progress is shown, and a list of files that could not be written appears at the end. You are warned about unsaved changes.
 - **Log:** every write is logged with its old and new coordinates, so they can be restored by hand.
-- **Interface:** English, Russian and Ukrainian. New languages are added as files, without code changes.
+- **Interface:** English, Russian and Ukrainian (*Tools → Language*). New languages are added as files, without code changes.
 - **File → Refresh (F5):** reads the folder and the added files again after they were changed outside; the view stays.
 - **Batch mode:** addresses and altitudes for whole folders from the command line (see below).
 - **Next start:** the program reopens the last folder with the added files and the current photo, the window, the map and its mode.
@@ -57,9 +59,11 @@ When coordinates exist in several places, they are read in this order: XMP sidec
 
 Videos (MOV, MP4, AVI, MPG, MTS, MKV, WMV and other formats exiftool reads) are shown in the strip with the thumbnail Windows Explorer shows, and on the map when they have coordinates (from the phone's QuickTime metadata, the XMP sidecar, or the first point of a GPS track). Space shows a large frame and an "Open in Player" button. Videos are placed like photos: MOV, MP4 and the rest of the QuickTime family get the coordinates in the file itself (where phones keep them), the other formats in an XMP sidecar; the file time of a video is kept.
 
+Live photos (iPhone Live Photo; Motion Photo of Google, Xiaomi, Samsung) are one thumbnail in the strip; the short video plays on hover. For an iPhone pair, the coordinates are written to both the photo and the MOV.
+
 ## Requirements
 
-- Windows 10 or 11.
+- Windows 10 or 11, 64-bit.
 - [ExifTool](https://exiftool.org/) (checked with 13.62 and 13.64). If GeoPhotos does not find it at start, it offers **Install for GeoPhotos**: it downloads the official Windows zip, checks its SHA-256 against exiftool.org and puts exiftool next to `GeoPhotos.exe`. Or any of:
   - install it with the Windows installer (or `winget install OliverBetz.ExifTool`); GeoPhotos finds it in `PATH` or where the installer puts it;
   - put it next to `GeoPhotos.exe`: `exiftool.exe` **together with its folder `exiftool_files`** (the exe alone does not run). From the zip of exiftool.org rename `exiftool(-k).exe` to `exiftool.exe`;
