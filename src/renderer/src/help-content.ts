@@ -31,6 +31,7 @@ export const SECTIONS: Section[] = [
       { keys: ['Del'], text: 'help.delete' },
       { keys: ['Ctrl+S'], text: 'help.save' },
       { keys: ['Ctrl+O'], text: 'help.open' },
+      { keys: ['Ctrl+Shift+O'], text: 'help.addFiles' },
       { keys: ['F5'], text: 'help.refresh' },
       { keys: ['F1'], text: 'help.help' },
       { keys: ['Enter'], text: 'help.search' }
@@ -48,7 +49,8 @@ export const SECTIONS: Section[] = [
       { action: 'help.action.dragToPhoto', text: 'help.dragToPhoto' },
       { action: 'help.action.dragMarker', text: 'help.dragMarker' },
       { keys: ['Ctrl+help.key.drag'], text: 'help.boxSelect' },
-      { action: 'help.action.dropOnMark', text: 'help.dropOnMark' }
+      { action: 'help.action.dropOnMark', text: 'help.dropOnMark' },
+      { action: 'help.action.dropFromExplorer', text: 'help.dropFromExplorer' }
     ]
   },
   {

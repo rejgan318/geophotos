@@ -11,16 +11,27 @@ import { MAX_RECENT } from '@shared/recent'
 export interface AppState {
   recentFolders: string[]
   /**
-   * The open folder, the current photo and the strip scroll at exit; opened at the next start
-   * without a parameter.
+   * The project (tz.md, п. 3.1: the open folder, files added to it, files of it taken off the
+   * strip), the current photo and the strip scroll at exit; opened at the next start without a
+   * parameter.
    */
-  lastSession: { folder: string; photo: string | null; scroll: number; subfolders: boolean } | null
+  lastSession: Session | null
   /** Position and size of the window (its normal size when maximized). */
   window: WindowState | null
   /** Place and zoom of the map, its tile source, markers or thumbnails. */
   map: MapState | null
   /** Modes of the Tools menu (tz.md, пп. 5.5, 5.6). */
   tools: ToolsState
+}
+
+export interface Session {
+  /** null — only added files. */
+  folder: string | null
+  photo: string | null
+  scroll: number
+  subfolders: boolean
+  added: string[]
+  removed: string[]
 }
 
 export interface ToolsState {
@@ -53,13 +64,19 @@ const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
 
 function readSession(v: unknown): AppState['lastSession'] {
   if (!isObj(v)) return null
-  if (typeof v['folder'] !== 'string' || !v['folder']) return null
+  const folder = typeof v['folder'] === 'string' && v['folder'] ? v['folder'] : null
+  const paths = (x: unknown): string[] => (Array.isArray(x) ? x.filter((p): p is string => typeof p === 'string' && p !== '') : [])
+  const added = paths(v['added'])
+  if (!folder && !added.length) return null
   return {
-    folder: v['folder'],
+    folder,
     photo: typeof v['photo'] === 'string' && v['photo'] ? v['photo'] : null,
     scroll: isNum(v['scroll']) && v['scroll'] >= 0 ? v['scroll'] : 0,
     // Whether photos from subfolders were loaded (tz.md, п. 3.2): restored without asking.
-    subfolders: v['subfolders'] === true
+    subfolders: v['subfolders'] === true,
+    // Files added to the folder and files of it taken off the strip (п. 3.1); none before 0.25.0.
+    added,
+    removed: folder ? paths(v['removed']) : []
   }
 }
 

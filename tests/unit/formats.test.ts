@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pathFromArgv } from '@shared/argv'
+import { pathsFromArgv } from '@shared/argv'
 import { baseNameOf, formatOf, isSidecar, isSupported, sidecarNameOf, sidecarOwners } from '@shared/formats'
 import { liveUrl, parseThumbUrl, thumbUrl } from '@shared/ipc'
 
@@ -60,19 +60,22 @@ describe('formats (tz.md, п. 3.3)', () => {
   })
 })
 
-describe('launch parameter: folder or photo', () => {
-  const dirs = new Set(['D:\\Trip', 'D:\\dev\\geophotos', 'D:\\Trip\\IMG_1.jpg'])
-  const isDir = (p: string): boolean => dirs.has(p)
+describe('launch parameters: folders and files', () => {
+  const dirs = new Set(['D:\\Trip', 'D:\\dev\\geophotos', 'D:\\Trip\\IMG_1.jpg', 'E:\\IMG_2.jpg'])
+  const exists = (p: string): boolean => dirs.has(p)
 
-  it('takes the last existing folder', () => {
-    expect(pathFromArgv(['D:\\Trip'], isDir)).toBe('D:\\Trip')
-    expect(pathFromArgv(['--inspect', 'D:\\Trip', '--flag'], isDir)).toBe('D:\\Trip')
-    expect(pathFromArgv(['D:\\Trip\\IMG_1.jpg'], isDir)).toBe('D:\\Trip\\IMG_1.jpg')
+  it('takes every existing folder and file, in order', () => {
+    expect(pathsFromArgv(['D:\\Trip'], exists)).toEqual(['D:\\Trip'])
+    expect(pathsFromArgv(['--inspect', 'D:\\Trip', '--flag'], exists)).toEqual(['D:\\Trip'])
+    expect(pathsFromArgv(['D:\\Trip\\IMG_1.jpg', 'D:\\Nope', 'E:\\IMG_2.jpg'], exists)).toEqual([
+      'D:\\Trip\\IMG_1.jpg',
+      'E:\\IMG_2.jpg'
+    ])
   })
 
   it('skips the app folder and dots (development)', () => {
-    expect(pathFromArgv(['.', 'D:\\dev\\geophotos'], isDir, 'D:\\dev\\geophotos')).toBeUndefined()
-    expect(pathFromArgv(['D:\\Nope'], isDir)).toBeUndefined()
+    expect(pathsFromArgv(['.', 'D:\\dev\\geophotos'], exists, 'D:\\dev\\geophotos')).toEqual([])
+    expect(pathsFromArgv(['D:\\Nope'], exists)).toEqual([])
   })
 })
 

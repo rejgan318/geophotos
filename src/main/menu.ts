@@ -3,7 +3,8 @@ import type { Translate } from '@shared/i18n'
 import type { StripFilter } from '@shared/ipc'
 
 export interface MenuHandlers {
-  openPhoto(): void
+  openFolder(): void
+  addFiles(): void
   openRecent(folder: string): void
   refresh(): void
   clearRecent(): void
@@ -62,7 +63,8 @@ export function buildMenu(
     {
       label: t('menu.file'),
       submenu: [
-        { label: t('menu.openPhoto'), accelerator: 'CmdOrCtrl+O', click: h.openPhoto },
+        { label: t('menu.openFolder'), accelerator: 'CmdOrCtrl+O', click: h.openFolder },
+        { label: t('menu.addFiles'), accelerator: 'CmdOrCtrl+Shift+O', click: h.addFiles },
         { label: t('menu.openRecent'), submenu: recentItems },
         { id: MENU_ID.refresh, label: t('menu.refresh'), accelerator: 'F5', click: h.refresh, enabled: false },
         { type: 'separator' },

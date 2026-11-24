@@ -3,9 +3,9 @@ import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, protocol, screen, session, shell } from 'electron'
 import { windowTitle } from '@shared/app-info'
-import { pathFromArgv } from '@shared/argv'
+import { pathsFromArgv } from '@shared/argv'
 import { isBatch, parseBatchArgs } from '@shared/batch-args'
-import { SUPPORTED_EXTENSIONS } from '@shared/formats'
+import { isSupported, SUPPORTED_EXTENSIONS } from '@shared/formats'
 import { EXIFTOOL_DOWNLOAD_URL, exiftoolCandidates } from '@shared/exiftool-places'
 import { assignAddress, assignAltitude, assignCoords, pastePhotoData, photoCounts, photosAt, photosToSave } from '@shared/edits'
 import { checkedAltitude, ELEVATION_BATCH, needsAltitude, pointsWithoutAltitude } from '@shared/elevation'
@@ -17,6 +17,7 @@ import {
   IPC,
   parseThumbUrl,
   THUMB_SCHEME,
+  validRemovePhotos,
   validSetCoords,
   type FolderData,
   type InitData,
@@ -32,10 +33,22 @@ import {
 } from '@shared/ipc'
 import { addressText, formatCoords, type FileMeta, type Photo } from '@shared/photo'
 import { addRecent, idsByPath, removeRecent, samePath } from '@shared/recent'
+import {
+  afterRemoval,
+  displayName,
+  EMPTY_PROJECT,
+  isEmptyProject,
+  parentOf,
+  renumber,
+  titleFolder,
+  withAdded,
+  withRemoved,
+  type Project
+} from '@shared/project'
 import { mapSources, type Settings } from '@shared/settings'
 import { windowOnScreen } from '@shared/window-place'
 import { ExifTool, exiftoolVersion } from './exiftool'
-import { hasSubfolders, scanFolder, type PhotoSource } from './folder'
+import { hasSubfolders, scanFiles, scanFolder, type PhotoSource, type ScannedFolder } from './folder'
 import { listLanguages, loadStrings } from './locales'
 import { AUTO_LANGUAGE, resolveLanguage } from '@shared/language'
 import { log, setupLog } from './logger'
@@ -66,13 +79,54 @@ const paths = {
   logs: join(app.getPath('userData'), 'logs')
 }
 
+/** The project on the strip (tz.md, п. 3.1); `photos`, `sources` and `fileMeta` go by photo id. */
 interface OpenFolder {
   data: FolderData
   sources: PhotoSource[]
   /** Coordinates and address as they are in the files: what "modified" is compared with, the log's "old". */
   fileMeta: FileMeta[]
-  /** Photos from subfolders are loaded too (tz.md, п. 3.2). */
-  subfolders: boolean
+  /** The folder (with its subfolders choice, п. 3.2), added files, files taken off the strip. */
+  project: Project
+}
+
+/** A photo with what main keeps about it: the unit the strip is rebuilt of. */
+interface Entry {
+  photo: Photo
+  source: PhotoSource
+  fileMeta: FileMeta
+}
+
+function entriesOf(folder: OpenFolder | null): Entry[] {
+  if (!folder) return []
+  return folder.data.photos.map((photo, id) => ({ photo, source: folder.sources[id]!, fileMeta: folder.fileMeta[id]! }))
+}
+
+function entriesOfScan(scanned: ScannedFolder): Entry[] {
+  return scanned.photos.map((photo, id) => ({
+    photo,
+    source: scanned.sources[id]!,
+    fileMeta: { coords: photo.coords, address: photo.address, altitude: photo.altitude }
+  }))
+}
+
+/** Lower-case paths of the files on the strip, with the MOV of live pairs (п. 3.3.7). */
+function filesOf(entries: readonly Entry[]): Set<string> {
+  const set = new Set<string>()
+  for (const e of entries) {
+    set.add(e.source.path.toLowerCase())
+    if (e.source.live?.kind === 'pair') set.add(e.source.live.video.path.toLowerCase())
+  }
+  return set
+}
+
+/** Makes the project on the strip of these photos (ids already in order). */
+function projectOf(entries: readonly Entry[], project: Project, selected: number | null): OpenFolder {
+  return {
+    data: { folder: titleFolder(project), photos: entries.map((e) => e.photo), generation, selected },
+    sources: entries.map((e) => e.source),
+    fileMeta: entries.map((e) => e.fileMeta),
+    project
+  }
 }
 
 let settings: Settings
@@ -118,7 +172,7 @@ let ui: UiState = { ids: [], current: null, filter: 'all', view: 'map', mapMode:
 const batchArgs = isBatch(process.argv.slice(1)) ? parseBatchArgs(process.argv.slice(1), app.getAppPath()) : null
 /** The batch window is running: the program state of the main window is not touched. */
 let batchOnly = batchArgs !== null
-let startupPath = batchArgs ? undefined : pathFromArgv(process.argv.slice(1), (p) => kindOf(p) !== null, app.getAppPath())
+let startupPaths = batchArgs ? [] : pathsFromArgv(process.argv.slice(1), (p) => kindOf(p) !== null, app.getAppPath())
 
 function kindOf(p: string): 'dir' | 'file' | null {
   try {
@@ -367,14 +421,18 @@ function saveAppState(): void {
  */
 function rememberSession(): void {
   const photo = ui.current === null ? undefined : current?.data.photos[ui.current]
-  lastSession = current
-    ? {
-        folder: current.data.folder,
-        photo: photo?.path ?? null,
-        scroll: viewState?.scroll ?? 0,
-        subfolders: current.subfolders
-      }
-    : null
+  const project = current?.project
+  lastSession =
+    project && !isEmptyProject(project)
+      ? {
+          folder: project.folder,
+          photo: photo?.path ?? null,
+          scroll: viewState?.scroll ?? 0,
+          subfolders: project.subfolders,
+          added: project.added,
+          removed: project.removed
+        }
+      : null
   const thumbnails = ui.mapMode === 'thumbs'
   if (viewState) {
     const { lat, lon, zoom, source } = viewState
@@ -386,51 +444,67 @@ function rememberSession(): void {
 }
 
 /**
- * Start without a parameter: the folder and photo of the previous run (tz.md, пп. 7.1–7.2).
- * A missing folder: the program starts without one; a missing photo: the folder opens with
- * the first photo selected. Both only go to the log.
+ * Start without a parameter: the project and photo of the previous run (tz.md, пп. 7.1–7.2).
+ * A missing folder: the program starts without it (the added files stay); missing added files
+ * drop out; a missing photo: the first photo is selected. All only go to the log.
  */
 async function restoreSession(): Promise<void> {
   if (!lastSession) return
-  const { folder, photo } = lastSession
-  if (!isDirectory(folder)) {
-    log.info(`Last folder not found, starting without a folder: ${folder}`)
-    return
+  const { photo } = lastSession
+  let folder = lastSession.folder
+  if (folder && !isDirectory(folder)) {
+    log.info(`Last folder not found, starting without it: ${folder}`)
+    folder = null
   }
+  const added = lastSession.added.filter((p) => {
+    const ok = kindOf(p) === 'file'
+    if (!ok) log.info(`Added file of the last session not found: ${p}`)
+    return ok
+  })
+  const project: Project = { folder, subfolders: lastSession.subfolders, added, removed: folder ? lastSession.removed : [] }
+  if (isEmptyProject(project)) return
   const photoOk = !!photo && kindOf(photo) === 'file'
   if (photo && !photoOk) log.info(`Last selected photo not found: ${photo}`)
-  log.info(`Restoring the last session: ${folder}`)
-  await openFolder(folder, photoOk && photo ? photo : undefined, {
-    scroll: lastSession.scroll,
-    subfolders: lastSession.subfolders
-  })
+  log.info(`Restoring the last session: ${folder ?? '(no folder)'}; added files: ${added.length}`)
+  await loadProject(project, { selectPath: photoOk && photo ? photo : undefined, restored: { scroll: lastSession.scroll } })
 }
 
 /**
- * File → Refresh (F5, tz.md, п. 3.8): the open folder is read again — new files come, deleted ones
- * go, changes made outside show. The current and selected photos, the filter, the map and the strip
- * scroll stay; unsaved changes are asked about first, as when another folder is opened (п. 6.5).
+ * File → Refresh (F5, tz.md, п. 3.8): the project is read again — new files of the folder come
+ * (not those taken off the strip), deleted ones go, changes made outside show. The current and
+ * selected photos, the filter, the map and the strip scroll stay; unsaved changes are asked about
+ * first, as when another folder is opened (п. 6.5).
  */
 async function refresh(): Promise<void> {
   const folder = current
   if (!folder || saving) return
+  if (!(await confirmDiscard())) return
   const pathOf = (id: number | null): string | undefined => (id === null ? undefined : folder.data.photos[id]?.path)
   const paths = ui.ids.map(pathOf).filter((p): p is string => !!p)
   log.info(`Refresh: ${folder.data.folder}`)
-  await openFolder(
-    folder.data.folder,
-    pathOf(ui.current),
-    { scroll: viewState?.scroll ?? 0, subfolders: folder.subfolders },
-    { paths, filter: ui.filter }
-  )
+  await loadProject(folder.project, {
+    selectPath: pathOf(ui.current),
+    restored: { scroll: viewState?.scroll ?? 0 },
+    keep: { paths, filter: ui.filter }
+  })
 }
 
-/** Opens a folder, or the folder of a photo with that photo selected (tz.md, п. 3.1). */
-async function openPath(path: string): Promise<void> {
-  const kind = kindOf(path)
-  if (kind === 'dir') await openFolder(path)
-  else if (kind === 'file') await openFolder(dirname(path), path)
-  else await folderMissing(path)
+/**
+ * Folders and files dropped from Explorer or given at start (tz.md, п. 3.1): the first folder
+ * opens (a new project; other folders are not taken), then the files are added to the strip.
+ */
+async function openPaths(list: readonly string[]): Promise<void> {
+  const dirs = list.filter(isDirectory)
+  const files = list.filter((p) => kindOf(p) === 'file')
+  if (dirs.length > 1) log.info(`Several folders given, only the first opens: ${dirs.join('; ')}`)
+  if (dirs[0] && !(await openFolder(dirs[0]))) return
+  if (files.length) await addFiles(files)
+}
+
+/** Open Recent (п. 3.1): the folder, or a message that it is gone. */
+async function openRecent(folder: string): Promise<void> {
+  if (isDirectory(folder)) await openFolder(folder)
+  else await folderMissing(folder)
 }
 
 async function folderMissing(folder: string): Promise<void> {
@@ -481,23 +555,50 @@ async function askSubfolders(folder: string): Promise<boolean> {
 }
 
 /**
- * `restored`: the folder of the last run opened at start (tz.md, п. 7.1), with the strip scroll
- * and the subfolders choice of that run.
+ * Opens a folder (tz.md, п. 3.1): a new project — the strip is the whole folder; unsaved changes
+ * and the subfolders are asked about first (пп. 6.5, 3.2). `selectPath`: the photo to select.
+ * False if it did not open (cancelled, cannot be read).
  */
-async function openFolder(
-  folder: string,
-  selectPath?: string,
-  restored?: { scroll: number; subfolders: boolean },
-  keep?: { paths: string[]; filter: StripFilter }
-): Promise<void> {
-  if (!win || saving) return
-  if (!(await confirmDiscard())) return
-  const subfolders = restored ? restored.subfolders : await askSubfolders(folder)
-  if (!win) return
+async function openFolder(folder: string, selectPath?: string): Promise<boolean> {
+  if (!win || saving) return false
+  if (!(await confirmDiscard())) return false
+  const subfolders = await askSubfolders(folder)
+  return loadProject({ folder, subfolders, added: [], removed: [] }, { selectPath })
+}
+
+/** The photos of a project: its folder without the files taken off, and the added files. */
+async function scanProject(project: Project): Promise<{ entries: Entry[]; unreadable: string[] }> {
+  const unreadable: string[] = []
+  const entries: Entry[] = []
+  if (project.folder) {
+    const scanned = await scanFolder(project.folder, exiftool, { subfolders: project.subfolders })
+    unreadable.push(...scanned.unreadable)
+    entries.push(...entriesOfScan(scanned).filter((e) => !project.removed.some((r) => samePath(r, e.photo.path))))
+  }
+  if (project.added.length) {
+    const scanned = await scanFiles(project.folder, project.added, exiftool)
+    unreadable.push(...scanned.unreadable)
+    const have = filesOf(entries)
+    entries.push(...entriesOfScan(scanned).filter((e) => !have.has(e.photo.path.toLowerCase())))
+  }
+  return { entries: renumber(entries), unreadable }
+}
+
+/**
+ * Reads a project and shows it: opening a folder, Refresh (`keep`), the last session at start
+ * (`restored`, tz.md, п. 7.1: the strip scroll comes back, the map stays).
+ */
+async function loadProject(
+  project: Project,
+  opts: { selectPath?: string; restored?: { scroll: number }; keep?: { paths: string[]; filter: StripFilter } } = {}
+): Promise<boolean> {
+  const { selectPath, restored, keep } = opts
+  if (!win) return false
+  const folder = titleFolder(project)
   win.webContents.send(IPC.folderLoading, { folder })
   let scanned
   try {
-    scanned = await scanFolder(folder, exiftool, { subfolders })
+    scanned = await scanProject(project)
   } catch (e) {
     log.error(`Cannot open folder ${folder}: ${String(e)}`)
     await dialog.showMessageBox(win, {
@@ -509,20 +610,16 @@ async function openFolder(
     })
     // Back to what was shown before.
     if (current) win.webContents.send(IPC.folderLoaded, current.data)
-    return
+    return false
   }
 
   generation++
   thumbnails.clear()
   liveVideos.clear()
-  const chosen = selectPath ? scanned.photos.find((p) => samePath(p.path, selectPath)) : undefined
-  current = {
-    data: { folder, photos: scanned.photos, generation, selected: chosen?.id ?? null },
-    sources: scanned.sources,
-    fileMeta: scanned.photos.map((p) => ({ coords: p.coords, address: p.address, altitude: p.altitude })),
-    subfolders
-  }
-  for (const dir of scanned.unreadable) log.warn(`Subfolder skipped, cannot be read: ${dir}`)
+  const photos = scanned.entries.map((e) => e.photo)
+  const chosen = selectPath ? photos.find((p) => samePath(p.path, selectPath)) : undefined
+  current = projectOf(scanned.entries, project, chosen?.id ?? null)
+  for (const dir of scanned.unreadable) log.warn(`Folder skipped, cannot be read: ${dir}`)
   // A new folder: every point may be asked again (tz.md, п. 5.5).
   addressRetry.clear()
   altitudeRetry.clear()
@@ -532,22 +629,32 @@ async function openFolder(
     ...(restored ? { restored: { scroll: restored.scroll } } : {}),
     ...(keep ? { keep: { ids: idsByPath(current.data.photos, keep.paths), filter: keep.filter } } : {})
   })
-  setRecent((list) => addRecent(list, folder))
+  // Only folders go to Open Recent (п. 3.1).
+  const opened = project.folder
+  if (opened) setRecent((list) => addRecent(list, opened))
   refreshEditState()
   kickQueues()
 
-  const withCoords = scanned.photos.filter((p) => p.coords).length
-  log.info(
-    `Folder opened: ${folder}${subfolders ? ' (with subfolders)' : ''}; photos: ${scanned.photos.length}, with coordinates: ${withCoords}`
-  )
+  const withCoords = photos.filter((p) => p.coords).length
+  const parts = [
+    opened ? `folder ${opened}${project.subfolders ? ' (with subfolders)' : ''}` : 'no folder',
+    ...(project.added.length ? [`added files: ${project.added.length}`] : []),
+    ...(project.removed.length ? [`taken off the strip: ${project.removed.length}`] : [])
+  ]
+  log.info(`Opened: ${parts.join('; ')}; photos: ${photos.length}, with coordinates: ${withCoords}`)
+  reportReadErrors(photos)
+  return true
+}
 
-  const failed = scanned.photos.filter((p) => p.error)
+/** Files that could not be read: in the log and in a window (tz.md, п. 6.7). */
+function reportReadErrors(photos: readonly Photo[]): void {
+  const failed = photos.filter((p) => p.error)
   for (const p of failed) log.warn(`Read error: ${p.path}: ${p.error}`)
-  if (failed.length) {
+  if (failed.length && win) {
     void dialog.showMessageBox(win, {
       type: 'warning',
       title: t('error.read.title'),
-      message: t('error.read.message', { count: failed.length, total: scanned.photos.length }),
+      message: t('error.read.message', { count: failed.length, total: photos.length }),
       detail: failed
         .slice(0, 30)
         .map((p) => `${p.name}: ${p.error}`)
@@ -557,26 +664,160 @@ async function openFolder(
   }
 }
 
+/** Adding files that is under way: the next add waits for it, so both land on the strip. */
+let addingFiles: Promise<void> = Promise.resolve()
+
 /**
- * "Open Photo…": a file dialog filtered to photos, so the photos in folders are visible;
- * the chosen photo opens its whole folder and becomes selected (tz.md, п. 3.1).
+ * Adds files to the strip (tz.md, п. 3.1: Add Files…, dropped files, files given at start)
+ * without starting a new project: what is on the strip stays, with its unsaved changes. Files
+ * already on it are not added again. The added photos become selected, the first of them current;
+ * the map shows those with coordinates.
  */
-async function choosePhoto(): Promise<void> {
+function addFiles(list: readonly string[]): Promise<void> {
+  addingFiles = addingFiles.then(() => addFilesNow(list)).catch((e) => log.error(`Adding files failed: ${String(e)}`))
+  return addingFiles
+}
+
+async function addFilesNow(list: readonly string[]): Promise<void> {
   if (!win) return
+  const present = filesOf(entriesOf(current))
+  const unique = [...new Map(list.filter((p) => isSupported(p)).map((p) => [p.toLowerCase(), p] as const)).values()]
+  const fresh = unique.filter((p) => !present.has(p.toLowerCase()))
+  if (!fresh.length) {
+    log.info(`Nothing to add: ${list.length} file(s), on the strip already or not photos or videos`)
+    return
+  }
+  const base = current?.project ?? EMPTY_PROJECT
+  win.webContents.send(IPC.folderLoading, { folder: titleFolder(base), adding: true })
+  let scanned: ScannedFolder
+  try {
+    scanned = await scanFiles(base.folder, fresh, exiftool)
+  } catch (e) {
+    log.error(`Cannot add files: ${String(e)}`)
+    if (current) win.webContents.send(IPC.folderLoaded, keptView(current))
+    await dialog.showMessageBox(win, {
+      type: 'error',
+      title: t('error.add.title'),
+      message: t('error.add.message', { count: fresh.length }),
+      detail: String(e),
+      buttons: [t('dialog.ok')]
+    })
+    return
+  }
+  // Saving changes the photos it writes: they are merged after it.
+  while (saving) await sleep(200)
+  if (!win) return
+
+  // The strip as it is now: it may have changed meanwhile.
+  const kept = entriesOf(current)
+  const project = current?.project ?? EMPTY_PROJECT
+  const have = filesOf(kept)
+  const added = entriesOfScan(scanned)
+    .filter((e) => !have.has(e.photo.path.toLowerCase()))
+    .map((e) => ({ ...e, photo: { ...e.photo, name: displayName(project.folder, e.photo.path) } }))
+  for (const dir of scanned.unreadable) log.warn(`Folder skipped, cannot be read: ${dir}`)
+  if (!added.length) {
+    log.info('Nothing added')
+    if (current) win.webContents.send(IPC.folderLoaded, keptView(current))
+    return
+  }
+  // A MOV on the strip by itself that is the pair of an added photo goes with the photo (п. 3.3.7).
+  const paired = new Set(added.flatMap((e) => (e.source.live?.kind === 'pair' ? [e.source.live.video.path.toLowerCase()] : [])))
+  const stays = kept.filter((e) => !paired.has(e.source.path.toLowerCase()))
+  const addedPaths = new Set(added.map((e) => e.photo.path.toLowerCase()))
+  const entries = renumber([...stays, ...added])
+  const ids = entries.filter((e) => addedPaths.has(e.photo.path.toLowerCase())).map((e) => e.photo.id)
+  // In the order they were given: the title names the folder of the first one (п. 4.13).
+  const given = fresh.map((p) => p.toLowerCase())
+  const rank = (p: string): number => given.indexOf(p.toLowerCase())
+  const next = withAdded(
+    { ...project, added: project.added.filter((p) => !paired.has(p.toLowerCase())) },
+    added.map((e) => e.photo.path).sort((a, b) => rank(a) - rank(b))
+  )
+  generation++
+  current = projectOf(entries, next, ids[0] ?? null)
+  selection = new Set(ids)
+  win.webContents.send(IPC.folderLoaded, { ...current.data, keep: { ids, filter: ui.filter }, show: ids })
+  refreshEditState()
+  kickQueues()
+  log.info(`Files added: ${added.length}; photos on the strip: ${entries.length}: ${added.map((e) => e.photo.path).join(', ')}`)
+  reportReadErrors(added.map((e) => e.photo))
+}
+
+/** The strip as it is, sent again (after the "adding…" status): selection, filter, map, scroll stay. */
+function keptView(folder: OpenFolder): FolderData {
+  return {
+    ...folder.data,
+    selected: ui.current,
+    restored: { scroll: viewState?.scroll ?? 0 },
+    keep: { ids: ui.ids, filter: ui.filter }
+  }
+}
+
+/**
+ * Del of photos without coordinates (tz.md, п. 6.6): they leave the strip, the files on disk stay;
+ * their unsaved changes are lost. Files of the folder taken off are remembered (Refresh and the
+ * next run do not bring them back). The next photo in the strip becomes current.
+ */
+function removePhotos(req: unknown): void {
+  const folder = current
+  if (!win || !folder || saving || !validRemovePhotos(req) || req.generation !== folder.data.generation) return
+  const ids = new Set(req.ids.filter((id) => id < folder.data.photos.length))
+  // With coordinates, Del removes those instead (the window decides); never both.
+  if (!ids.size || [...ids].some((id) => folder.data.photos[id]!.coords)) return
+  const gone = folder.data.photos.filter((p) => ids.has(p.id))
+  const nextOld = afterRemoval(folder.data.photos.map((p) => p.id), ids)
+  const nextPath = nextOld === null ? null : folder.data.photos[nextOld]!.path
+  const entries = renumber(entriesOf(folder).filter((e) => !ids.has(e.photo.id)))
+  const project = withRemoved(folder.project, gone.map((p) => p.path))
+  const nextId = nextPath === null ? null : (entries.find((e) => e.photo.path === nextPath)?.photo.id ?? null)
+  generation++
+  current = isEmptyProject(project) ? null : projectOf(entries, project, nextId)
+  selection = new Set(nextId === null ? [] : [nextId])
+  const lost = gone.filter((p) => p.modified).length
+  log.info(
+    `Taken off the strip: ${gone.length}${lost ? ` (unsaved changes of ${lost} lost)` : ''}: ${gone.map((p) => p.path).join(', ')}`
+  )
+  const data: FolderData = current
+    ? { ...current.data, restored: { scroll: viewState?.scroll ?? 0 }, keep: { ids: [...selection], filter: ui.filter } }
+    : { folder: '', photos: [], generation, selected: null }
+  win.webContents.send(IPC.folderLoaded, data)
+  refreshEditState()
+  kickQueues()
+}
+
+/** The file dialog of Open Folder… and Add Files… (п. 3.1): filtered to photos and videos. */
+async function chooseFiles(title: string, many: boolean): Promise<string[]> {
+  if (!win) return []
   // The open folder, or the last one opened, also in an earlier run.
-  const last = current?.data.folder ?? recentFolders[0]
+  const last = current?.data.folder || recentFolders[0]
   const startDir = last && isDirectory(last) ? last : undefined
   const res = await dialog.showOpenDialog(win, {
-    title: t('dialog.openPhoto'),
-    properties: ['openFile'],
+    title,
+    properties: many ? ['openFile', 'multiSelections'] : ['openFile'],
     filters: [
       { name: t('dialog.photos'), extensions: [...SUPPORTED_EXTENSIONS] },
       { name: t('dialog.allFiles'), extensions: ['*'] }
     ],
     ...(startDir ? { defaultPath: startDir } : {})
   })
-  const file = res.filePaths[0]
-  if (!res.canceled && file) await openPath(file)
+  return res.canceled ? [] : res.filePaths
+}
+
+/**
+ * Open Folder… (tz.md, п. 3.1): a file dialog filtered to photos, so the photos in folders are
+ * visible (the folder dialog of Windows shows no files); the chosen photo opens its whole folder
+ * and becomes selected.
+ */
+async function chooseFolder(): Promise<void> {
+  const [file] = await chooseFiles(t('dialog.openFolder'), false)
+  if (file) await openFolder(parentOf(file), file)
+}
+
+/** Add Files… (п. 3.1): the chosen files join the strip. */
+async function chooseAddFiles(): Promise<void> {
+  const files = await chooseFiles(t('dialog.addFiles'), true)
+  if (files.length) await addFiles(files)
 }
 
 function updateMenu(recent: string[]): void {
@@ -584,8 +825,9 @@ function updateMenu(recent: string[]): void {
     buildMenu(
       t,
       {
-        openPhoto: () => void choosePhoto(),
-        openRecent: (folder) => void openPath(folder),
+        openFolder: () => void chooseFolder(),
+        addFiles: () => void chooseAddFiles(),
+        openRecent: (folder) => void openRecent(folder),
         refresh: () => void refresh(),
         clearRecent: () => setRecent(() => []),
         save: () => void save(),
@@ -1411,10 +1653,10 @@ void app.whenReady().then(async () => {
   serveThumbnails()
   ipcMain.handle(IPC.init, () => {
     // The window is ready: now the folder or photo from the launch parameter can be opened.
-    const path = startupPath
-    startupPath = undefined
-    // A folder or photo given as a parameter wins over the last session (tz.md, п. 7.2).
-    if (path) setImmediate(() => void openPath(path))
+    const given = startupPaths
+    startupPaths = []
+    // Folders and files given as parameters win over the last session (tz.md, п. 7.2).
+    if (given.length) setImmediate(() => void openPaths(given))
     else if (!current && lastSession) setImmediate(() => void restoreSession())
     // The window was reloaded (View → Reload in development): show the open folder again,
     // with its unsaved changes, which live in main.
@@ -1428,10 +1670,11 @@ void app.whenReady().then(async () => {
     }
     return initData()
   })
-  // A folder or photo dropped from Explorer (tz.md, п. 3.1).
-  ipcMain.handle(IPC.openPath, (_e, path: unknown) => {
-    if (typeof path === 'string' && path) void openPath(path)
+  // Folders and files dropped from Explorer (tz.md, п. 3.1).
+  ipcMain.handle(IPC.openPaths, (_e, list: unknown) => {
+    if (Array.isArray(list)) void openPaths(list.filter((p): p is string => typeof p === 'string' && p !== ''))
   })
+  ipcMain.handle(IPC.removePhotos, (_e, req: unknown) => removePhotos(req))
   ipcMain.handle(IPC.setCoords, (_e, req: unknown) => setCoords(req))
   ipcMain.on(IPC.uiState, (_e, state: unknown) => {
     ui = validUiState(state) ?? ui

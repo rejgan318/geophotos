@@ -69,13 +69,33 @@ describe('state between runs (tz.md, п. 7.5)', () => {
 
   it('the folder, photo, strip scroll and subfolders choice of the last session survive a restart (пп. 7.1, 3.2)', () => {
     const file = stateFile()
-    const lastSession = { folder: NIGHT, photo: `${NIGHT}\\IMG_0001.CR2`, scroll: 840, subfolders: true }
+    const lastSession = { folder: NIGHT, photo: `${NIGHT}\\IMG_0001.CR2`, scroll: 840, subfolders: true, added: [], removed: [] }
     writeState(file, { recentFolders: [NIGHT], ...NONE, lastSession })
     expect(readState(file)).toEqual({ recentFolders: [NIGHT], ...NONE, lastSession })
-    // Files of earlier versions have no scroll and no subfolders choice.
+    // Files of earlier versions have no scroll, no subfolders choice, no added or removed files.
     writeFileSync(file, JSON.stringify({ lastSession: { folder: 'D:\\x', photo: 5 } }))
-    expect(readState(file).lastSession).toEqual({ folder: 'D:\\x', photo: null, scroll: 0, subfolders: false })
+    expect(readState(file).lastSession).toEqual({ folder: 'D:\\x', photo: null, scroll: 0, subfolders: false, added: [], removed: [] })
     writeFileSync(file, JSON.stringify({ lastSession: { photo: 'D:\\x\\a.jpg' } }))
+    expect(readState(file).lastSession).toBeNull()
+  })
+
+  it('the project survives a restart: added files, files taken off the strip, no folder (п. 3.1)', () => {
+    const file = stateFile()
+    const lastSession = {
+      folder: NIGHT,
+      photo: 'E:\\Phone\\a.jpg',
+      scroll: 0,
+      subfolders: false,
+      added: ['E:\\Phone\\a.jpg', 'E:\\Phone\\b.heic'],
+      removed: [`${NIGHT}\\IMG_0002.CR2`]
+    }
+    writeState(file, { recentFolders: [NIGHT], ...NONE, lastSession })
+    expect(readState(file).lastSession).toEqual(lastSession)
+    // Only added files: no folder, so nothing of a folder taken off.
+    const only = { ...lastSession, folder: null, removed: [] }
+    writeState(file, { recentFolders: [], ...NONE, lastSession: only })
+    expect(readState(file).lastSession).toEqual(only)
+    writeFileSync(file, JSON.stringify({ lastSession: { folder: null, added: [5, ''], removed: ['x'] } }))
     expect(readState(file).lastSession).toBeNull()
   })
 

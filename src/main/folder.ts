@@ -1,5 +1,5 @@
 import { readdir } from 'node:fs/promises'
-import { join, relative } from 'node:path'
+import { join } from 'node:path'
 import { baseNameOf, formatOf, isSidecar, isSupported, sidecarNameOf, sidecarOwners, type PreviewKind } from '@shared/formats'
 import {
   ADDRESS_READ_ARGS,
@@ -18,6 +18,7 @@ import {
 import { contentId, embeddedLiveTag, LIVE_VIDEO_TAGS, livePairs } from '@shared/live'
 import type { Address, CoordSource, LatLon, Photo } from '@shared/photo'
 import type { WriteInfo } from '@shared/write-plan'
+import { displayName, parentOf } from '@shared/project'
 import type { ExifTool } from './exiftool'
 
 /**
@@ -134,6 +135,41 @@ export async function scanFolder(
   }
 }
 
+/**
+ * Reads some files (tz.md, п. 3.1: added to the strip). Named by their path from `folder` (the
+ * opened one) if they are in it, else by the full path (п. 3.2). Read by the same rules as a
+ * folder: the XMP next to a file (п. 3.7) and the MOV of an iPhone Live Photo (п. 3.3.7) come
+ * along although not given. Files that are not photos or videos, or are missing, are skipped.
+ * A folder that cannot be read: its files are skipped, the folder is in `unreadable`.
+ */
+export async function scanFiles(folder: string | null, files: readonly string[], exiftool: ExifTool): Promise<ScannedFolder> {
+  const byDir = new Map<string, { dir: string; names: Set<string> }>()
+  for (const file of files) {
+    const name = fileNameOf(file)
+    if (!isSupported(name)) continue
+    const dir = parentOf(file)
+    const key = dir.toLowerCase()
+    const entry = byDir.get(key) ?? { dir, names: new Set<string>() }
+    entry.names.add(name.toLowerCase())
+    byDir.set(key, entry)
+  }
+  const unreadable: string[] = []
+  const items: Item[] = []
+  for (const { dir, names } of byDir.values()) {
+    try {
+      items.push(...(await scanOne(folder, dir, exiftool, names)))
+    } catch {
+      unreadable.push(dir)
+    }
+  }
+  items.sort((a, b) => comparePhotos(a.photo, b.photo))
+  return {
+    photos: items.map((it, id) => ({ id, ...it.photo })),
+    sources: items.map((it) => it.source),
+    unreadable
+  }
+}
+
 /** The folder and every folder inside it, all levels; unreadable ones go to `unreadable`. */
 async function allFolders(folder: string, unreadable: string[]): Promise<string[]> {
   const result: string[] = []
@@ -156,15 +192,24 @@ async function allFolders(folder: string, unreadable: string[]): Promise<string[
 
 type Item = { photo: Omit<Photo, 'id'>; source: PhotoSource }
 
-/** The photos of one folder (`dir`), named by their path from the opened `root`. */
-async function scanOne(root: string, folder: string, exiftool: ExifTool): Promise<Item[]> {
+/**
+ * The photos of one folder (`dir`), named by their path from the opened `root` (п. 3.2). With
+ * `only` (lower-case file names), just those files — and the MOV of a live pair of a photo
+ * among them (п. 3.3.7).
+ */
+async function scanOne(root: string | null, folder: string, exiftool: ExifTool, only?: ReadonlySet<string>): Promise<Item[]> {
   const entries = await readdir(folder, { withFileTypes: true })
   const names = entries.filter((e) => e.isFile()).map((e) => e.name)
-  const photoNames = names.filter(isSupported)
+  const supported = names.filter(isSupported)
+  const given = (n: string): boolean => !only || only.has(n.toLowerCase())
+  // Videos that may be the MOV of a live pair of a given photo: the same base name.
+  const photoBases = new Set(supported.filter((n) => given(n) && !formatOf(n)!.video).map((n) => baseNameOf(n).toLowerCase()))
+  const photoNames = supported.filter((n) => given(n) || (formatOf(n)!.video && photoBases.has(baseNameOf(n).toLowerCase())))
   const sidecarNames = names.filter(isSidecar)
   if (!photoNames.length) return []
 
-  const own = sidecarOwners(photoNames)
+  // Who owns an XMP is decided by the whole folder (п. 3.7: a RAW of the name wins over a video).
+  const own = sidecarOwners(supported)
   // Existing sidecars by base name, with their actual file names.
   const sidecarFiles = new Map(sidecarNames.map((n) => [baseNameOf(n).toLowerCase(), n]))
 
@@ -189,7 +234,7 @@ async function scanOne(root: string, folder: string, exiftool: ExifTool): Promis
   })
   const tracks = await readTracks(exiftool, folder, deep)
 
-  return photoNames.filter((name) => !pairedVideos.has(name)).map((name) => {
+  return photoNames.filter((name) => !pairedVideos.has(name) && given(name)).map((name) => {
     const path = join(folder, name)
     const rec = records.get(name.toLowerCase())
     const format = formatOf(name)!
@@ -227,7 +272,7 @@ async function scanOne(root: string, folder: string, exiftool: ExifTool): Promis
       live
     }
     const track = tracks.get(name.toLowerCase()) ?? null
-    const photo = toPhoto(relative(root, path), path, rec, sidecarRec, { video: format.video, track })
+    const photo = toPhoto(displayName(root, path), path, rec, sidecarRec, { video: format.video, track })
     return { photo: live ? { ...photo, live: true as const } : photo, source }
   })
 }

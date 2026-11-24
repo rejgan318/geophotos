@@ -24,7 +24,8 @@ const api: GeoPhotosApi = {
   onFolderLoaded: (cb) => {
     ipcRenderer.on(IPC.folderLoaded, (_e, data: FolderData) => cb(data))
   },
-  openPath: (path) => ipcRenderer.invoke(IPC.openPath, path) as Promise<void>,
+  openPaths: (paths) => ipcRenderer.invoke(IPC.openPaths, paths) as Promise<void>,
+  removePhotos: (req) => ipcRenderer.invoke(IPC.removePhotos, req) as Promise<void>,
   pathForFile: (file) => webUtils.getPathForFile(file),
   setCoords: (req) => ipcRenderer.invoke(IPC.setCoords, req) as Promise<void>,
   onPhotosChanged: (cb) => {

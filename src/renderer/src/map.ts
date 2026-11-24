@@ -301,6 +301,22 @@ export class MapView {
     return true
   }
 
+  /**
+   * Fits the view to the markers of some photos (added files, tz.md, п. 3.1) that are shown now.
+   * False (and the view stays) when none of them has a marker.
+   */
+  fitPhotos(ids: readonly number[]): boolean {
+    const points = ids
+      .filter((id) => !this.shown || this.shown.has(id))
+      .flatMap((id) => {
+        const m = this.markers.get(id)
+        return m ? [m.getLatLng()] : []
+      })
+    if (!points.length) return false
+    this.map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 16 })
+    return true
+  }
+
   /** Photos with new coordinates: their markers move; the view stays. */
   updatePhotos(changed: Photo[]): void {
     for (const p of changed) {

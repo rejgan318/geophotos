@@ -8,6 +8,7 @@ import type {
   InitData,
   PhotosChanged,
   QueueState,
+  RemovePhotosRequest,
   SaveState,
   SearchResult,
   SetCoordsRequest,
@@ -21,8 +22,13 @@ export interface GeoPhotosApi {
   init(): Promise<InitData>
   onFolderLoading(cb: (data: FolderLoading) => void): void
   onFolderLoaded(cb: (data: FolderData) => void): void
-  /** Opens a folder, or the folder of a photo with that photo selected. */
-  openPath(path: string): Promise<void>
+  /**
+   * Folders and files dropped from Explorer (tz.md, п. 3.1): the first folder opens (a new
+   * project), the files are added to the strip.
+   */
+  openPaths(paths: string[]): Promise<void>
+  /** Takes photos off the strip (Del, tz.md, п. 6.6); the strip comes again through onFolderLoaded. */
+  removePhotos(req: RemovePhotosRequest): Promise<void>
   /** Disk path of a file or folder dropped onto the window ('' if it has none). */
   pathForFile(file: File): string
   /** Gives photos new coordinates; the change comes back through onPhotosChanged. */

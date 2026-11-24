@@ -126,6 +126,7 @@ export function sameCoords(a: LatLon | null, b: LatLon | null): boolean {
 }
 
 export interface FolderData {
+  /** The folder the title names (tz.md, п. 4.13); '' — nothing open. */
   folder: string
   photos: Photo[]
   /** Generation of the opened folder; part of thumbnail URLs so old ones are not reused. */
@@ -142,6 +143,11 @@ export interface FolderData {
    * strip filter stay as they were.
    */
   keep?: { ids: number[]; filter: StripFilter }
+  /**
+   * Files were added (tz.md, п. 3.1): the map shows these photos (those with coordinates) and
+   * nothing else moves; with `keep`, they are the selection.
+   */
+  show?: number[]
 }
 
 export function formatCoords(c: LatLon): string {

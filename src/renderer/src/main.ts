@@ -364,11 +364,16 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
         if (!e.repeat) toggleThumbnails()
         return
       }
-      // Del: the selected photos lose their coordinates (and address, altitude) until Save.
+      // Del (tz.md, п. 6.6): the selected photos lose their coordinates (and address, altitude)
+      // until Save; if none of them has any, they leave the strip.
       if (e.key === 'Delete' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
         e.preventDefault()
         e.stopPropagation()
-        if (!e.repeat && folder) void setCoords([...sel.ids], null)
+        if (!e.repeat && folder && !saving && sel.ids.size) {
+          const ids = [...sel.ids]
+          if (ids.some((id) => folder?.photos[id]?.coords)) void setCoords(ids, null)
+          else void window.geophotos.removePhotos({ generation: folder.generation, ids })
+        }
         return
       }
       // Ctrl+C / Ctrl+V of coordinates, by the physical key (any layout). Text fields keep
@@ -429,23 +434,29 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     }
   })
 
-  window.geophotos.onFolderLoading(({ folder: path }) => {
+  window.geophotos.onFolderLoading(({ folder: path, adding }) => {
+    // Files being added (tz.md, п. 3.1): the strip stays as it is meanwhile.
+    if (adding) return note(t('status.adding'))
     strip.clear()
     note('')
     statusPhoto.textContent = t('status.loading', { folder: path })
   })
 
   window.geophotos.onFolderLoaded((data) => {
-    folder = data
+    if (statusNote.textContent === t('status.adding')) note('')
+    // Everything taken off the strip, no folder: nothing is open.
+    folder = data.folder || data.photos.length ? data : null
     // Refresh keeps the selection and the filter (tz.md, п. 3.8); any other opening starts afresh.
     const keep = data.keep
     const cur = keep ? (data.selected ?? keep.ids.at(-1) ?? null) : null
     sel = keep && cur !== null ? { ids: new Set(keep.ids.length ? keep.ids : [cur]), current: cur, anchor: cur } : EMPTY_SELECTION
     filter = keep?.filter ?? 'all'
     strip.setPhotos(data)
-    // The folder of the last run or a refresh: the map stays where it was (tz.md, пп. 7.1, 3.8).
-    map.setPhotos(data.photos, data.generation, !data.restored)
+    // The folder of the last run or a refresh: the map stays where it was (tz.md, пп. 7.1, 3.8);
+    // added files: the map shows them (п. 3.1).
+    map.setPhotos(data.photos, data.generation, !data.restored && !data.show)
     applyFilter()
+    if (data.show) map.fitPhotos(data.show)
     if (keep && sel.current !== null) select(sel)
     // The photo chosen in the dialog or dropped onto the window becomes selected (tz.md, п. 3.1).
     // Otherwise the first photo already is (a photo is always selected, п. 4.4).
@@ -501,8 +512,9 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     note(s.failed ? t('save.doneFailed', { saved: s.saved, failed: s.failed }) : t('save.done', { saved: s.saved }))
   })
 
-  // Dropping a folder or photo from Explorer opens it; photos dragged inside the window are
-  // handled by the map and the strip; anything else is ignored (and never navigates the window).
+  // Dropping from Explorer (tz.md, п. 3.1): a folder opens, files are added to the strip; photos
+  // dragged inside the window are handled by the map and the strip; anything else is ignored
+  // (and never navigates the window).
   document.addEventListener('dragover', (e) => {
     const types = e.dataTransfer?.types ?? []
     if (types.includes(PHOTO_DRAG_TYPE)) return
@@ -512,9 +524,8 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   document.addEventListener('drop', (e) => {
     e.preventDefault()
     if (dragged) return
-    const file = e.dataTransfer?.files[0]
-    const path = file ? window.geophotos.pathForFile(file) : ''
-    if (path) void window.geophotos.openPath(path)
+    const paths = [...(e.dataTransfer?.files ?? [])].map((f) => window.geophotos.pathForFile(f)).filter((p) => p !== '')
+    if (paths.length) void window.geophotos.openPaths(paths)
   })
 
   byId('strip').addEventListener('scroll', reportView, { passive: true })

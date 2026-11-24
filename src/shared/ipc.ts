@@ -11,8 +11,10 @@ export const IPC = {
   folderLoading: 'folder:loading',
   /** event, main → window: a folder was read. */
   folderLoaded: 'folder:loaded',
-  /** invoke, window → main: open a dropped folder or photo. */
-  openPath: 'path:open',
+  /** invoke, window → main: folders and files dropped from Explorer (tz.md, п. 3.1). */
+  openPaths: 'paths:open',
+  /** invoke, window → main: take photos off the strip (Del, tz.md, п. 6.6). */
+  removePhotos: 'photos:remove',
   /** invoke, window → main: give photos new coordinates (not saved yet). */
   setCoords: 'photos:setCoords',
   /** event, main → window: some photos changed (coordinates, unsaved mark). */
@@ -94,6 +96,27 @@ export function validViewState(v: unknown): ViewState | null {
 
 export interface FolderLoading {
   folder: string
+  /** Files are being added (tz.md, п. 3.1): the strip stays as it is meanwhile. */
+  adding?: boolean
+}
+
+/** Del of photos without coordinates (tz.md, п. 6.6): they leave the strip. */
+export interface RemovePhotosRequest {
+  /** Generation the ids belong to: a request for an older strip is ignored. */
+  generation: number
+  ids: number[]
+}
+
+/** Checks a remove request coming from the window. */
+export function validRemovePhotos(v: unknown): v is RemovePhotosRequest {
+  if (!v || typeof v !== 'object') return false
+  const r = v as Record<string, unknown>
+  const ids = r['ids']
+  return (
+    Number.isInteger(r['generation']) &&
+    Array.isArray(ids) &&
+    ids.every((id) => Number.isInteger(id) && (id as number) >= 0)
+  )
 }
 
 export interface SetCoordsRequest {
