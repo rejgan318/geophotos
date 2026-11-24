@@ -4,6 +4,8 @@ import type { Photo } from '@shared/photo'
 export type { StripFilter }
 
 export function matchesFilter(p: Photo, f: StripFilter): boolean {
+  // Tracks are shown whatever the filter (tz.md, п. 3.9.3).
+  if (p.track) return true
   if (f === 'coords') return p.coords !== null
   if (f === 'noCoords') return p.coords === null
   if (f === 'modified') return p.modified
@@ -20,7 +22,7 @@ export function visibleIds(photos: readonly Photo[], f: StripFilter): number[] {
  * so an active filter that became empty (e.g. "modified" after saving) falls back to "all".
  */
 export function effectiveFilter(photos: readonly Photo[], f: StripFilter): StripFilter {
-  return f !== 'all' && !photos.some((p) => matchesFilter(p, f)) ? 'all' : f
+  return f !== 'all' && !photos.some((p) => !p.track && matchesFilter(p, f)) ? 'all' : f
 }
 
 /** A click on a filter button: the active filter (other than "all") is switched off by a second click. */

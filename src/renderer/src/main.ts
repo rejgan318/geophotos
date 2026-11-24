@@ -24,6 +24,9 @@ import {
   type Selection
 } from './selection'
 import { PHOTO_DRAG_TYPE, Strip } from './strip'
+import type L from './leaflet-global'
+import { TrackLayer } from './track-layer'
+import { TrackSummaryView } from './track-view'
 
 const byId = (id: string): HTMLElement => document.getElementById(id)!
 
@@ -49,6 +52,8 @@ async function start(): Promise<void> {
   const progress = byId('progress')
   const progressText = byId('progress-text')
   let folder: FolderData | null = null
+  /** Whether an item of the strip is a track (tz.md, п. 3.9). */
+  const isTrackId = (id: number): boolean => !!folder?.photos[id]?.track
   let sel: Selection = EMPTY_SELECTION
   /** Photos being dragged from the strip (drag data cannot be read before the drop). */
   let dragged: number[] | null = null
@@ -201,6 +206,10 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     sel = next
     strip.setSelection(sel)
     map.setSelection(sel.ids, sel.current)
+    // The selected track is wider; if it is wholly off the map, the map shows it (tz.md, п. 3.9.4).
+    const track = sel.current !== null && isTrackId(sel.current) ? sel.current : null
+    tracks.setCurrent(track)
+    if (track !== null && view === 'map') tracks.reveal(track)
     showStatus()
     showPhoto()
     reportState()
@@ -211,14 +220,68 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     window.geophotos.reportState({ ids: [...sel.ids], current: sel.current, filter, view, mapMode })
   }
 
+  /** The photo view, or for a track the track view (tz.md, пп. 4.14, 3.9.6). */
   const showPhoto = (): void => {
     const p = sel.current === null ? null : (folder?.photos[sel.current] ?? null)
+    if (view === 'photo' && p?.track) {
+      viewer.setVisible(false)
+      enterTrackView(p.id)
+      return
+    }
+    leaveTrackView()
+    viewer.setVisible(view === 'photo')
     viewer.show(p, folder?.generation ?? 0)
+  }
+
+  /** Where the map was before the track view: it comes back after it (п. 3.9.6). */
+  /**
+   * Where the map was before the track view, and the item that was current then: the map comes
+   * back there (п. 3.9.6) — unless another item became current meanwhile; then the map shows it.
+   */
+  let mapBefore: { center: L.LatLng; zoom: number; item: number | null } | null = null
+  const enterTrackView = (id: number): void => {
+    const p = folder?.photos[id]
+    const data = tracks.data(id)
+    if (!p || !data) {
+      leaveTrackView()
+      summary.hide()
+      return
+    }
+    if (!mapBefore) mapBefore = { center: map.leaflet.getCenter(), zoom: map.leaflet.getZoom(), item: id }
+    map.setStill(true)
+    tracks.showOnly(id)
+    summary.show(p.name, data, tracks.colorOf(p))
+    // The whole track in the room the summary and the profile leave (tz.md, п. 3.9.6).
+    tracks.fit(id, { animate: false, ...summary.margins() })
+  }
+  const leaveTrackView = (): void => {
+    if (!summary.visible && !mapBefore) return
+    summary.hide()
+    tracks.showOnly(null)
+    map.setStill(false)
+    const before = mapBefore
+    mapBefore = null
+    if (!before) return
+    map.leaflet.setView(before.center, before.zoom, { animate: false })
+    const cur = sel.current
+    if (cur === null || cur === before.item) return
+    // Another track became current in the track view: the map shows the whole of it; a photo —
+    // its marker, if it is off the map (п. 4.4.2).
+    if (isTrackId(cur)) tracks.fit(cur, { animate: false })
+    else map.revealCurrent()
   }
 
   /** Double click, C, View → Show on Map: the current photo on the map (tz.md, п. 4.4.2). */
   const showOnMap = (): void => {
-    if (sel.current === null || !folder?.photos[sel.current]?.coords) return
+    if (sel.current === null) return
+    const p = folder?.photos[sel.current]
+    // A track: the whole of it (tz.md, п. 3.9.4).
+    if (p?.track) {
+      if (view === 'photo') toggleView()
+      tracks.fit(p.id)
+      return
+    }
+    if (!p?.coords) return
     if (view === 'photo') toggleView()
     map.showOnMap(sel.current)
   }
@@ -246,7 +309,6 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   /** Space and View menu: the map or the current photo (tz.md, п. 9.3). */
   const toggleView = (): void => {
     view = view === 'map' ? 'photo' : 'map'
-    viewer.setVisible(view === 'photo')
     showPhoto()
     if (view === 'map') map.invalidateSize()
     reportState()
@@ -301,7 +363,7 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     onViewChanged: () => reportView()
   })
   const strip = new Strip(byId('strip'), t, {
-    onClick: (id, mods) => select(clickSelect(sel, id, mods, order)),
+    onClick: (id, mods) => select(clickSelect(sel, id, mods, order, isTrackId)),
     // Double click: show the photo on the map (from the photo view, back to the map first).
     onDoubleClick: (id) => {
       if (sel.current !== id || sel.ids.size !== 1) select(single(id))
@@ -317,6 +379,12 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     onDropOnPhoto: (ids, coords) => void setCoords(ids, coords),
     dragged: () => dragged
   })
+  const tracks = new TrackLayer(map.leaflet, init.tracks, t, {
+    onClick: (id) => {
+      if (view === 'map') select(single(id))
+    }
+  })
+  const summary = new TrackSummaryView(byId('map'), t, (p, color) => tracks.showProbe(p, color))
   addSearchBox(map, t)
   const viewer = new PhotoView(byId('viewer'), t, (id) => void window.geophotos.openInPlayer(id))
   const help = new HelpView(t)
@@ -364,16 +432,16 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
         if (!e.repeat) toggleThumbnails()
         return
       }
-      // Del (tz.md, п. 6.6): the selected photos lose their coordinates (and address, altitude)
-      // until Save; if none of them has any, they leave the strip.
-      if (e.key === 'Delete' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+      // Del (tz.md, п. 6.6): the selected photos or track leave the strip (main asks first if
+      // some have unsaved changes). Ctrl+Del: the selected photos lose their coordinates (and
+      // address, altitude) until Save.
+      if (e.key === 'Delete' && !e.altKey && !e.metaKey && !e.shiftKey) {
         e.preventDefault()
         e.stopPropagation()
-        if (!e.repeat && folder && !saving && sel.ids.size) {
-          const ids = [...sel.ids]
-          if (ids.some((id) => folder?.photos[id]?.coords)) void setCoords(ids, null)
-          else void window.geophotos.removePhotos({ generation: folder.generation, ids })
-        }
+        if (e.repeat || !folder || saving || !sel.ids.size) return
+        const ids = [...sel.ids]
+        if (e.ctrlKey) void setCoords(ids.filter((id) => !isTrackId(id)), null)
+        else void window.geophotos.removePhotos({ generation: folder.generation, ids })
         return
       }
       // Ctrl+C / Ctrl+V of coordinates, by the physical key (any layout). Text fields keep
@@ -389,7 +457,7 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
       }
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'a') {
         e.preventDefault()
-        if (folder) select(selectAll(sel, order))
+        if (folder) select(selectAll(sel, order, isTrackId))
         return
       }
       if (e.ctrlKey || e.altKey || e.metaKey) return
@@ -453,10 +521,28 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     filter = keep?.filter ?? 'all'
     strip.setPhotos(data)
     // The folder of the last run or a refresh: the map stays where it was (tz.md, пп. 7.1, 3.8);
-    // added files: the map shows them (п. 3.1).
-    map.setPhotos(data.photos, data.generation, !data.restored && !data.show)
+    // added files: the map shows them (п. 3.1). The tracks count too (п. 3.9.5): they come from
+    // main a moment later, so the map is fitted then.
+    leaveTrackView()
+    map.setPhotos(data.photos, data.generation, false)
     applyFilter()
-    if (data.show) map.fitPhotos(data.show)
+    const fitAll = !data.restored && !data.show
+    const show = data.show
+    void tracks.setTracks(data.photos, data.generation).then(() => {
+      if (folder !== data) return
+      if (fitAll) map.fitMarkers(tracks.bounds())
+      else if (show) {
+        const added = show.filter(isTrackId)
+        const b = added.reduce<L.LatLngBounds | null>((acc, id) => {
+          const tb = tracks.bounds(id)
+          return tb ? (acc ? acc.extend(tb) : tb) : acc
+        }, null)
+        map.fitPhotos(show, b)
+      }
+      tracks.setCurrent(sel.current !== null && isTrackId(sel.current) ? sel.current : null)
+      // The track view of the current track, if it is on (the window was waiting for its data).
+      if (view === 'photo') showPhoto()
+    })
     if (keep && sel.current !== null) select(sel)
     // The photo chosen in the dialog or dropped onto the window becomes selected (tz.md, п. 3.1).
     // Otherwise the first photo already is (a photo is always selected, п. 4.4).

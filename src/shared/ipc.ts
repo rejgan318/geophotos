@@ -2,6 +2,7 @@ import type { Strings } from './i18n'
 import type { Address, FolderData, LatLon, Photo } from './photo'
 import type { SearchResult } from './search'
 import type { MapSource, MarkerStyle } from './settings'
+import type { TrackData } from './track'
 
 /** IPC channels between main and the window. All IPC names and payloads live here. */
 export const IPC = {
@@ -15,6 +16,8 @@ export const IPC = {
   openPaths: 'paths:open',
   /** invoke, window → main: take photos off the strip (Del, tz.md, п. 6.6). */
   removePhotos: 'photos:remove',
+  /** invoke, window → main: the lines and points of a track of the strip (tz.md, п. 3.9). */
+  trackData: 'track:data',
   /** invoke, window → main: give photos new coordinates (not saved yet). */
   setCoords: 'photos:setCoords',
   /** event, main → window: some photos changed (coordinates, unsaved mark). */
@@ -66,6 +69,8 @@ export interface InitData {
     /** Thumbnails on the map at the end of the last run (п. 7.1). */
     thumbnails: boolean
   }
+  /** Colours of tracks and the zoom from which waypoint names show (tz.md, п. 3.9.5). */
+  tracks: { colors: string[]; labelZoom: number }
   /** Scheme of thumbnail URLs: `${thumbScheme}://f<generation>/<photo id>`. */
   thumbScheme: string
   /** Locale of the regional format of the system: dates are shown in it (tz.md, п. 4.13). */
@@ -100,7 +105,14 @@ export interface FolderLoading {
   adding?: boolean
 }
 
-/** Del of photos without coordinates (tz.md, п. 6.6): they leave the strip. */
+/** A track for the map (tz.md, п. 3.9): its lines and points, the time zone of its place. */
+export interface TrackForMap {
+  data: TrackData
+  /** IANA time zone of the place of the track (local times); null — unknown. */
+  zone: string | null
+}
+
+/** Del (tz.md, п. 6.6): the selected items leave the strip. */
 export interface RemovePhotosRequest {
   /** Generation the ids belong to: a request for an older strip is ignored. */
   generation: number

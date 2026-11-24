@@ -187,6 +187,27 @@
         }
       }
     },
+    "tracks": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Tracks (GPX, KML, KMZ, FIT, TCX, GeoJSON) on the map and in the strip.",
+      "properties": {
+        "colors": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+          "default": ["#2979FF", "#FF9100", "#D500F9", "#00E5FF", "#FFEA00", "#3D5AFE", "#FF80AB", "#A1887F"],
+          "description": "Colors of tracks, #RRGGBB, given in the order of the tracks in the strip, round again when there are more tracks. Better not green or red: those are the colors of photo markers."
+        },
+        "labelZoom": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 22,
+          "default": 14,
+          "description": "From this map zoom the names of waypoints are always shown; below it, only when the mouse is over the flag."
+        }
+      }
+    },
     "folders": {
       "type": "object",
       "additionalProperties": false,

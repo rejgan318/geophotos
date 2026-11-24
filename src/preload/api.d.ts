@@ -12,6 +12,7 @@ import type {
   SaveState,
   SearchResult,
   SetCoordsRequest,
+  TrackForMap,
   UiState,
   ViewState,
   WindowCommand
@@ -29,6 +30,8 @@ export interface GeoPhotosApi {
   openPaths(paths: string[]): Promise<void>
   /** Takes photos off the strip (Del, tz.md, п. 6.6); the strip comes again through onFolderLoaded. */
   removePhotos(req: RemovePhotosRequest): Promise<void>
+  /** Lines and points of a track of the strip (tz.md, п. 3.9); null — not a track, or another strip. */
+  trackData(generation: number, id: number): Promise<TrackForMap | null>
   /** Disk path of a file or folder dropped onto the window ('' if it has none). */
   pathForFile(file: File): string
   /** Gives photos new coordinates; the change comes back through onPhotosChanged. */

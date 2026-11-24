@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { scanFiles } from '../../src/main/folder'
+import { scanFiles, scanFolder } from '../../src/main/folder'
 import { hasMaster, makeJpeg, MASTER_DIR, newExifTool, tempDir, writeTags } from './helpers'
 
 const et = newExifTool()
@@ -74,5 +74,36 @@ describe.skipIf(!haveLive)('added files: what comes along', () => {
     expect(alone.photos.map((p) => [p.path, !!p.video, !!p.live])).toEqual([[join(tmp.dir, 'IMG_9119.MOV'), true, false]])
     const both = await scanFiles(null, [join(tmp.dir, 'IMG_9119.MOV'), join(tmp.dir, 'IMG_9119.HEIC')], et)
     expect(both.photos.map((p) => p.path)).toEqual([join(tmp.dir, 'IMG_9119.HEIC')])
+  })
+})
+
+// Tracks of a folder (tz.md, п. 3.9.2): items of the strip with the photos.
+describe('tracks in a folder', () => {
+  const tmp = tempDir()
+  afterAll(() => tmp.remove())
+
+  it('a track is an item dated by its first time as local time of its place; a broken one has an error', async () => {
+    await makeJpeg(join(tmp.dir, 'a.jpg'))
+    await writeTags(et, join(tmp.dir, 'a.jpg'), ['-EXIF:DateTimeOriginal=2024:05:01 09:30:00'])
+    writeFileSync(
+      join(tmp.dir, 'walk.gpx'),
+      `<gpx creator="test"><trk><trkseg><trkpt lat="49.84" lon="24.03"><time>2024-05-01T07:00:00Z</time></trkpt><trkpt lat="49.85" lon="24.03"><time>2024-05-01T07:10:00Z</time></trkpt></trkseg></trk></gpx>`
+    )
+    writeFileSync(join(tmp.dir, 'broken.gpx'), '<gpx/>')
+    const scan = await scanFolder(tmp.dir, et)
+    expect(scan.photos.map((p) => p.name)).toEqual(['a.jpg', 'walk.gpx', 'broken.gpx'])
+    const walk = scan.photos[1]!
+    // 07:00 UTC is 10:00 in Lviv in May.
+    expect(walk).toMatchObject({ date: '2024-05-01 10:00:00', coords: null, modified: false })
+    expect(walk.track).toMatchObject({ points: 2, duration: 600 })
+    expect(walk.track!.distance).toBeCloseTo(1112, -1)
+    expect(scan.sources[1]).toMatchObject({ preview: 'track', track: { zone: 'Europe/Kyiv' } })
+    expect(scan.photos[2]!.error).toBeTruthy()
+    expect(scan.sources[2]!.track).toBeNull()
+  })
+
+  it('added track files are read too', async () => {
+    const scan = await scanFiles(null, [join(tmp.dir, 'walk.gpx')], et)
+    expect(scan.photos.map((p) => [p.name, !!p.track])).toEqual([[join(tmp.dir, 'walk.gpx'), true]])
   })
 })

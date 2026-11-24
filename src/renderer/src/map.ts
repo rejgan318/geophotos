@@ -112,6 +112,8 @@ export class MapView {
   private place: L.Marker | null = null
   /** Photos that pass the strip filter (tz.md, п. 4.13); null — all. Others have no marker. */
   private shown: ReadonlySet<number> | null = null
+  /** The track view (tz.md, п. 3.9.6): the map is dimmed and still, without photo markers. */
+  private still = false
 
   constructor(
     private readonly el: HTMLElement,
@@ -129,6 +131,7 @@ export class MapView {
     // it can give the current photo its coordinates instead of zooming (п. 4.4.2).
     this.map = L.map(el, { zoomControl: true, worldCopyJump: true, keyboardPanDelta: 0, doubleClickZoom: false })
     this.map.on('dblclick', (e: L.LeafletMouseEvent) => {
+      if (this.still) return
       if (this.h.onMapDoubleClick(this.dropPoint(e.originalEvent))) return
       // The same as Leaflet's own double click zoom; Shift zooms out.
       const z = this.map.getZoom()
@@ -292,28 +295,54 @@ export class MapView {
 
   /**
    * Fits the view to the markers shown now: on opening a folder (п. 5.2) and on a click on a
-   * filter button (п. 4.13). False (and the view stays) when there are none.
+   * filter button (п. 4.13); with `extra` — the tracks too (п. 3.9.5). False (and the view stays)
+   * when there is nothing.
    */
-  fitMarkers(): boolean {
+  fitMarkers(extra: L.LatLngBounds | null = null): boolean {
     const points = [...this.markers.values()].map((m) => m.getLatLng())
-    if (!points.length) return false
-    this.map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 16 })
+    let b = points.length ? L.latLngBounds(points) : null
+    if (extra) b = b ? b.extend(extra) : extra
+    if (!b) return false
+    this.map.fitBounds(b, { padding: [40, 40], maxZoom: 16 })
     return true
+  }
+
+  /**
+   * The track view (tz.md, п. 3.9.6): the map is a still, slightly dimmed background — no panning,
+   * zooming, photo markers or editing; `false` makes it the working map again.
+   */
+  setStill(on: boolean): void {
+    if (on === this.still) return
+    this.still = on
+    this.el.classList.toggle('map-still', on)
+    const m = this.map
+    for (const handler of [m.dragging, m.scrollWheelZoom, m.boxZoom, m.keyboard, m.touchZoom]) {
+      if (on) handler.disable()
+      else handler.enable()
+    }
+    if (on) m.removeLayer(this.cluster)
+    else m.addLayer(this.cluster)
+    // The track fills the free room exactly, not only by whole zoom steps; back to whole steps after.
+    m.options.zoomSnap = on ? 0.1 : 1
+    if (!on) this.highlightGroups()
   }
 
   /**
    * Fits the view to the markers of some photos (added files, tz.md, п. 3.1) that are shown now.
    * False (and the view stays) when none of them has a marker.
    */
-  fitPhotos(ids: readonly number[]): boolean {
+  fitPhotos(ids: readonly number[], extra: L.LatLngBounds | null = null): boolean {
     const points = ids
       .filter((id) => !this.shown || this.shown.has(id))
       .flatMap((id) => {
         const m = this.markers.get(id)
         return m ? [m.getLatLng()] : []
       })
-    if (!points.length) return false
-    this.map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 16 })
+    let b = points.length ? L.latLngBounds(points) : null
+    // Added tracks (tz.md, п. 3.9.2).
+    if (extra) b = b ? b.extend(extra) : extra
+    if (!b) return false
+    this.map.fitBounds(b, { padding: [40, 40], maxZoom: 16 })
     return true
   }
 
@@ -462,7 +491,7 @@ export class MapView {
     container.addEventListener(
       'mousedown',
       (e) => {
-        if (e.button !== 0 || !e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return
+        if (this.still || e.button !== 0 || !e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return
         if ((e.target as HTMLElement).closest('.leaflet-marker-icon, .leaflet-control')) return
         e.preventDefault()
         e.stopPropagation()
@@ -481,13 +510,13 @@ export class MapView {
   /** Photos from the strip can be dropped anywhere on the map (п. 4.5). */
   private acceptDrops(): void {
     this.el.addEventListener('dragover', (e) => {
-      if (!this.h.dragged()) return
+      if (this.still || !this.h.dragged()) return
       e.preventDefault()
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
     })
     this.el.addEventListener('drop', (e) => {
       const ids = this.h.dragged()
-      if (!ids) return
+      if (!ids || this.still) return
       e.preventDefault()
       e.stopPropagation()
       this.h.onDropPhotos(ids, this.dropPoint(e))
@@ -512,6 +541,14 @@ export class MapView {
    * Shows the selected photos (п. 4.4.2): their markers get the selected look; if the marker of
    * the current photo or its group is off screen, the map pans to it without changing the zoom.
    */
+  /** The current photo comes into view if its marker (or group) is off the map; the zoom stays. */
+  revealCurrent(): void {
+    const marker = this.current === null ? undefined : this.markers.get(this.current)
+    if (!marker) return
+    const target = this.shownAt(marker)
+    if (!this.map.getBounds().pad(-0.08).contains(target)) this.map.panTo(target, { animate: false })
+  }
+
   setSelection(ids: ReadonlySet<number>, current: number | null): void {
     const before = this.selected
     const moved = current !== this.current

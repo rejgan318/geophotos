@@ -52,6 +52,10 @@
   "elevation": {
     "url": "https://api.open-meteo.com/v1/elevation"
   },
+  "tracks": {
+    "colors": ["#2979FF", "#FF9100", "#D500F9", "#00E5FF", "#FFEA00", "#3D5AFE", "#FF80AB", "#A1887F"],
+    "labelZoom": 14
+  },
   "folders": {
     "subfolders": "ask"
   },

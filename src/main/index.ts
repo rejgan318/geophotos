@@ -6,6 +6,7 @@ import { windowTitle } from '@shared/app-info'
 import { pathsFromArgv } from '@shared/argv'
 import { isBatch, parseBatchArgs } from '@shared/batch-args'
 import { isSupported, SUPPORTED_EXTENSIONS } from '@shared/formats'
+import { isTrackFile, TRACK_EXTENSIONS, trackPreviewSvg, withTrackColors } from '@shared/track'
 import { EXIFTOOL_DOWNLOAD_URL, exiftoolCandidates } from '@shared/exiftool-places'
 import { assignAddress, assignAltitude, assignCoords, pastePhotoData, photoCounts, photosAt, photosToSave } from '@shared/edits'
 import { checkedAltitude, ELEVATION_BATCH, needsAltitude, pointsWithoutAltitude } from '@shared/elevation'
@@ -29,7 +30,8 @@ import {
   validViewState,
   type AboutInfo,
   type BatchState,
-  type ViewState
+  type ViewState,
+  type TrackForMap
 } from '@shared/ipc'
 import { addressText, formatCoords, type FileMeta, type Photo } from '@shared/photo'
 import { addRecent, idsByPath, removeRecent, samePath } from '@shared/recent'
@@ -62,6 +64,7 @@ import { ElevationService } from './elevation'
 import { Geocoder } from './geocode'
 import { ThumbnailService } from './thumbnails'
 import { canWriteIn, installExiftool } from './exiftool-install'
+import sharp from 'sharp'
 
 // Must happen before `ready`: thumbnails are served to the window by this scheme.
 protocol.registerSchemesAsPrivileged([
@@ -122,7 +125,8 @@ function filesOf(entries: readonly Entry[]): Set<string> {
 /** Makes the project on the strip of these photos (ids already in order). */
 function projectOf(entries: readonly Entry[], project: Project, selected: number | null): OpenFolder {
   return {
-    data: { folder: titleFolder(project), photos: entries.map((e) => e.photo), generation, selected },
+    // Track colours follow the order of tracks in the strip (tz.md, п. 3.9.5).
+    data: { folder: titleFolder(project), photos: withTrackColors(entries.map((e) => e.photo), settings.tracks.colors.length), generation, selected },
     sources: entries.map((e) => e.source),
     fileMeta: entries.map((e) => e.fileMeta),
     project
@@ -157,6 +161,8 @@ let saving = false
 let closeConfirmed = false
 /** An unsaved-changes question is on screen: no second one. */
 let asking = false
+/** The folder files were last added from (Add Files…, tz.md, п. 3.1); kept between runs. */
+let addFolder: string | null = null
 /** Recent folders, latest first (tz.md, п. 3.1); read from the state file once at start. */
 let recentFolders: string[] = []
 /** Folder and photo of the previous run (tz.md, п. 7.1); replaced at exit. */
@@ -391,6 +397,7 @@ function initData(): InitData {
       saved: mapState ? { lat: mapState.lat, lon: mapState.lon, zoom: mapState.zoom } : null,
       thumbnails: mapState?.thumbnails ?? false
     },
+    tracks: settings.tracks,
     thumbScheme: THUMB_SCHEME,
     // Regional format of Windows (as in Explorer), for dates (tz.md, п. 4.13).
     dateLocale: app.getSystemLocale() || strings['locale'] || 'en-US'
@@ -409,7 +416,7 @@ function setRecent(update: (list: string[]) => string[]): void {
 
 function saveAppState(): void {
   try {
-    writeState(paths.state, { recentFolders, lastSession, window: windowState, map: mapState, tools })
+    writeState(paths.state, { recentFolders, lastSession, window: windowState, map: mapState, tools, addFolder })
   } catch (e) {
     log.warn(`Cannot save state ${paths.state}: ${String(e)}`)
   }
@@ -681,7 +688,7 @@ function addFiles(list: readonly string[]): Promise<void> {
 async function addFilesNow(list: readonly string[]): Promise<void> {
   if (!win) return
   const present = filesOf(entriesOf(current))
-  const unique = [...new Map(list.filter((p) => isSupported(p)).map((p) => [p.toLowerCase(), p] as const)).values()]
+  const unique = [...new Map(list.filter((p) => isSupported(p) || isTrackFile(p)).map((p) => [p.toLowerCase(), p] as const)).values()]
   const fresh = unique.filter((p) => !present.has(p.toLowerCase()))
   if (!fresh.length) {
     log.info(`Nothing to add: ${list.length} file(s), on the strip already or not photos or videos`)
@@ -735,9 +742,13 @@ async function addFilesNow(list: readonly string[]): Promise<void> {
     added.map((e) => e.photo.path).sort((a, b) => rank(a) - rank(b))
   )
   generation++
-  current = projectOf(entries, next, ids[0] ?? null)
-  selection = new Set(ids)
-  win.webContents.send(IPC.folderLoaded, { ...current.data, keep: { ids, filter: ui.filter }, show: ids })
+  // The added photos become selected; a track is selected alone (tz.md, п. 3.9.4): only tracks
+  // added — the first of them. The map shows all that was added.
+  const photoIds = ids.filter((id) => !entries[id]!.photo.track)
+  const chosen = photoIds.length ? photoIds : ids.slice(0, 1)
+  current = projectOf(entries, next, chosen[0] ?? null)
+  selection = new Set(chosen)
+  win.webContents.send(IPC.folderLoaded, { ...current.data, keep: { ids: chosen, filter: ui.filter }, show: ids })
   refreshEditState()
   kickQueues()
   log.info(`Files added: ${added.length}; photos on the strip: ${entries.length}: ${added.map((e) => e.photo.path).join(', ')}`)
@@ -755,16 +766,38 @@ function keptView(folder: OpenFolder): FolderData {
 }
 
 /**
- * Del of photos without coordinates (tz.md, п. 6.6): they leave the strip, the files on disk stay;
- * their unsaved changes are lost. Files of the folder taken off are remembered (Refresh and the
- * next run do not bring them back). The next photo in the strip becomes current.
+ * Del (tz.md, п. 6.6): the selected photos or track leave the strip, the files on disk stay. If
+ * some have unsaved changes, the user is asked first; those changes are then lost. Files of the
+ * folder taken off are remembered (Refresh and the next run do not bring them back). The next item
+ * of the strip becomes current.
  */
-function removePhotos(req: unknown): void {
+async function removePhotos(req: unknown): Promise<void> {
+  if (!win || !current || saving || asking || !validRemovePhotos(req) || req.generation !== current.data.generation) return
+  const asked = current
+  const askedIds = new Set(req.ids.filter((id) => id < asked.data.photos.length))
+  if (!askedIds.size) return
+  const changed = [...askedIds].filter((id) => asked.data.photos[id]!.modified).length
+  if (changed) {
+    asking = true
+    try {
+      const { response } = await dialog.showMessageBox(win, {
+        type: 'question',
+        title: t('remove.title'),
+        message: t('remove.message', { count: changed }),
+        buttons: [t('remove.remove'), t('unsaved.cancel')],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true
+      })
+      if (response !== 0) return
+    } finally {
+      asking = false
+    }
+  }
+  // The strip may have changed while the question was open.
   const folder = current
-  if (!win || !folder || saving || !validRemovePhotos(req) || req.generation !== folder.data.generation) return
-  const ids = new Set(req.ids.filter((id) => id < folder.data.photos.length))
-  // With coordinates, Del removes those instead (the window decides); never both.
-  if (!ids.size || [...ids].some((id) => folder.data.photos[id]!.coords)) return
+  if (!win || !folder || folder !== asked || saving) return
+  const ids = askedIds
   const gone = folder.data.photos.filter((p) => ids.has(p.id))
   const nextOld = afterRemoval(folder.data.photos.map((p) => p.id), ids)
   const nextPath = nextOld === null ? null : folder.data.photos[nextOld]!.path
@@ -787,16 +820,16 @@ function removePhotos(req: unknown): void {
 }
 
 /** The file dialog of Open Folder… and Add Files… (п. 3.1): filtered to photos and videos. */
-async function chooseFiles(title: string, many: boolean): Promise<string[]> {
+async function chooseFiles(title: string, many: boolean, prefer: string | null = null): Promise<string[]> {
   if (!win) return []
-  // The open folder, or the last one opened, also in an earlier run.
-  const last = current?.data.folder || recentFolders[0]
-  const startDir = last && isDirectory(last) ? last : undefined
+  // `prefer` if it is still there; else the open folder, or the last one opened, also in an earlier run.
+  const startDir = [prefer, current?.data.folder, recentFolders[0]].find((d): d is string => !!d && isDirectory(d))
   const res = await dialog.showOpenDialog(win, {
     title,
     properties: many ? ['openFile', 'multiSelections'] : ['openFile'],
     filters: [
-      { name: t('dialog.photos'), extensions: [...SUPPORTED_EXTENSIONS] },
+      // Tracks too (tz.md, п. 3.9.2).
+      { name: t('dialog.photos'), extensions: [...SUPPORTED_EXTENSIONS, ...TRACK_EXTENSIONS] },
       { name: t('dialog.allFiles'), extensions: ['*'] }
     ],
     ...(startDir ? { defaultPath: startDir } : {})
@@ -816,8 +849,12 @@ async function chooseFolder(): Promise<void> {
 
 /** Add Files… (п. 3.1): the chosen files join the strip. */
 async function chooseAddFiles(): Promise<void> {
-  const files = await chooseFiles(t('dialog.addFiles'), true)
-  if (files.length) await addFiles(files)
+  // The dialog opens where files were added from the last time (п. 3.1), not in the open folder.
+  const files = await chooseFiles(t('dialog.addFiles'), true, addFolder)
+  if (!files.length) return
+  addFolder = parentOf(files[0]!)
+  saveAppState()
+  await addFiles(files)
 }
 
 function updateMenu(recent: string[]): void {
@@ -877,7 +914,8 @@ function refreshEditState(): void {
   }
   // Show on Map: the current photo needs coordinates.
   const showItem = menu?.getMenuItemById(MENU_ID.showOnMap)
-  if (showItem) showItem.enabled = ui.current !== null && !!photos[ui.current]?.coords
+  // A track is shown whole (tz.md, п. 3.9.4).
+  if (showItem) showItem.enabled = ui.current !== null && (!!photos[ui.current]?.coords || !!photos[ui.current]?.track)
   const addressItem = menu?.getMenuItemById(MENU_ID.address)
   if (addressItem) addressItem.checked = tools.address
   const altitudeItem = menu?.getMenuItemById(MENU_ID.altitude)
@@ -1450,12 +1488,38 @@ async function serveLive(source: PhotoSource, range: string | null): Promise<Res
   }
 }
 
+/** Thumbnails of tracks by path and colour: the colour changes when tracks are added or taken off. */
+const trackThumbs = new Map<string, Promise<Buffer>>()
+
+/** The shape of a track in its colour (tz.md, п. 3.9.3), as a JPEG like the photo thumbnails. */
+function trackThumbnail(source: PhotoSource, color: string): Promise<Buffer> {
+  const key = `${source.path.toLowerCase()}|${color}`
+  let p = trackThumbs.get(key)
+  if (!p) {
+    const data = source.track?.data
+    p = data ? sharp(Buffer.from(trackPreviewSvg(data, color))).jpeg({ quality: 85 }).toBuffer() : Promise.reject(new Error('track not read'))
+    trackThumbs.set(key, p)
+    while (trackThumbs.size > 200) trackThumbs.delete(trackThumbs.keys().next().value!)
+  }
+  return p
+}
+
 function serveThumbnails(): void {
   protocol.handle(THUMB_SCHEME, async (req) => {
     const ref = parseThumbUrl(req.url)
     const source = ref && current?.data.generation === ref.generation ? current.sources[ref.id] : undefined
     if (!ref || !source) return new Response(null, { status: 404 })
     if (ref.live) return serveLive(source, req.headers.get('range'))
+    if (source.preview === 'track') {
+      const info = current?.data.photos[ref.id]?.track
+      const colors = settings.tracks.colors
+      try {
+        const jpeg = await trackThumbnail(source, colors[(info?.color ?? 0) % colors.length]!)
+        return new Response(new Uint8Array(jpeg), { headers: { 'content-type': 'image/jpeg', 'cache-control': 'no-store' } })
+      } catch {
+        return new Response(null, { status: 404 })
+      }
+    }
     try {
       const jpeg = ref.large ? await thumbnails.getLarge(source) : await thumbnails.get(source)
       return new Response(new Uint8Array(jpeg), {
@@ -1675,6 +1739,11 @@ void app.whenReady().then(async () => {
     if (Array.isArray(list)) void openPaths(list.filter((p): p is string => typeof p === 'string' && p !== ''))
   })
   ipcMain.handle(IPC.removePhotos, (_e, req: unknown) => removePhotos(req))
+  ipcMain.handle(IPC.trackData, (_e, gen: unknown, id: unknown): TrackForMap | null => {
+    if (!current || gen !== current.data.generation || typeof id !== 'number') return null
+    const track = current.sources[id]?.track
+    return track ? { data: track.data, zone: track.zone } : null
+  })
   ipcMain.handle(IPC.setCoords, (_e, req: unknown) => setCoords(req))
   ipcMain.on(IPC.uiState, (_e, state: unknown) => {
     ui = validUiState(state) ?? ui
@@ -1709,6 +1778,7 @@ void app.whenReady().then(async () => {
   windowState = saved.window
   mapState = saved.map
   tools = saved.tools
+  addFolder = saved.addFolder
   ui = { ...ui, mapMode: mapState?.thumbnails ? 'thumbs' : 'pins' }
   updateMenu(recentFolders)
   win = createWindow()

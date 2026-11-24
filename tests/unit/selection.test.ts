@@ -144,3 +144,34 @@ describe('strip filter by the status bar counter (tz.md, п. 4.13)', () => {
     expect(navigateShown('Home', 4, [])).toBeNull()
   })
 })
+
+describe('tracks in the strip (tz.md, п. 3.9)', () => {
+  // 0, 1, 3 — photos; 2 — a track.
+  const order = [0, 1, 2, 3]
+  const isTrack = (id: number): boolean => id === 2
+
+  it('a track is selected alone, whatever the keys', () => {
+    const two = clickSelect(single(0), 1, { ctrl: true, shift: false }, order, isTrack)
+    expect([...clickSelect(two, 2, { ctrl: true, shift: false }, order, isTrack).ids]).toEqual([2])
+    expect([...clickSelect(two, 2, { ctrl: false, shift: true }, order, isTrack).ids]).toEqual([2])
+  })
+
+  it('photos do not join a selected track; a Shift range leaves tracks out', () => {
+    expect([...clickSelect(single(2), 3, { ctrl: true, shift: false }, order, isTrack).ids]).toEqual([3])
+    expect([...clickSelect(single(0), 3, { ctrl: false, shift: true }, order, isTrack).ids]).toEqual([0, 1, 3])
+  })
+
+  it('Ctrl+A selects the photos only', () => {
+    const all = selectAll(single(2), order, isTrack)
+    expect([...all.ids]).toEqual([0, 1, 3])
+    expect(all.current).toBe(0)
+  })
+
+  it('tracks are shown under any filter and are not counted', () => {
+    const track = { id: 2, coords: null, modified: false, track: { points: 3, waypoints: 0, distance: 1, duration: null, color: 0 } } as unknown as Photo
+    expect(matchesFilter(track, 'coords')).toBe(true)
+    expect(matchesFilter(track, 'modified')).toBe(true)
+    // Only a track passes "without coordinates": the filter is empty, so "all" is in force.
+    expect(effectiveFilter([track], 'noCoords')).toBe('all')
+  })
+})

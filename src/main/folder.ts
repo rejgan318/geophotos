@@ -1,4 +1,4 @@
-import { readdir } from 'node:fs/promises'
+import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { baseNameOf, formatOf, isSidecar, isSupported, sidecarNameOf, sidecarOwners, type PreviewKind } from '@shared/formats'
 import {
@@ -19,6 +19,9 @@ import { contentId, embeddedLiveTag, LIVE_VIDEO_TAGS, livePairs } from '@shared/
 import type { Address, CoordSource, LatLon, Photo } from '@shared/photo'
 import type { WriteInfo } from '@shared/write-plan'
 import { displayName, parentOf } from '@shared/project'
+import { allPoints, isTrackFile, timeSpan, trackInfo, type TrackData } from '@shared/track'
+import { wallTime, zoneAt } from '@shared/dates'
+import { readTrack } from './tracks'
 import type { ExifTool } from './exiftool'
 
 /**
@@ -36,6 +39,11 @@ export interface PhotoSource extends WriteInfo {
    * pair — written together with the photo (its WriteInfo). Null for others.
    */
   live: { kind: 'embedded'; tag: string } | { kind: 'pair'; video: WriteInfo } | null
+  /**
+   * A track (tz.md, п. 3.9): its lines and points, and the time zone of its place (local times of
+   * the tooltip and the summary). Null for a track file that could not be read; absent for photos.
+   */
+  track?: { data: TrackData; zone: string | null } | null
 }
 
 export interface ScannedFolder {
@@ -146,7 +154,7 @@ export async function scanFiles(folder: string | null, files: readonly string[],
   const byDir = new Map<string, { dir: string; names: Set<string> }>()
   for (const file of files) {
     const name = fileNameOf(file)
-    if (!isSupported(name)) continue
+    if (!isSupported(name) && !isTrackFile(name)) continue
     const dir = parentOf(file)
     const key = dir.toLowerCase()
     const entry = byDir.get(key) ?? { dir, names: new Set<string>() }
@@ -202,6 +210,66 @@ async function scanOne(root: string | null, folder: string, exiftool: ExifTool, 
   const names = entries.filter((e) => e.isFile()).map((e) => e.name)
   const supported = names.filter(isSupported)
   const given = (n: string): boolean => !only || only.has(n.toLowerCase())
+  // Tracks of the folder (tz.md, п. 3.9.2) are items of the strip too.
+  const tracks = await Promise.all(names.filter((n) => isTrackFile(n) && given(n)).map((n) => trackItem(root, join(folder, n))))
+  return [...tracks, ...(await scanPhotos(root, folder, exiftool, names, supported, given))]
+}
+
+/**
+ * A track file as an item of the strip (tz.md, п. 3.9.3): dated by its first time, as local time
+ * of its place. A file that cannot be read is an item with an error (shown as a placeholder).
+ */
+async function trackItem(root: string | null, path: string): Promise<Item> {
+  let data: TrackData | null = null
+  let error: string | undefined
+  try {
+    data = await readTrack(path)
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e)
+  }
+  const size = (await stat(path).catch(() => null))?.size
+  const span = data ? timeSpan(data) : null
+  const first = data ? (allPoints(data)[0] ?? data.waypoints[0]) : undefined
+  const zone = first ? zoneAt(first) : undefined
+  const date = span ? wallTime(new Date(span.start), zone) : null
+  return {
+    photo: {
+      name: displayName(root, path),
+      path,
+      date,
+      dateSource: 'shot',
+      coords: null,
+      coordSource: null,
+      address: null,
+      altitude: null,
+      modified: false,
+      ...(error ? { error } : {}),
+      ...(size !== undefined ? { size } : {}),
+      track: data ? trackInfo(data) : { points: 0, waypoints: 0, distance: 0, duration: null, color: 0 }
+    },
+    source: {
+      path,
+      write: 'file',
+      xmpCoords: false,
+      sidecar: null,
+      preview: 'track',
+      previewTag: null,
+      orientation: 1,
+      live: null,
+      track: data ? { data, zone: zone ?? null } : null
+    }
+  }
+}
+
+/** The photos and videos of one folder (see scanOne). */
+async function scanPhotos(
+  root: string | null,
+  folder: string,
+  exiftool: ExifTool,
+  names: string[],
+  supported: string[],
+  given: (n: string) => boolean
+): Promise<Item[]> {
   // Videos that may be the MOV of a live pair of a given photo: the same base name.
   const photoBases = new Set(supported.filter((n) => given(n) && !formatOf(n)!.video).map((n) => baseNameOf(n).toLowerCase()))
   const photoNames = supported.filter((n) => given(n) || (formatOf(n)!.video && photoBases.has(baseNameOf(n).toLowerCase())))

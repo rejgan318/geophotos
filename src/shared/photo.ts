@@ -1,4 +1,5 @@
 import type { StripFilter } from './ipc'
+import type { TrackInfo } from './track'
 
 export interface LatLon {
   lat: number
@@ -91,6 +92,16 @@ export interface Photo {
   live?: true
   /** A video (tz.md, п. 3.3.6): its length in seconds, null if unknown. Absent for photos. */
   video?: { duration: number | null }
+  /**
+   * A track (tz.md, п. 3.9): an item of the strip that is not a photo — no coordinates of its own,
+   * never edited or saved, not counted or filtered. Absent for photos and videos.
+   */
+  track?: TrackInfo
+}
+
+/** Whether an item of the strip is a track (tz.md, п. 3.9.3). */
+export function isTrack(p: { track?: TrackInfo }): boolean {
+  return p.track !== undefined
 }
 
 export type DateSource = 'shot' | 'name' | 'file'

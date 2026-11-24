@@ -43,7 +43,7 @@ describe('File → Refresh keeps the selection by path (tz.md, п. 3.8)', () => 
 })
 
 describe('state between runs (tz.md, п. 7.5)', () => {
-  const NONE = { lastSession: null, window: null, map: null, tools: { address: false, altitude: false } }
+  const NONE = { lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: null }
 
   it('recent folders survive a restart, including non-Latin paths', () => {
     const file = stateFile()
@@ -104,8 +104,8 @@ describe('state between runs (tz.md, п. 7.5)', () => {
     const window = { x: -1200, y: 40, width: 1100, height: 700, maximized: true }
     const map = { lat: -33.85, lon: 151.21, zoom: 13, source: 'topo', thumbnails: true }
     const tools = { address: true, altitude: true }
-    writeState(file, { recentFolders: [], lastSession: null, window, map, tools })
-    expect(readState(file)).toEqual({ recentFolders: [], lastSession: null, window, map, tools })
+    writeState(file, { recentFolders: [], lastSession: null, window, map, tools, addFolder: null })
+    expect(readState(file)).toEqual({ recentFolders: [], lastSession: null, window, map, tools, addFolder: null })
   })
 
   it('broken window or map parts are dropped, the rest is kept', () => {
@@ -125,5 +125,20 @@ describe('state between runs (tz.md, п. 7.5)', () => {
     const file = stateFile()
     writeState(file, { recentFolders: ['D:\\a "quoted" path'], ...NONE })
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ recentFolders: ['D:\\a "quoted" path'], ...NONE })
+  })
+})
+
+describe('state: the folder of Add Files (tz.md, п. 3.1)', () => {
+  it('survives a restart; missing in older files', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'geophotos-state-'))
+    try {
+      const file = join(dir, 'state.json')
+      writeState(file, { recentFolders: [], lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: 'E:\Phone' })
+      expect(readState(file).addFolder).toBe('E:\Phone')
+      writeFileSync(file, JSON.stringify({ recentFolders: [] }))
+      expect(readState(file).addFolder).toBeNull()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

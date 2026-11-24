@@ -24,17 +24,22 @@ function range(order: readonly number[], a: number, b: number): number[] | null 
   return order.slice(Math.min(i, j), Math.max(i, j) + 1)
 }
 
-/** A click on a photo with the modifier keys held. */
+/**
+ * A click on a photo with the modifier keys held. A track (`isTrack`, tz.md, п. 3.9.4) is always
+ * selected alone, whatever the keys; it never joins photos, and photos never join it.
+ */
 export function clickSelect(
   sel: Selection,
   id: number,
   mods: { ctrl: boolean; shift: boolean },
-  order: readonly number[]
+  order: readonly number[],
+  isTrack: (id: number) => boolean = () => false
 ): Selection {
+  if (isTrack(id) || [...sel.ids].some(isTrack)) return single(id)
   const span = mods.shift && sel.anchor !== null ? range(order, sel.anchor, id) : null
   if (span) {
     const ids = new Set(mods.ctrl ? sel.ids : [])
-    for (const i of span) ids.add(i)
+    for (const i of span) if (!isTrack(i)) ids.add(i)
     return { ids, current: id, anchor: sel.anchor }
   }
   if (mods.ctrl) {
@@ -52,9 +57,10 @@ export function clickSelect(
   return single(id)
 }
 
-/** Ctrl+A: all photos shown in the strip; the current one stays if it is shown. */
-export function selectAll(sel: Selection, order: readonly number[]): Selection {
-  if (!order.length) return EMPTY_SELECTION
+/** Ctrl+A: all photos shown in the strip, not the tracks (п. 3.9.4); the current one stays if it is one of them. */
+export function selectAll(sel: Selection, all: readonly number[], isTrack: (id: number) => boolean = () => false): Selection {
+  const order = all.filter((id) => !isTrack(id))
+  if (!order.length) return sel
   const current = sel.current !== null && order.includes(sel.current) ? sel.current : order[0]!
   return { ids: new Set(order), current, anchor: sel.anchor !== null && order.includes(sel.anchor) ? sel.anchor : current }
 }

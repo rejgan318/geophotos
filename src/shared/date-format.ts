@@ -18,3 +18,19 @@ export function formatWallTime(wall: string, locale: string, dateOnly = false): 
     return wall
   }
 }
+
+/**
+ * An instant (ms) as the local time of a place (time zone `zone`; null — the computer's), in the
+ * regional format of a locale: times of tracks (tz.md, п. 3.9.5). `part`: the date and time, or
+ * only the time.
+ */
+export function formatInstant(ms: number, zone: string | null, locale: string, part: 'dateTime' | 'time' = 'dateTime'): string {
+  const opts: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' }
+  if (part === 'dateTime') Object.assign(opts, { year: 'numeric', month: '2-digit', day: '2-digit' })
+  if (zone) opts.timeZone = zone
+  try {
+    return new Intl.DateTimeFormat(locale, opts).format(new Date(ms)).replace(/,(?= )/, '')
+  } catch {
+    return new Date(ms).toISOString()
+  }
+}

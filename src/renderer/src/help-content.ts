@@ -1,4 +1,4 @@
-import { ADDRESS_SVG, ALTITUDE_SVG, PENCIL_SVG, PHOTO_SVG, PIN_OFF_SVG, PIN_SVG } from './icons'
+import { ADDRESS_SVG, ALTITUDE_SVG, PENCIL_SVG, PHOTO_SVG, PIN_OFF_SVG, PIN_SVG, TRACK_SVG } from './icons'
 
 /**
  * Help → Keyboard Shortcuts (F1): keys, mouse actions and marks of the program.
@@ -29,6 +29,7 @@ export const SECTIONS: Section[] = [
       { keys: ['Ctrl+C'], text: 'help.copy' },
       { keys: ['Ctrl+V'], text: 'help.paste' },
       { keys: ['Del'], text: 'help.delete' },
+      { keys: ['Ctrl+Del'], text: 'help.clearCoords' },
       { keys: ['Ctrl+S'], text: 'help.save' },
       { keys: ['Ctrl+O'], text: 'help.open' },
       { keys: ['Ctrl+Shift+O'], text: 'help.addFiles' },
@@ -62,7 +63,8 @@ export const SECTIONS: Section[] = [
       { icon: ADDRESS_SVG, color: 'var(--address)', text: 'help.markAddress' },
       { icon: ALTITUDE_SVG, color: 'var(--altitude)', text: 'help.markAltitude' },
       { icon: PHOTO_SVG, color: 'var(--selected)', text: 'help.markFilters' },
-      { icon: PIN_OFF_SVG, color: 'var(--no-coords)', text: 'help.markNoCoords' }
+      { icon: PIN_OFF_SVG, color: 'var(--no-coords)', text: 'help.markNoCoords' },
+      { icon: TRACK_SVG, color: 'var(--selected)', text: 'help.markTrack' }
     ]
   }
 ]

@@ -23,7 +23,8 @@ GeoPhotos needs no installer: it is a folder you copy to your computer.
 
 ## Features
 
-- **Folder and separate files:** *File → Open Folder…* (Ctrl+O) or dropping a folder shows the whole folder; *File → Add Files…* (Ctrl+Shift+O) or dropping files adds them to what is already in the strip, so photos from several folders (say, the camera's and the phone's) can be placed together. Del on photos without coordinates takes them off the strip (the files stay).
+- **Folder and separate files:** *File → Open Folder…* (Ctrl+O) or dropping a folder shows the whole folder; *File → Add Files…* (Ctrl+Shift+O) or dropping files adds them to what is already in the strip, so photos from several folders (say, the camera's and the phone's) can be placed together. Del takes the selected photos or track off the strip (the files stay).
+- **Tracks** (GPX, KML, KMZ, FIT, TCX, GeoJSON — from watches, navigators, apps): in the strip by their start time, with their shape as the thumbnail; on the map as lines in distinct colours, with waypoints as flags. Hovering a line shows the time of that point (local time of the place), the altitude and, when the file has them, heart rate, speed, cadence, temperature, power. Space on a track shows its summary (distance, time moving, stops, speeds, ascent and descent, heart rate) and its altitude profile over the dimmed map.
 - **Map:** OpenStreetMap, Esri satellite, Google satellite and OpenTopoMap. Nearby markers are grouped. Markers or photo thumbnails on the map (key T); hovering a marker shows its thumbnail.
 - **Place search:** by name or address, through Nominatim.
 - **Thumbnail strip:** sorted by shooting date. Marks show photos with coordinates, an address, an altitude, and unsaved changes. Photos of subfolders can be loaded too.
@@ -32,7 +33,7 @@ GeoPhotos needs no installer: it is a folder you copy to your computer.
   - drag a photo onto another one in the strip (both ways: the one without coordinates gets them);
   - drag a marker on the map;
   - Ctrl+V coordinates copied from Google Maps and the like, or Ctrl+C / Ctrl+V between photos (with the address and altitude);
-  - Del removes coordinates, address and altitude (on photos without coordinates it takes them off the strip).
+  - Ctrl+Del removes coordinates, address and altitude.
 - **Selection:** click, Ctrl+click, Shift+click, Ctrl+A; Ctrl+drag on the map selects the photos in a rectangle. Arrow keys move through the photos. Dragging the marker of one of several selected photos moves them all to that point.
 - **Filters:** all photos, with coordinates, without coordinates, modified — as buttons in the status bar and in the View menu.
 - **Address and altitude** (*Tools → Get Address / Get Altitude*): the address from Nominatim (OpenStreetMap) in the interface language, the altitude from the Open-Meteo Elevation API, for every photo of the folder that has coordinates. Points the service did not answer are asked again in the background.

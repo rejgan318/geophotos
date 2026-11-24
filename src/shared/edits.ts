@@ -40,7 +40,8 @@ export function assignCoords(
   const changed: Photo[] = []
   for (const id of new Set(ids)) {
     const p = photos[id]
-    if (!p || sameCoords(p.coords, c)) continue
+    // A track has no coordinates of its own and is never edited (tz.md, п. 3.9).
+    if (!p || p.track || sameCoords(p.coords, c)) continue
     const next = { coords: c, address: null, altitude: null }
     changed.push({ ...p, ...next, modified: isModified(next, file[id]) })
   }
@@ -94,7 +95,8 @@ export function dropOnPhoto(
   target: number
 ): { ids: number[]; coords: LatLon } | null {
   const t = photos[target]
-  if (!t || !dragged.length || (dragged.length === 1 && dragged[0] === target)) return null
+  // Dropping onto a track comes with 0.27.0 (tz.md, п. 9.3); tracks are never dragged.
+  if (!t || t.track || dragged.some((id) => photos[id]?.track) || !dragged.length || (dragged.length === 1 && dragged[0] === target)) return null
   if (t.coords) return { ids: [...dragged], coords: t.coords }
   const first = photos[dragged[0]!]?.coords
   if (!first || !dragged.every((id) => sameCoords(photos[id]?.coords ?? null, first))) return null
@@ -164,11 +166,13 @@ export function photoCounts(photos: readonly Photo[]): {
   withoutCoords: number
   modified: number
 } {
-  const withCoords = photos.filter((p) => p.coords).length
+  // Tracks are not counted (tz.md, п. 3.9.3).
+  const only = photos.filter((p) => !p.track)
+  const withCoords = only.filter((p) => p.coords).length
   return {
-    total: photos.length,
+    total: only.length,
     withCoords,
-    withoutCoords: photos.length - withCoords,
-    modified: photos.filter((p) => p.modified).length
+    withoutCoords: only.length - withCoords,
+    modified: only.filter((p) => p.modified).length
   }
 }

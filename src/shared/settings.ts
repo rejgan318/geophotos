@@ -28,6 +28,8 @@ export interface Settings {
   elevation: { url: string }
   /** Photos from subfolders (tz.md, п. 3.2). */
   folders: { subfolders: 'ask' | 'yes' | 'no' }
+  /** Colours of tracks, in their order in the strip; zoom from which waypoint names show (tz.md, п. 3.9.5). */
+  tracks: { colors: string[]; labelZoom: number }
 }
 
 /** Look of map markers (tz.md, п. 4.8.1). */

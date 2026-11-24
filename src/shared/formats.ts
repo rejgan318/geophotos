@@ -11,6 +11,7 @@ export type PreviewKind =
   | 'embedded' // embedded JPEG preview extracted by exiftool (RAW, DNG)
   | 'heic' // embedded JPEG preview, or full HEIC decoding when there is none
   | 'system' // the thumbnail of the system, as Explorer shows it (videos, п. 3.3.6)
+  | 'track' // the shape of a track, drawn by the program (tz.md, п. 3.9.3)
 
 export interface FormatInfo {
   write: WriteMode

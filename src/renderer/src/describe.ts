@@ -1,5 +1,5 @@
 import type { Translate } from '@shared/i18n'
-import { formatWallTime } from '@shared/date-format'
+import { formatInstant, formatWallTime } from '@shared/date-format'
 import { durationText, fileSizeParts, formatCoords, type Photo } from '@shared/photo'
 
 /** Regional format of the system for dates (tz.md, п. 4.13); set once at start. */
@@ -7,6 +7,26 @@ let dateLocale = 'en-US'
 
 export function setDateLocale(locale: string): void {
   dateLocale = locale
+}
+
+/** An instant of a track as local time of its place (tz.md, п. 3.9.5). */
+export function trackTime(ms: number, zone: string | null, part: 'dateTime' | 'time' = 'dateTime'): string {
+  return formatInstant(ms, zone, dateLocale, part)
+}
+
+/** A number in the interface language ("12,4"). */
+export function numberText(n: number, t: Translate, digits = 0): string {
+  return n.toLocaleString(t('locale'), { minimumFractionDigits: digits, maximumFractionDigits: digits })
+}
+
+/** "12,4 км", "850 м" (tracks, tz.md, п. 3.9.3). */
+export function distanceText(m: number, t: Translate): string {
+  return m >= 1000 ? t('unit.km', { n: numberText(m / 1000, t, m < 10000 ? 2 : 1) }) : t('unit.m', { n: numberText(m, t) })
+}
+
+/** "18,4 км/ч". */
+export function speedText(ms: number, t: Translate): string {
+  return t('unit.kmh', { n: numberText(ms * 3.6, t, 1) })
 }
 
 /**
@@ -30,6 +50,13 @@ export function fileSize(bytes: number, t: Translate): string {
  * of a video.
  */
 export function statusParts(p: Photo, t: Translate): { name: string; rest: string[] } {
+  // A track (tz.md, п. 3.9.3): start, length of time, distance, points.
+  if (p.track) {
+    const rest = [photoDate(p, t)]
+    if (p.track.duration !== null) rest.push(durationText(p.track.duration))
+    rest.push(distanceText(p.track.distance, t), t('track.points', { n: numberText(p.track.points, t) }))
+    return { name: p.name, rest }
+  }
   const rest = [photoDate(p, t)]
   if (p.size !== undefined) rest.push(fileSize(p.size, t))
   if (p.video?.duration != null) rest.push(durationText(p.video.duration))
@@ -49,6 +76,13 @@ export function photoCoords(p: Photo, t: Translate): string {
 
 /** Tooltip of a thumbnail: name, date, coordinates (and a read error, if any). */
 export function photoTooltip(p: Photo, t: Translate): string {
+  if (p.track) {
+    const lines = [p.name, t('track.badge'), photoDate(p, t)]
+    if (p.track.duration !== null) lines.push(durationText(p.track.duration))
+    lines.push(distanceText(p.track.distance, t))
+    if (p.error) lines.push(t('photo.readError', { error: p.error }))
+    return lines.join('\n')
+  }
   const lines = [p.name, photoDate(p, t), photoCoords(p, t)]
   if (p.live) lines.splice(1, 0, t('photo.live'))
   if (p.video) {

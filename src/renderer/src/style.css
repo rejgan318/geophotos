@@ -948,3 +948,152 @@ body {
 .about-box a:hover {
   color: #aecbfa;
 }
+
+/* Tracks (tz.md, п. 3.9). In the strip: the badge in the place of the video one. */
+.thumb .badge-track svg {
+  fill: #9be7ff;
+  color: #9be7ff;
+  width: 12px;
+  height: 12px;
+}
+
+/* A waypoint: a flag of the track's colour; its name next to it (п. 3.9.5). */
+.track-flag {
+  background: none;
+  border: none;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+}
+
+.leaflet-tooltip.flag-label {
+  padding: 1px 5px;
+  border: none;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 12px;
+  box-shadow: none;
+}
+
+.leaflet-tooltip.flag-label::before {
+  display: none;
+}
+
+/* The point under the mouse on a track line. */
+.leaflet-tooltip.track-tip {
+  padding: 3px 7px;
+  border: none;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.leaflet-tooltip.track-tip::before {
+  border-top-color: rgba(0, 0, 0, 0.75);
+}
+
+/* The track view (п. 3.9.6): a still map, a little dimmed — still readable, but plainly not
+   the working map; no controls on it. */
+.map-still .leaflet-tile-pane {
+  filter: brightness(0.78) saturate(0.85);
+}
+
+.map-still .leaflet-control-zoom,
+.map-still .leaflet-control-layers,
+.map-still .search-box {
+  display: none;
+}
+
+.map-still .leaflet-container,
+.map-still.leaflet-container {
+  cursor: default;
+}
+
+.track-stats {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+  max-width: min(420px, calc(100% - 20px));
+  padding: 8px 12px 10px;
+  border-radius: 4px;
+  background: rgba(20, 20, 20, 0.82);
+  color: #eee;
+  font-size: 13px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+
+.track-stats[hidden],
+.track-profile[hidden] {
+  display: none;
+}
+
+.track-stats .ts-title {
+  margin-bottom: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.track-stats dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 14px;
+  margin: 0;
+}
+
+.track-stats dt {
+  color: #aaa;
+}
+
+.track-stats dd {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.track-profile {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 22px;
+  z-index: 1000;
+  padding: 4px 0;
+  border-radius: 4px;
+  background: rgba(20, 20, 20, 0.82);
+}
+
+.track-profile svg {
+  display: block;
+  cursor: crosshair;
+}
+
+.track-profile .tp-label {
+  fill: #bbb;
+  font-size: 11px;
+}
+
+.track-profile .tp-cursor {
+  stroke: #fff;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.track-profile .tp-readout {
+  position: absolute;
+  top: 2px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.track-profile .tp-readout[hidden] {
+  display: none;
+}

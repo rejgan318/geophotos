@@ -3,7 +3,7 @@ import { liveUrl, thumbUrl } from '@shared/ipc'
 import { dropOnPhoto } from '@shared/edits'
 import { type FolderData, type LatLon, type Photo } from '@shared/photo'
 import { photoTooltip } from './describe'
-import { ADDRESS_SVG, ALTITUDE_SVG, FILE_SVG, LIVE_SVG, PENCIL_SVG, PIN_SVG, VIDEO_SVG } from './icons'
+import { ADDRESS_SVG, ALTITUDE_SVG, FILE_SVG, LIVE_SVG, PENCIL_SVG, PIN_SVG, TRACK_SVG, VIDEO_SVG } from './icons'
 import type { Selection } from './selection'
 
 /** Type of the data carried by a drag of photos out of the strip. */
@@ -91,8 +91,9 @@ export class Strip {
 
   private makeItem(p: Photo): HTMLElement {
     const item = document.createElement('div')
-    item.className = 'thumb'
-    item.draggable = true
+    item.className = p.track ? 'thumb is-track' : 'thumb'
+    // A track is not dragged anywhere (tz.md, п. 3.9.4).
+    item.draggable = !p.track
     item.dataset['id'] = String(p.id)
 
     const img = document.createElement('img')
@@ -104,6 +105,14 @@ export class Strip {
     img.addEventListener('error', () => img.replaceWith(this.placeholder(p)), { once: true })
     item.append(img)
     if (p.error) item.classList.add('has-error')
+    // A track (tz.md, п. 3.9.3): its badge in the place of the video one.
+    if (p.track) {
+      const b = document.createElement('div')
+      b.className = 'badge-video badge-track'
+      b.title = this.t('track.badge')
+      b.innerHTML = TRACK_SVG
+      item.append(b)
+    }
     if (p.video) {
       const v = document.createElement('div')
       v.className = 'badge-video'

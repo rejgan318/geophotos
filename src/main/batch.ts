@@ -119,6 +119,8 @@ export async function runBatch(
       for (const dir of scan.unreadable) deps.log.warn(`Batch: subfolder skipped, cannot be read: ${dir}`)
       scan.photos.forEach((photo, i) => {
         if (!entry.all && !entry.files.some((f) => samePath(f, photo.path))) return
+        // Tracks are not processed (tz.md, п. 3.9.2), not even counted as skipped.
+        if (photo.track) return
         const needAddress = opts.address && !!photo.coords && (opts.overwrite || !photo.address)
         // A 0 is checked against the terrain (tz.md, п. 5.6).
         const needAltitude = opts.altitude && !!photo.coords && (opts.overwrite || needsAltitude(photo.altitude))

@@ -38,3 +38,17 @@ export const LIVE_SVG =
 /** File placeholder of a photo that cannot be shown. */
 export const FILE_SVG =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h8l6 6v14H6zM14 2v6h6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>'
+
+/** A track (tz.md, п. 3.9.3): a winding path between two points. */
+export const TRACK_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="5" r="2.5"/><path d="M5 19c3-1 3-5 7-6s5-3 7-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 2.5"/></svg>'
+
+/** A waypoint of a track (tz.md, п. 3.9.5): a flag; its foot is the point (viewBox 20×26, foot at 3,25). */
+export function flagSvg(color: string): string {
+  return (
+    '<svg viewBox="0 0 20 26" width="100%" height="100%" aria-hidden="true">' +
+    '<path d="M3 25V2" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/>' +
+    '<path d="M3 25V2" stroke="#333" stroke-width="1.6" stroke-linecap="round"/>' +
+    `<path d="M4 2.5h13l-3.2 4.5 3.2 4.5H4z" fill="${color}" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`
+  )
+}

@@ -11,6 +11,7 @@ import {
   type QueueState,
   type SaveState,
   type SearchResult,
+  type TrackForMap,
   type WindowCommand
 } from '@shared/ipc'
 import type { GeoPhotosApi } from './api'
@@ -26,6 +27,7 @@ const api: GeoPhotosApi = {
   },
   openPaths: (paths) => ipcRenderer.invoke(IPC.openPaths, paths) as Promise<void>,
   removePhotos: (req) => ipcRenderer.invoke(IPC.removePhotos, req) as Promise<void>,
+  trackData: (generation, id) => ipcRenderer.invoke(IPC.trackData, generation, id) as Promise<TrackForMap | null>,
   pathForFile: (file) => webUtils.getPathForFile(file),
   setCoords: (req) => ipcRenderer.invoke(IPC.setCoords, req) as Promise<void>,
   onPhotosChanged: (cb) => {
