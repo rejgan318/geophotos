@@ -49,7 +49,7 @@ import {
 } from '@shared/project'
 import { mapSources, type Settings } from '@shared/settings'
 import { windowOnScreen } from '@shared/window-place'
-import { ExifTool, exiftoolVersion } from './exiftool'
+import { ExifTool, exiftoolVersion, workersFor } from './exiftool'
 import { hasSubfolders, scanFiles, scanFolder, type PhotoSource, type ScannedFolder } from './folder'
 import { listLanguages, loadStrings } from './locales'
 import { AUTO_LANGUAGE, resolveLanguage } from '@shared/language'
@@ -120,6 +120,15 @@ function filesOf(entries: readonly Entry[]): Set<string> {
     if (e.source.live?.kind === 'pair') set.add(e.source.live.video.path.toLowerCase())
   }
   return set
+}
+
+/**
+ * exiftool processes for the open project (tz.md, п. 3.10): as many as its files call for — they
+ * read it again (Refresh, adding) and give the previews of RAW while the strip scrolls. A smaller
+ * project closes the extra ones.
+ */
+function fitWorkers(): void {
+  exiftool.setWorkers(workersFor(current?.data.photos.length ?? 0))
 }
 
 /** Makes the project on the strip of these photos (ids already in order). */
@@ -235,7 +244,8 @@ async function startup(): Promise<boolean> {
   settings = { ...settings, exiftoolPath: found.path }
   exiftoolVer = found.version
   exiftool = new ExifTool(settings.exiftoolPath)
-  thumbnails = new ThumbnailService(exiftool, 3, systemThumbnail)
+  // As many thumbnails at once as there are exiftool processes (previews of RAW come from them), at least 3.
+  thumbnails = new ThumbnailService(exiftool, () => Math.max(3, exiftool.size), systemThumbnail)
   placeSearch = new PlaceSearch(settings.search.url, userAgent(), settings.language)
   geocoder = new Geocoder(settings.geocode.url, userAgent(), settings.language, settings.geocode.minIntervalMs)
   elevation = new ElevationService(settings.elevation.url, userAgent())
@@ -603,6 +613,7 @@ async function loadProject(
   if (!win) return false
   const folder = titleFolder(project)
   win.webContents.send(IPC.folderLoading, { folder })
+  const started = Date.now()
   let scanned
   try {
     scanned = await scanProject(project)
@@ -648,7 +659,11 @@ async function loadProject(
     ...(project.added.length ? [`added files: ${project.added.length}`] : []),
     ...(project.removed.length ? [`taken off the strip: ${project.removed.length}`] : [])
   ]
-  log.info(`Opened: ${parts.join('; ')}; photos: ${photos.length}, with coordinates: ${withCoords}`)
+  fitWorkers()
+  log.info(
+    `Opened: ${parts.join('; ')}; photos: ${photos.length}, with coordinates: ${withCoords}; ` +
+      `read in ${((Date.now() - started) / 1000).toFixed(2)} s, exiftool processes: ${exiftool.size}`
+  )
   reportReadErrors(photos)
   return true
 }
@@ -751,6 +766,7 @@ async function addFilesNow(list: readonly string[]): Promise<void> {
   win.webContents.send(IPC.folderLoaded, { ...current.data, keep: { ids: chosen, filter: ui.filter }, show: ids })
   refreshEditState()
   kickQueues()
+  fitWorkers()
   log.info(`Files added: ${added.length}; photos on the strip: ${entries.length}: ${added.map((e) => e.photo.path).join(', ')}`)
   reportReadErrors(added.map((e) => e.photo))
 }
@@ -817,6 +833,7 @@ async function removePhotos(req: unknown): Promise<void> {
   win.webContents.send(IPC.folderLoaded, data)
   refreshEditState()
   kickQueues()
+  fitWorkers()
 }
 
 /** The file dialog of Open Folder… and Add Files… (п. 3.1): filtered to photos and videos. */

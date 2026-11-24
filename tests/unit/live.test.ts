@@ -37,3 +37,12 @@ describe('live photos (tz.md, п. 3.3.7)', () => {
     )
   })
 })
+
+describe('Motion Photo read without the end of the file (tz.md, п. 3.10)', () => {
+  it('is known by its XMP mark; the video tag to take it out is given', () => {
+    expect(embeddedLiveTag({ 'XMP:MotionPhoto': 1 })).toBe('MotionPhotoVideo')
+    expect(embeddedLiveTag({ 'XMP:MicroVideo': 1 })).toBe('EmbeddedVideo')
+    expect(embeddedLiveTag({ 'XMP:MotionPhoto': 0 })).toBeNull()
+    expect(embeddedLiveTag({ 'Google:MotionPhotoVideo': '(Binary data)', 'XMP:MotionPhoto': 1 })).toBe('MotionPhotoVideo')
+  })
+})

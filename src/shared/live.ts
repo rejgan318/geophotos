@@ -9,6 +9,13 @@ import { baseNameOf } from './formats'
  */
 export const LIVE_VIDEO_TAGS = ['MotionPhotoVideo', 'EmbeddedVideoFile', 'EmbeddedVideo'] as const
 
+/**
+ * Marks of a Motion Photo in the XMP at the start of the file (tz.md, п. 3.10): the folder is read
+ * without going to the end of the file, where the video is, so these tell that it is there.
+ * `MotionPhoto` — Google Motion Photo (Xiaomi, Pixel, newer Samsung); `MicroVideo` — Pixel 2.
+ */
+export const LIVE_MARK_TAGS = ['XMP-GCamera:MotionPhoto', 'XMP-GCamera:MicroVideo'] as const
+
 type Rec = Record<string, unknown>
 
 function anyGroup(rec: Rec, tag: string): unknown {
@@ -22,6 +29,10 @@ function anyGroup(rec: Rec, tag: string): unknown {
 export function embeddedLiveTag(rec: Rec | undefined): string | null {
   if (!rec) return null
   for (const tag of LIVE_VIDEO_TAGS) if (anyGroup(rec, tag) !== undefined) return tag
+  // Read without the end of the file: the XMP marks tell the video is there.
+  const on = (v: unknown): boolean => v === 1 || v === '1' || v === true
+  if (on(anyGroup(rec, 'MotionPhoto'))) return 'MotionPhotoVideo'
+  if (on(anyGroup(rec, 'MicroVideo'))) return 'EmbeddedVideo'
   return null
 }
 

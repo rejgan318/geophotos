@@ -88,9 +88,10 @@ export class ThumbnailService {
   private running = 0
   private waiting: (() => void)[] = []
 
+  /** How many thumbnails are made at once: a number, or asked each time (it follows the exiftool processes). */
   constructor(
     private readonly exiftool: ExifTool,
-    private readonly parallel = 3,
+    private readonly parallel: number | (() => number) = 3,
     private readonly system = noSystemThumbnail
   ) {}
 
@@ -123,7 +124,8 @@ export class ThumbnailService {
   }
 
   private async limited<T>(job: () => Promise<T>): Promise<T> {
-    if (this.running >= this.parallel) await new Promise<void>((r) => this.waiting.push(r))
+    const limit = typeof this.parallel === 'number' ? this.parallel : this.parallel()
+    if (this.running >= limit) await new Promise<void>((r) => this.waiting.push(r))
     this.running++
     try {
       return await job()

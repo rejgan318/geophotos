@@ -15,7 +15,7 @@ import {
   xmpCoords,
   type ExifRecord
 } from '@shared/metadata'
-import { contentId, embeddedLiveTag, LIVE_VIDEO_TAGS, livePairs } from '@shared/live'
+import { contentId, embeddedLiveTag, LIVE_MARK_TAGS, LIVE_VIDEO_TAGS, livePairs } from '@shared/live'
 import type { Address, CoordSource, LatLon, Photo } from '@shared/photo'
 import type { WriteInfo } from '@shared/write-plan'
 import { displayName, parentOf } from '@shared/project'
@@ -68,6 +68,10 @@ const COORD_TAGS = [
 ]
 
 const TAGS = [
+  // Not to the end of a JPEG (tz.md, п. 3.10): 2.6 times faster on phone photos. What is lost is the
+  // video of a Motion Photo at the end of the file: such a photo is known by its XMP mark instead
+  // (LIVE_MARK_TAGS), and the video itself is taken out when it plays.
+  '-fast',
   '-File:FileName',
   '-File:FileModifyDate',
   '-File:FileSize',
@@ -94,6 +98,7 @@ const TAGS = [
   '-ThumbnailImage',
   // Live photos (tz.md, п. 3.3.7): the video inside, the identifier of an iPhone pair.
   ...LIVE_VIDEO_TAGS.map((t) => `-${t}`),
+  ...LIVE_MARK_TAGS.map((t) => `-${t}`),
   '-ContentIdentifier',
   '-ExifTool:Error'
 ]
@@ -406,7 +411,8 @@ async function readRecords(
   names: string[],
   tags: string[]
 ): Promise<Map<string, ExifRecord>> {
-  const recs = await exiftool.json(['-n', '-G0', ...tags, ...names.map((n) => join(folder, n))])
+  // Split among the exiftool processes (tz.md, п. 3.10).
+  const recs = await exiftool.jsonFiles(['-n', '-G0', ...tags], names.map((n) => join(folder, n)))
   const map = new Map<string, ExifRecord>()
   for (const rec of recs) {
     const name = tagValue(rec, 'FileName', 'File') ?? baseOfSourceFile(rec)
@@ -423,7 +429,7 @@ async function recordsByPath(exiftool: ExifTool, paths: string[], tags: string[]
   const byKey = new Map<string, string>()
   for (const p of paths) byKey.set(pathKey(p), p.toLowerCase())
   // Missing files (a sidecar not created yet) make exiftool report an error: no records then.
-  const recs = await exiftool.json(['-n', '-G0', ...tags, ...paths]).catch(() => [])
+  const recs = await exiftool.jsonFiles(['-n', '-G0', ...tags], paths).catch(() => [])
   const map = new Map<string, ExifRecord>()
   for (const rec of recs) {
     const src = rec['SourceFile']

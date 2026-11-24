@@ -158,3 +158,26 @@ describe('generated cases', () => {
     }
   })
 })
+
+// Several exiftool processes (tz.md, п. 3.10): the same records as one.
+describe.skipIf(!hasMaster)('reading with several exiftool processes', () => {
+  const tmp = tempDir()
+  afterAll(() => tmp.remove())
+
+  it('gives what one process gives', async () => {
+    await copyMaster(tmp.dir)
+    const one = newExifTool()
+    const many = newExifTool()
+    many.setWorkers(4)
+    try {
+      const a = await scanFolder(tmp.dir, one)
+      const b = await scanFolder(tmp.dir, many)
+      expect(many.size).toBe(4)
+      expect(b.photos).toEqual(a.photos)
+      expect(b.sources).toEqual(a.sources)
+    } finally {
+      one.close()
+      many.close()
+    }
+  })
+})
