@@ -171,6 +171,7 @@ export class MapView {
       maxClusterRadius: 50,
       // Photos at one point stay grouped until max zoom; a click then fans them out.
       spiderfyOnMaxZoom: true,
+      spiderfyDistanceMultiplier: this.fanSpacing(),
       iconCreateFunction: (c) => {
         const n = c.getChildCount()
         if (this.thumbs) {
@@ -193,6 +194,11 @@ export class MapView {
     // run before the groups are redrawn, and a far move would lose the mark.
     this.map.whenReady(() => this.map.on('zoomend moveend', () => this.highlightGroups()))
     this.cluster.on('animationend spiderfied unspiderfied', () => this.highlightGroups())
+    // The library leaves a fanned-out group half-seen at its point; thumbnails would cover it only
+    // in part, so in the thumbnail mode it is hidden until the fan closes (then it is shown again).
+    this.cluster.on('spiderfied', (e) => {
+      if (this.thumbs) e.cluster.setOpacity(0)
+    })
 
     this.acceptDrops()
     this.boxSelect()
@@ -220,6 +226,8 @@ export class MapView {
   setThumbnails(on: boolean): void {
     if (on === this.thumbs) return
     this.thumbs = on
+    // Before clearLayers, which also closes an open fan.
+    ;(this.cluster.options as L.MarkerClusterGroupOptions).spiderfyDistanceMultiplier = this.fanSpacing()
     this.cluster.clearLayers()
     this.markers.clear()
     this.highlighted = []
@@ -229,6 +237,14 @@ export class MapView {
     }
     this.cluster.addLayers([...this.markers.values()])
     this.highlightGroups()
+  }
+
+  /**
+   * How far a fanned-out group spreads its photos: the library's spacing suits pins (about 25 px
+   * apart); thumbnails need their width and a gap.
+   */
+  private fanSpacing(): number {
+    return this.thumbs ? (this.thumbSize + 12) / 25 : 1
   }
 
   /** The look of a photo on the map: a pin, or its thumbnail in the thumbnail mode. */
