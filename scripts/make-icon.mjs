@@ -1,4 +1,4 @@
-// Makes build/icon.ico (the program icon) from build/icon.svg: every size Windows uses,
+// Makes build/icon.ico (the program icon) and build/installerSidebar.bmp from build/icon.svg. The icon: every size Windows uses,
 // each stored as PNG inside the .ico. Run after changing the SVG: node scripts/make-icon.mjs
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -37,3 +37,37 @@ writeFileSync(resolve(root, 'build/icon.ico'), ico)
 // The window icon in development (the built program takes it from the .exe).
 writeFileSync(resolve(root, 'build/icon.png'), images.find((i) => i.size === 256).png)
 console.log(`build/icon.ico: ${SIZES.join(', ')} px, ${ico.length} bytes`)
+
+// The picture of the first and last pages of the installer (tz.md, п. 2.5): 164×314, a 24-bit
+// BMP as NSIS wants it — the icon on the dark background of the program.
+const SIDEBAR = { width: 164, height: 314, icon: 112, background: { r: 0x1e, g: 0x1e, b: 0x1e } }
+const iconPng = await sharp(svg, { density: 384 }).resize(SIDEBAR.icon, SIDEBAR.icon).png().toBuffer()
+const { data } = await sharp({ create: { width: SIDEBAR.width, height: SIDEBAR.height, channels: 3, background: SIDEBAR.background } })
+  .composite([{ input: iconPng, left: (SIDEBAR.width - SIDEBAR.icon) >> 1, top: 70 }])
+  .removeAlpha()
+  .raw()
+  .toBuffer({ resolveWithObject: true })
+const rowSize = Math.ceil((SIDEBAR.width * 3) / 4) * 4
+const pixels = Buffer.alloc(rowSize * SIDEBAR.height)
+for (let y = 0; y < SIDEBAR.height; y++) {
+  // BMP rows go bottom-up, pixels as BGR.
+  const out = (SIDEBAR.height - 1 - y) * rowSize
+  for (let x = 0; x < SIDEBAR.width; x++) {
+    const i = (y * SIDEBAR.width + x) * 3
+    pixels[out + x * 3] = data[i + 2]
+    pixels[out + x * 3 + 1] = data[i + 1]
+    pixels[out + x * 3 + 2] = data[i]
+  }
+}
+const bmpHeader = Buffer.alloc(54)
+bmpHeader.write('BM', 0)
+bmpHeader.writeUInt32LE(54 + pixels.length, 2)
+bmpHeader.writeUInt32LE(54, 10) // pixels start
+bmpHeader.writeUInt32LE(40, 14) // BITMAPINFOHEADER
+bmpHeader.writeInt32LE(SIDEBAR.width, 18)
+bmpHeader.writeInt32LE(SIDEBAR.height, 22)
+bmpHeader.writeUInt16LE(1, 26) // planes
+bmpHeader.writeUInt16LE(24, 28) // bits per pixel
+bmpHeader.writeUInt32LE(pixels.length, 34)
+writeFileSync(resolve(root, 'build/installerSidebar.bmp'), Buffer.concat([bmpHeader, pixels]))
+console.log(`build/installerSidebar.bmp: ${SIDEBAR.width}×${SIDEBAR.height}`)

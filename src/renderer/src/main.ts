@@ -5,6 +5,7 @@ import { formatDuration } from '@shared/duration'
 import { makeTranslate } from '@shared/i18n'
 import type { MapMode, ViewMode } from '@shared/ipc'
 import type { Address, FolderData, LatLon } from '@shared/photo'
+import type { UpdateState } from '@shared/updates'
 import { setDateLocale, statusParts } from './describe'
 import { MapView } from './map'
 import { PhotoView } from './viewer'
@@ -50,6 +51,17 @@ async function start(): Promise<void> {
   const statusNote = byId('status-note')
   const statusCounts = byId('status-counts')
   const statusQueue = byId('status-queue')
+  // A new version (tz.md, п. 2.5): far right in the status bar; a click restarts or opens the release.
+  const statusUpdate = byId('status-update') as HTMLButtonElement
+  const showUpdate = (u: UpdateState | null): void => {
+    statusUpdate.hidden = !u
+    if (!u) return
+    statusUpdate.textContent = t(u.kind === 'ready' ? 'update.ready' : 'update.available', { version: u.version })
+    statusUpdate.title = t(u.kind === 'ready' ? 'update.readyHint' : 'update.availableHint')
+  }
+  statusUpdate.addEventListener('click', () => void window.geophotos.applyUpdate())
+  showUpdate(init.update)
+  window.geophotos.onUpdateState(showUpdate)
   const progress = byId('progress')
   const progressText = byId('progress-text')
   let folder: FolderData | null = null

@@ -10,6 +10,8 @@ export interface TileSource {
 export interface Settings {
   language: string
   exiftoolPath: string
+  /** Ask GitHub Releases for a newer version at start (tz.md, п. 2.5). */
+  checkUpdates: boolean
   map: {
     initialView: { lat: number; lon: number; zoom: number }
     defaultSource: string

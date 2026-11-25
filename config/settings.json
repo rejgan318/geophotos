@@ -4,6 +4,7 @@
   "$schema": "../schemas/settings.schema.json",
   "language": "auto",
   "exiftoolPath": "exiftool",
+  "checkUpdates": true,
   "map": {
     "initialView": { "lat": 49.8419, "lon": 24.0315, "zoom": 5 },
     "defaultSource": "osm",

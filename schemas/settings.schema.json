@@ -22,6 +22,11 @@
       "default": "exiftool",
       "description": "Path to exiftool.exe. \"exiftool\" means: find it in PATH."
     },
+    "checkUpdates": {
+      "type": "boolean",
+      "default": true,
+      "description": "At start, ask GitHub Releases for a newer version. The installed program downloads it in the background and installs it on exit; the zip version only tells about it."
+    },
     "map": {
       "type": "object",
       "additionalProperties": false,

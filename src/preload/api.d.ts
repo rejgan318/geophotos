@@ -1,3 +1,4 @@
+import type { UpdateState } from '../shared/updates'
 import type {
   AboutInfo,
   AboutTarget,
@@ -49,6 +50,9 @@ export interface GeoPhotosApi {
   searchPlaces(query: string): Promise<SearchResult>
   /** Opens a video in the default program of Windows (photo view, tz.md, п. 4.14). */
   openInPlayer(id: number): Promise<void>
+  /** A new version (tz.md, п. 2.5): shown in the status bar; a click applies it. */
+  onUpdateState(cb: (s: UpdateState) => void): void
+  applyUpdate(): Promise<void>
   aboutInfo(): Promise<AboutInfo>
   /** Opens the settings file (created if missing) or the log folder. */
   openAboutTarget(target: AboutTarget): Promise<void>

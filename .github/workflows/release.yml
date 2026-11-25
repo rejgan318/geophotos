@@ -42,17 +42,28 @@ jobs:
       - run: npm run pack:zip
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: dist/GeoPhotos-${{ env.VERSION }}-win-x64.zip
+          subject-path: |
+            dist/GeoPhotos-Setup-${{ env.VERSION }}.exe
+            dist/GeoPhotos-${{ env.VERSION }}-win-x64.zip
+      # The installer, the zip, and what the updater of installed programs reads (tz.md, п. 2.5):
+      # latest.yml (the version and SHA-512 of the installer) and the blockmap (to download only
+      # what changed). The zip version reads the version from latest.yml too.
       - name: Draft release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          setup="dist/GeoPhotos-Setup-$VERSION.exe"
           zip="dist/GeoPhotos-$VERSION-win-x64.zip"
-          sha="$(sha256sum "$zip" | cut -d' ' -f1 | tr a-f A-F)"
+          sha() { sha256sum "$1" | cut -d' ' -f1 | tr a-f A-F; }
           notes="$RUNNER_TEMP/notes.md"
           cat "release-notes/$VERSION.md" > "$notes"
-          printf '\nSHA-256 of the zip: `%s`\n\nBuilt by GitHub Actions from tag `%s`; check its origin: `gh attestation verify %s --repo %s`\n' \
-            "$sha" "$GITHUB_REF_NAME" "$(basename "$zip")" "$GITHUB_REPOSITORY" >> "$notes"
-          gh release create "$GITHUB_REF_NAME" "$zip" --draft --verify-tag \
-            --title "GeoPhotos $VERSION" --notes-file "$notes"
+          {
+            printf '\nSHA-256:\n'
+            printf -- '- `%s`: `%s`\n' "$(basename "$setup")" "$(sha "$setup")"
+            printf -- '- `%s`: `%s`\n' "$(basename "$zip")" "$(sha "$zip")"
+            printf '\nBuilt by GitHub Actions from tag `%s`; check the origin of a file: `gh attestation verify <file> --repo %s`\n' \
+              "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY"
+          } >> "$notes"
+          gh release create "$GITHUB_REF_NAME" "$setup" "$zip" dist/latest.yml "$setup.blockmap" \
+            --draft --verify-tag --title "GeoPhotos $VERSION" --notes-file "$notes"

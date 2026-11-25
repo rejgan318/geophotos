@@ -473,6 +473,21 @@ body {
   white-space: nowrap;
 }
 
+/* A new version (tz.md, п. 2.5): far right, a quiet link-like button. */
+#status-update {
+  flex: none;
+  border: none;
+  background: none;
+  padding: 0 2px;
+  font: inherit;
+  color: var(--marker-color);
+  cursor: pointer;
+}
+
+#status-update:hover {
+  text-decoration: underline;
+}
+
 /* Counter as filter buttons (tz.md, п. 4.13): the strip badge icons with numbers.
    The active filter is outlined in the color of its icon; "all" is white. */
 #status-counts {

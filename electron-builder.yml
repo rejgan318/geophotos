@@ -32,5 +32,46 @@ extraFiles:
 win:
   # Made from build/icon.svg by scripts/make-icon.mjs.
   icon: build/icon.ico
+  # The installer (tz.md, п. 2.5). dist/win-unpacked is made on the way; scripts/pack-zip.mjs packs
+  # it into the zip.
   target:
-    - dir
+    - nsis
+nsis:
+  artifactName: GeoPhotos-Setup-${version}.exe
+  # A wizard for the current user only, without administrator rights: build/installer.nsh skips
+  # the "all users or only me" page and adds the page of the desktop shortcut.
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createStartMenuShortcut: true
+  createDesktopShortcut: true
+  shortcutName: GeoPhotos
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerSidebar: build/installerSidebar.bmp
+  uninstallerSidebar: build/installerSidebar.bmp
+  installerLanguages: [en_US, ru_RU, uk_UA]
+  multiLanguageInstaller: true
+  displayLanguageSelector: false
+  runAfterFinish: true
+  # Settings and logs (%APPDATA%\GeoPhotos) stay after uninstalling.
+  deleteAppDataOnUninstall: false
+  include: build/installer.nsh
+# Where the updater looks for new versions: latest.yml of GitHub Releases (tz.md, п. 2.5).
+# The build itself never publishes (--publish never): Actions drafts the release.
+publish:
+  - provider: github
+    owner: rejgan318
+    repo: geophotos
+# Electron fuses (security review of 0.22.1): the program cannot be run as plain Node.js or be
+# given Node options from outside, and loads only its own checked app.asar. Inspect arguments stay
+# on: make-project.md, п. 5 ("Окружение Claude") attaches the debugger to a running program. The
+# extra privileges of file:// stay too: the window is loaded from file:// (off — it stays blank).
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: true
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  grantFileProtocolExtraPrivileges: true

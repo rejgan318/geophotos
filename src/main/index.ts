@@ -64,6 +64,8 @@ import { ElevationService } from './elevation'
 import { Geocoder } from './geocode'
 import { ThumbnailService } from './thumbnails'
 import { canWriteIn, installExiftool } from './exiftool-install'
+import { checkForUpdates, installAndRestart, isInstalled } from './updates'
+import { releasePageUrl, type UpdateState } from '@shared/updates'
 import sharp from 'sharp'
 
 // Must happen before `ready`: thumbnails are served to the window by this scheme.
@@ -147,6 +149,10 @@ let settings: Settings
 let languages: { code: string; name: string }[] = []
 /** Tools → Language → Restart: the program starts again once it has really closed. */
 let restartOnQuit = false
+/** A new version is downloaded or released (tz.md, п. 2.5); shown in the status bar. */
+let updateState: UpdateState | null = null
+/** "Restart" of the update was clicked: install it when the program exits. */
+let updateOnQuit = false
 /** The language last chosen in Tools → Language in this run; null — none yet. */
 let languageChoice: string | null = null
 let strings: Strings
@@ -347,7 +353,8 @@ let installingExiftool = false
  */
 async function installForGeoPhotos(): Promise<{ path: string; version: string } | null> {
   const programDir = dirname(process.execPath)
-  const inProgram = await canWriteIn(programDir)
+  // The installed program: its folder is wiped by updating and uninstalling (tz.md, п. 2.5).
+  const inProgram = !isInstalled() && (await canWriteIn(programDir))
   const dir = inProgram ? programDir : join(process.env['LOCALAPPDATA'] ?? app.getPath('userData'), 'GeoPhotos', 'exiftool')
   const abort = new AbortController()
   installingExiftool = true
@@ -410,7 +417,8 @@ function initData(): InitData {
     tracks: settings.tracks,
     thumbScheme: THUMB_SCHEME,
     // Regional format of Windows (as in Explorer), for dates (tz.md, п. 4.13).
-    dateLocale: app.getSystemLocale() || strings['locale'] || 'en-US'
+    dateLocale: app.getSystemLocale() || strings['locale'] || 'en-US',
+    update: updateState
   }
 }
 
@@ -1587,11 +1595,13 @@ function createWindow(): BrowserWindow {
     e.preventDefault()
     if (saving || asking) {
       restartOnQuit = false
+      updateOnQuit = false
       return
     }
     void confirmExit().then((how) => {
       if (how === 'stay') {
         restartOnQuit = false
+        updateOnQuit = false
         return
       }
       closeConfirmed = true
@@ -1772,6 +1782,14 @@ void app.whenReady().then(async () => {
   })
   ipcMain.handle(IPC.openInPlayer, (_e, id: unknown) => openInPlayer(id))
   ipcMain.handle(IPC.aboutInfo, () => aboutInfo())
+  // The update in the status bar (tz.md, п. 2.5): the release page, or exit and install.
+  ipcMain.handle(IPC.updateApply, async () => {
+    if (updateState?.kind === 'available') await shell.openExternal(releasePageUrl(updateState.version))
+    else if (updateState?.kind === 'ready') {
+      updateOnQuit = true
+      win?.close()
+    }
+  })
   // Only known places: the window names a target, never a path.
   ipcMain.handle(IPC.aboutOpen, async (_e, target: unknown) => {
     if (target === 'license' || target === 'notices') await openLicenseFile(target)
@@ -1800,6 +1818,18 @@ void app.whenReady().then(async () => {
   updateMenu(recentFolders)
   win = createWindow()
   win.on('closed', () => (win = null))
+  // After the window is up: the check never delays the start (tz.md, п. 2.5).
+  if (settings.checkUpdates) {
+    win.webContents.once('did-finish-load', () => {
+      void checkForUpdates({
+        userAgent: userAgent(),
+        onState: (s) => {
+          updateState = s
+          win?.webContents.send(IPC.updateState, s)
+        }
+      })
+    })
+  }
 })
 
 // The progress window of installing exiftool closes before the main window opens (tz.md, п. 2.2).
@@ -1807,7 +1837,8 @@ app.on('window-all-closed', () => {
   if (!installingExiftool) app.quit()
 })
 app.on('will-quit', () => {
-  if (restartOnQuit) app.relaunch()
+  if (updateOnQuit) installAndRestart()
+  else if (restartOnQuit) app.relaunch()
   // The batch mode does not touch the state of the main window (last folder, map…).
   if (!batchOnly) rememberSession()
   exiftool?.close()

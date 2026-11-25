@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { UpdateState } from '@shared/updates'
 import {
   IPC,
   type AboutInfo,
@@ -46,6 +47,10 @@ const api: GeoPhotosApi = {
   },
   searchPlaces: (query) => ipcRenderer.invoke(IPC.search, query) as Promise<SearchResult>,
   openInPlayer: (id) => ipcRenderer.invoke(IPC.openInPlayer, id) as Promise<void>,
+  onUpdateState: (cb) => {
+    ipcRenderer.on(IPC.updateState, (_e, s: UpdateState) => cb(s))
+  },
+  applyUpdate: () => ipcRenderer.invoke(IPC.updateApply) as Promise<void>,
   aboutInfo: () => ipcRenderer.invoke(IPC.aboutInfo) as Promise<AboutInfo>,
   openAboutTarget: (target) => ipcRenderer.invoke(IPC.aboutOpen, target) as Promise<void>,
   batchInit: () => ipcRenderer.invoke(IPC.batchInit) as Promise<{ strings: Record<string, string> }>,

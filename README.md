@@ -8,20 +8,25 @@ You open a folder from a trip, see the photos that already have coordinates (usu
 
 ## Installation
 
-GeoPhotos needs no installer: it is a folder you copy to your computer.
+Two ways, both on the page of the [latest release](https://github.com/rejgan318/geophotos/releases/latest) (Assets at the bottom of the page): the installer, which also keeps GeoPhotos up to date, or a zip to unpack.
 
-1. Download `GeoPhotos-<version>-win-x64.zip` from the [latest release](https://github.com/rejgan318/geophotos/releases/latest) (Assets at the bottom of the page).
-2. Unpack it anywhere you can write to, for example `C:\Programs` or `D:\Tools` (right-click → *Extract All…*). A folder `GeoPhotos` appears. A folder you can write to is better than `C:\Program Files`: ExifTool can then be put right next to the program (step 4).
-3. Run `GeoPhotos.exe` from that folder. To start it more easily, right-click it → *Send to → Desktop (create shortcut)*, or pin it to Start.
-   The program is not signed, so on the first start Windows may show *"Windows protected your PC"*: click *More info → Run anyway*.
-4. GeoPhotos uses [ExifTool](https://exiftool.org/) to read and write coordinates. If ExifTool is not on the computer, GeoPhotos says so at the first start: click **Install for GeoPhotos** — it downloads the official ExifTool (about 11 MB) from exiftool.org, checks it and puts it next to `GeoPhotos.exe`. Other ways are under [Requirements](#requirements).
-5. Open a folder of photos: *File → Open Folder…* (pick any photo in it), or drag the folder onto the window.
+**Installer** (from 0.30.0) — `GeoPhotos-Setup-<version>.exe`:
+1. Run it. It installs for you only, without administrator rights, into `%LOCALAPPDATA%\Programs\GeoPhotos` (the folder can be changed), adds GeoPhotos to the Start menu and, if you leave the box ticked, a shortcut to the desktop.
+   The program is not signed, so Windows may show *"Windows protected your PC"*: click *More info → Run anyway*.
+2. GeoPhotos uses [ExifTool](https://exiftool.org/) to read and write coordinates. If ExifTool is not on the computer, GeoPhotos says so at the first start: click **Install for GeoPhotos** — it downloads the official ExifTool (about 11 MB) from exiftool.org, checks it and puts it into `%LOCALAPPDATA%\GeoPhotos\exiftool`. Other ways are under [Requirements](#requirements).
+3. Open a folder of photos: *File → Open Folder…* (pick any photo in it), or drag the folder onto the window.
 
-**Update:** unpack the new zip over the old folder (or into a new one). Settings, recent folders and logs are kept in `%APPDATA%\GeoPhotos` and stay. If ExifTool was installed next to the old `GeoPhotos.exe` and you use a new folder, copy `exiftool.exe` and `exiftool_files` over, or click **Install for GeoPhotos** again.
+**Updates** come by themselves: at start GeoPhotos asks GitHub for a newer version and downloads it in the background; then the status bar shows *"Version X is ready — restart"*. Click it to install now, or it is installed when you exit. To turn the check off, set `"checkUpdates": false` in the settings (*Tools → Open Settings File*).
 
-**Uninstall:** delete the `GeoPhotos` folder; to remove the settings and logs too, delete `%APPDATA%\GeoPhotos`.
+**Uninstall:** *Settings → Apps → GeoPhotos → Uninstall*. Settings, recent folders and logs (`%APPDATA%\GeoPhotos`) and ExifTool (`%LOCALAPPDATA%\GeoPhotos`) stay; delete those folders to remove them too.
 
-**Checking the download** (optional). The SHA-256 on the release page tells that the zip came intact. From 0.29.0 the releases are built by GitHub Actions from this public repository, and GitHub attests each zip: with [GitHub CLI](https://cli.github.com/), `gh attestation verify GeoPhotos-<version>-win-x64.zip --repo rejgan318/geophotos` checks that the file was built from this repository's code and not changed afterwards. Or build the program yourself: [Building from source](#building-from-source).
+**Zip** — `GeoPhotos-<version>-win-x64.zip`, no installation:
+1. Unpack it anywhere you can write to, for example `C:\Programs` or `D:\Tools` (right-click → *Extract All…*). A folder `GeoPhotos` appears. A folder you can write to is better than `C:\Program Files`: ExifTool can then be put right next to the program.
+2. Run `GeoPhotos.exe` from that folder (about *"Windows protected your PC"* — see above). To start it more easily, right-click it → *Send to → Desktop (create shortcut)*, or pin it to Start. **Install for GeoPhotos** puts ExifTool next to `GeoPhotos.exe`.
+3. The zip version does not update itself, but tells about a newer version in the status bar: click it to open the release page. **Update:** unpack the new zip over the old folder (or into a new one). Settings, recent folders and logs are kept in `%APPDATA%\GeoPhotos` and stay. If ExifTool was installed next to the old `GeoPhotos.exe` and you use a new folder, copy `exiftool.exe` and `exiftool_files` over, or click **Install for GeoPhotos** again.
+4. **Uninstall:** delete the `GeoPhotos` folder; to remove the settings and logs too, delete `%APPDATA%\GeoPhotos`.
+
+**Checking the download** (optional). The SHA-256 on the release page tells that a file came intact. From 0.29.0 the releases are built by GitHub Actions from this public repository, and GitHub attests each file: with [GitHub CLI](https://cli.github.com/), `gh attestation verify <file> --repo rejgan318/geophotos` checks that it was built from this repository's code and not changed afterwards. Or build the program yourself: [Building from source](#building-from-source).
 
 ## Features
 
@@ -68,7 +73,7 @@ Live photos (iPhone Live Photo; Motion Photo of Google, Xiaomi, Samsung) are one
 ## Requirements
 
 - Windows 10 or 11, 64-bit.
-- [ExifTool](https://exiftool.org/) (checked with 13.62 and 13.64). If GeoPhotos does not find it at start, it offers **Install for GeoPhotos**: it downloads the official Windows zip, checks its SHA-256 against exiftool.org and puts exiftool next to `GeoPhotos.exe`. Or any of:
+- [ExifTool](https://exiftool.org/) (checked with 13.62 and 13.64). If GeoPhotos does not find it at start, it offers **Install for GeoPhotos**: it downloads the official Windows zip, checks its SHA-256 against exiftool.org and puts exiftool next to `GeoPhotos.exe` (for the installed program: into `%LOCALAPPDATA%\GeoPhotos\exiftool`). Or any of:
   - install it with the Windows installer (or `winget install OliverBetz.ExifTool`); GeoPhotos finds it in `PATH` or where the installer puts it;
   - put it next to `GeoPhotos.exe`: `exiftool.exe` **together with its folder `exiftool_files`** (the exe alone does not run). From the zip of exiftool.org rename `exiftool(-k).exe` to `exiftool.exe`;
   - set `exiftoolPath` in the settings file to the full path of `exiftool.exe`.
@@ -85,7 +90,7 @@ cd geophotos
 git checkout v0.29.0     # the version you want; skip it for the latest code
 npm ci                   # the exact versions of the components from package-lock.json
 npm test                 # optional: unit tests
-npm run build            # the program: dist\win-unpacked\GeoPhotos.exe
+npm run build            # the program: dist\win-unpacked\GeoPhotos.exe, and the installer dist\GeoPhotos-Setup-<version>.exe
 npm run pack:zip         # optional: the same zip as in a release
 ```
 
@@ -143,12 +148,14 @@ The OpenStreetMap and Esri tiles are used under their usage policies. The Google
 | `npm run typecheck` | Type-check the main process, preload, tests and the window |
 | `npm test` | Unit tests |
 | `npm run test:integration` | Tests with the real ExifTool on copies of files |
-| `npm run build` | Build the program |
+| `npm run build` | Build the program and the installer (NSIS; additions in `build/installer.nsh`) |
 | `npm run pack:zip` | Pack the built program into the release zip |
 
 Some integration tests use real photos that are not in the repository. Set `GEOPHOTOS_TEST_DIR` to a folder of test photos, or they are taken from `../data/geophotos-testdata/master`. Without them, those tests are skipped.
 
-**GitHub Actions:** every push to `main` runs the type check, unit and integration tests on Windows and Ubuntu (`.github/workflows/test.yml`), with a pinned ExifTool checked against the SHA-256 of exiftool.org. A tag `vX.Y.Z` builds, tests and packs the program, attests the zip and creates a draft release with `release-notes/X.Y.Z.md` (`.github/workflows/release.yml`).
+**GitHub Actions:** every push to `main` runs the type check, unit and integration tests on Windows and Ubuntu (`.github/workflows/test.yml`), with a pinned ExifTool checked against the SHA-256 of exiftool.org. A tag `vX.Y.Z` builds and tests the program, attests the installer and the zip and creates a draft release with them, `latest.yml` and the blockmap for the updater, and `release-notes/X.Y.Z.md` (`.github/workflows/release.yml`).
+
+**Updates** (`src/main/updates.ts`): the installed program uses electron-updater; the zip version reads the version from `latest.yml` of the latest release. To try it without GitHub, set `GEOPHOTOS_UPDATE_URL` to a local web server that serves a folder with `latest.yml`, the installer and its blockmap of a newer build.
 
 **Stack:** Electron, TypeScript, electron-vite, Leaflet with Leaflet.markercluster, sharp, Vitest. ExifTool runs as a few `-stay_open` processes, about one per 30 files of the project.
 

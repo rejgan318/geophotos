@@ -3,6 +3,7 @@ import type { Address, FolderData, LatLon, Photo } from './photo'
 import type { SearchResult } from './search'
 import type { MapSource, MarkerStyle } from './settings'
 import type { TrackData } from './track'
+import type { UpdateState } from './updates'
 
 /** IPC channels between main and the window. All IPC names and payloads live here. */
 export const IPC = {
@@ -38,6 +39,10 @@ export const IPC = {
   openInPlayer: 'video:openInPlayer',
   /** invoke, window → main: data of Help → About. */
   aboutInfo: 'about:info',
+  /** event, main → window: a new version is downloaded or released (tz.md, п. 2.5). */
+  updateState: 'update:state',
+  /** invoke, window → main: the update in the status bar was clicked. */
+  updateApply: 'update:apply',
   /** invoke, window → main: open a license file (links in About). */
   aboutOpen: 'about:open',
   /** invoke, batch window → main: the interface texts (tz.md, п. 10). */
@@ -75,6 +80,8 @@ export interface InitData {
   thumbScheme: string
   /** Locale of the regional format of the system: dates are shown in it (tz.md, п. 4.13). */
   dateLocale: string
+  /** Already known at start (tz.md, п. 2.5); later ones come as events. */
+  update: UpdateState | null
 }
 
 /** What the window reports for the next run (tz.md, п. 7.1): the map and the strip scroll. */
