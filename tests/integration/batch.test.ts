@@ -107,8 +107,9 @@ describe('batch mode (tz.md, п. 10)', () => {
     )
     expect(out.written).toBe(1)
     expect(out.failed).toEqual([{ name: join(dir, 'nope.jpg'), error: 'Not found' }])
+    // Without a shooting date the strip is in file-time order, and writing x.jpg makes it newer: compare by name.
     const photos = (await scanFolder(dir, et)).photos
-    expect(photos.map((p) => [p.name, p.altitude])).toEqual([
+    expect(photos.map((p) => [p.name, p.altitude]).sort()).toEqual([
       ['x.jpg', 10],
       ['y.jpg', null]
     ])

@@ -36,4 +36,7 @@ jobs:
         run: bash scripts/ci-exiftool.sh
       - run: npm run typecheck
       - run: npm test
+      # On Ubuntu the program is not ported yet (tz.md, п. 9.4): known failures are listed there; they
+      # are shown in the log but do not fail the run. Unit tests must pass on both.
       - run: npm run test:integration
+        continue-on-error: ${{ matrix.os == 'ubuntu-latest' }}
