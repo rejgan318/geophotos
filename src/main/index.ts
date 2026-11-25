@@ -1,6 +1,6 @@
 import { statSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, protocol, screen, session, shell } from 'electron'
 import { windowTitle } from '@shared/app-info'
 import { pathsFromArgv } from '@shared/argv'
@@ -201,7 +201,59 @@ let gridThumb: number = GRID_THUMB.normal
 const batchArgs = isBatch(process.argv.slice(1)) ? parseBatchArgs(process.argv.slice(1), app.getAppPath()) : null
 /** The batch window is running: the program state of the main window is not touched. */
 let batchOnly = batchArgs !== null
-let startupPaths = batchArgs ? [] : pathsFromArgv(process.argv.slice(1), (p) => kindOf(p) !== null, app.getAppPath())
+let startupPaths = batchArgs ? [] : pathsFromArgv(process.argv.slice(1), (p) => kindOf(p) !== null, app.getAppPath()).map((p) => resolve(p))
+
+/**
+ * One window (tz.md, 0.35.0): a second start hands its folders and files to the program already
+ * running and ends; the batch mode (п. 10) runs on its own and takes no part in this.
+ */
+const secondInstance = !batchArgs && !app.requestSingleInstanceLock({ paths: startupPaths })
+if (secondInstance) app.quit()
+else if (!batchArgs) {
+  app.on('second-instance', (_e, _argv, _cwd, data) => {
+    const given = (data as { paths?: unknown } | null)?.paths
+    const paths = Array.isArray(given) ? given.filter((p): p is string => typeof p === 'string' && p !== '') : []
+    // Still starting (the exiftool window, say): they open with the window.
+    if (!win) {
+      startupPaths.push(...paths)
+      return
+    }
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+    // As if dropped onto the window (п. 3.1): a folder opens (asking about unsaved changes), files are added.
+    if (paths.length) void openPaths(paths)
+  })
+}
+
+/**
+ * The recent folders on the taskbar and Start icon (Jump List, tz.md, 0.35.0): a click opens the
+ * folder — in the running window (one window) or starting the program. Only in the built program:
+ * in development the icon is Electron's.
+ */
+function updateJumpList(): void {
+  if (!app.isPackaged || process.platform !== 'win32') return
+  // A quote after a backslash would be escaped: "E:\" for the root of a disk.
+  const quoted = (p: string): string => `"${p.replace(/\\$/, '\\\\')}"`
+  const result = recentFolders.length
+    ? app.setJumpList([
+        {
+          type: 'custom',
+          name: t('start.recent'),
+          items: recentFolders.map((folder) => ({
+            type: 'task' as const,
+            title: basename(folder) || folder,
+            description: folder,
+            program: process.execPath,
+            args: quoted(folder),
+            iconPath: process.execPath,
+            iconIndex: 0
+          }))
+        }
+      ])
+    : app.setJumpList(null)
+  if (result !== 'ok') log.warn(`Jump list not set: ${result}`)
+}
 
 function kindOf(p: string): 'dir' | 'file' | null {
   try {
@@ -441,6 +493,7 @@ function setRecent(update: (list: string[]) => string[]): void {
   recentFolders = update(recentFolders)
   updateMenu(recentFolders)
   win?.webContents.send(IPC.recent, recentFolders)
+  updateJumpList()
   saveAppState()
 }
 
@@ -1805,6 +1858,8 @@ async function runBatchWindow(paths: string[], opts: BatchOptions): Promise<numb
 const WINDOW_BG = '#2b2b2b'
 
 void app.whenReady().then(async () => {
+  // A second start (tz.md, 0.35.0): it has handed its paths over and quits.
+  if (secondInstance) return
   // The program is dark whatever the Windows theme: the menu bar, title bar, scrollbars and the
   // Windows dialogs too (tz.md, п. 4.16).
   nativeTheme.themeSource = 'dark'
@@ -1916,6 +1971,7 @@ void app.whenReady().then(async () => {
   addFolder = saved.addFolder
   stripPosition = saved.stripPosition
   gridThumb = saved.gridThumb
+  updateJumpList()
   ui = { ...ui, mapMode: mapState?.thumbnails ? 'thumbs' : 'pins' }
   updateMenu(recentFolders)
   win = createWindow()

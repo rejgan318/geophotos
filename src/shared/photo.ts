@@ -95,6 +95,11 @@ export interface Photo {
    * with it the shooting time is an exact instant (place on a track, tz.md, п. 3.9.7). Absent if unknown.
    */
   offset?: string
+  /**
+   * Where the camera looked, degrees clockwise from north (GPSImgDirection, phones write it; tz.md,
+   * 0.35.0): shown as a sector at the marker of the current photo. Absent if unknown.
+   */
+  direction?: number
   /** A video (tz.md, п. 3.3.6): its length in seconds, null if unknown. Absent for photos. */
   video?: { duration: number | null }
   /**

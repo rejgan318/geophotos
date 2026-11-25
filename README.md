@@ -44,6 +44,8 @@ Two ways, both on the page of the [latest release](https://github.com/rejgan318/
 - **Map:** OpenStreetMap, Esri satellite, Google satellite and OpenTopoMap. Nearby markers are grouped. Markers or photo thumbnails on the map (key T); hovering a marker shows its thumbnail.
 - **Place search:** by name or address, through Nominatim.
 - **Thumbnail strip:** sorted by shooting date. Marks show photos with coordinates, an address, an altitude, and unsaved changes. Photos of subfolders can be loaded too. The strip is at the bottom or on the left (*View → Strip Position*); G opens it as a grid over the whole window — handy for picking among many photos (G or Esc — back to the map); Ctrl+wheel makes the grid thumbnails larger or smaller.
+- **Shooting direction:** if the phone wrote where the camera looked (iPhone does), the current photo's marker shows a sector that way.
+- **One window:** starting GeoPhotos again brings the open window forward; a folder dropped onto its icon opens there. Right-click the taskbar icon for the recent folders.
 - **Right click** on a photo (in the strip or on the map) opens its menu: coordinates, *Show in Explorer*, *Open in Another Program*.
 - **Ways to set coordinates:**
   - drag thumbnails from the strip onto the map, or double-click the map for the current photo;

@@ -136,3 +136,15 @@ describe('photos', () => {
     expect(embeddedPreviewTag({})).toBeNull()
   })
 })
+
+describe('direction of the camera (tz.md, 0.35.0)', () => {
+  it('EXIF, then XMP; 360 is north; outside 0–360 or not a number — none', async () => {
+    const { pickDirection } = await import('@shared/metadata')
+    expect(pickDirection({ 'EXIF:GPSImgDirection': 123.4 })).toBe(123.4)
+    expect(pickDirection({ 'XMP:GPSImgDirection': 10 })).toBe(10)
+    expect(pickDirection({ 'EXIF:GPSImgDirection': 360 })).toBe(0)
+    expect(pickDirection({ 'EXIF:GPSImgDirection': 400 })).toBeNull()
+    expect(pickDirection({ 'EXIF:GPSImgDirection': 'north' })).toBeNull()
+    expect(pickDirection({})).toBeNull()
+  })
+})

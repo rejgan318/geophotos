@@ -121,6 +121,8 @@ export class MapView {
   private shown: ReadonlySet<number> | null = null
   /** The track view (tz.md, п. 3.9.6): the map is dimmed and still, without photo markers. */
   private still = false
+  /** Where the camera of the current photo looked (tz.md, 0.35.0): a sector at its marker. */
+  private direction: L.Marker | null = null
 
   constructor(
     private readonly el: HTMLElement,
@@ -625,8 +627,42 @@ export class MapView {
     return node
   }
 
+  /**
+   * The direction of the current photo (tz.md, п. 4.20): a translucent sector from its marker, only
+   * from the street zoom (DIRECTION_ZOOM: farther out it would cover kilometres and say nothing),
+   * while the marker is on the map by itself (not hidden in a group) and the photo has a direction.
+   * Follows the selection, zoom and moves (called with the group highlight).
+   */
+  private showDirection(): void {
+    const id = this.current
+    const marker = id === null ? undefined : this.markers.get(id)
+    const deg = id === null ? undefined : this.photos[id]?.direction
+    const near = this.map.getZoom() >= DIRECTION_ZOOM
+    const show = !this.still && near && marker && deg !== undefined && this.map.hasLayer(marker) && !this.groupOf(marker)
+    if (!show) {
+      this.direction?.remove()
+      this.direction = null
+      return
+    }
+    const at = marker.getLatLng()
+    const key = `${id}:${deg}`
+    if (this.direction && this.direction.options.alt === key) {
+      this.direction.setLatLng(at)
+      return
+    }
+    this.direction?.remove()
+    this.direction = L.marker(at, {
+      icon: L.divIcon({ className: 'photo-direction', html: directionSvg(deg), iconSize: [120, 120], iconAnchor: [60, 60] }),
+      interactive: false,
+      keyboard: false,
+      alt: key,
+      zIndexOffset: -1000
+    }).addTo(this.map)
+  }
+
   /** Groups that hide selected photos get the selected look. */
   private highlightGroups(): void {
+    this.showDirection()
     for (const el of this.highlighted) el.classList.remove('selected')
     this.highlighted = []
     for (const id of this.selected) {
@@ -676,4 +712,31 @@ export class MapView {
   invalidateSize(): void {
     this.map.invalidateSize()
   }
+}
+
+/** From this zoom (blocks and streets) the direction is shown: the sector covers about a hundred metres. */
+const DIRECTION_ZOOM = 15
+
+/** Muted blue of the direction beam: quiet on the map, apart from the marker colours. */
+const BEAM = '#2f6db5'
+
+/**
+ * A beam (tz.md, п. 4.20): a sector of 50° and 52 px pointing to `deg` (clockwise from north)
+ * from the centre of a 120 px box; denser at the marker, lighter at the edge, a thin outline so
+ * that it reads on a busy map.
+ */
+function directionSvg(deg: number): string {
+  const r = 52
+  const half = 25
+  const color = BEAM
+  const p = (a: number): string => {
+    const rad = ((a - 90) * Math.PI) / 180
+    return `${(60 + r * Math.cos(rad)).toFixed(1)},${(60 + r * Math.sin(rad)).toFixed(1)}`
+  }
+  return (
+    `<svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">` +
+    `<defs><radialGradient id="dir-fade" cx="60" cy="60" r="${r}" gradientUnits="userSpaceOnUse">` +
+    `<stop offset="0" stop-color="${color}" stop-opacity="0.5"/><stop offset="1" stop-color="${color}" stop-opacity="0.12"/></radialGradient></defs>` +
+    `<path d="M60,60 L${p(deg - half)} A${r},${r} 0 0 1 ${p(deg + half)} Z" fill="url(#dir-fade)" stroke="${color}" stroke-opacity="0.55" stroke-width="1"/></svg>`
+  )
 }

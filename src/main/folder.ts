@@ -80,6 +80,9 @@ const TAGS = [
   '-EXIF:DateTimeOriginal',
   // The time zone of the shooting time (phones): the exact instant, for the place on a track (tz.md, п. 3.9.7).
   '-EXIF:OffsetTimeOriginal',
+  // Where the camera looked (phones; tz.md, 0.35.0): the sector at the current photo's marker.
+  '-EXIF:GPSImgDirection',
+  '-XMP:GPSImgDirection',
   '-XMP:DateTimeOriginal',
   // Videos (tz.md, пп. 3.3.6, 4.2): dates, the camera, the length.
   '-XMP:CreateDate',

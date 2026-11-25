@@ -641,6 +641,12 @@ body.grid.grid-photo #strip {
 }
 
 /* Place search on the map (tz.md, п. 5.3). */
+/* The controls on the map are light (Leaflet): their fields and switches too, though the window
+   is dark (color-scheme, tz.md, п. 4.16) — otherwise the text typed is white on white. */
+.leaflet-control {
+  color-scheme: light;
+}
+
 .search-box {
   width: 300px;
   background: #fff;
@@ -659,6 +665,7 @@ body.grid.grid-photo #strip {
   padding: 6px 8px;
   font: inherit;
   outline: none;
+  color: inherit;
   background: transparent;
 }
 
@@ -1274,4 +1281,11 @@ body.grid #strip .thumb {
   margin-top: 6px;
   text-align: center;
   color: var(--fg-dim);
+}
+
+/* The direction of the current photo (tz.md, 0.35.0): under the markers, not clickable. */
+.photo-direction {
+  background: none;
+  border: none;
+  pointer-events: none;
 }

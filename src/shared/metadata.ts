@@ -222,6 +222,15 @@ export function videoDuration(rec: ExifRecord): number | null {
   return d !== null && d >= 0 ? d : null
 }
 
+/** Where the camera looked, degrees 0–360 from north (EXIF, then XMP); null — not written or not a number. */
+export function pickDirection(rec: ExifRecord): number | null {
+  for (const group of ['EXIF', 'XMP'] as const) {
+    const v = num(tagValue(rec, 'GPSImgDirection', group))
+    if (v !== null && v >= 0 && v <= 360) return v % 360
+  }
+  return null
+}
+
 /** Builds a photo from its exiftool record (`id` is assigned after sorting). */
 export function toPhoto(
   name: string,
@@ -249,8 +258,10 @@ export function toPhoto(
   // The offset belongs to the EXIF shooting time: only when that is the date used.
   const off = tagValue(rec, 'OffsetTimeOriginal', 'EXIF')
   const offset = dateSource === 'shot' && typeof off === 'string' && /^[+-]\d\d:\d\d$/.test(off.trim()) ? off.trim() : null
+  const direction = pickDirection(rec)
   return {
     name, path, date, dateSource, coords, coordSource, address, altitude, modified: false,
+    ...(direction !== null ? { direction } : {}),
     ...(error ? { error } : {}),
     ...(size !== null ? { size } : {}),
     ...(offset ? { offset } : {}),
