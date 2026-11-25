@@ -3,6 +3,8 @@ import type { Translate } from '@shared/i18n'
 import type { TrackForMap } from '@shared/ipc'
 import type { Photo } from '@shared/photo'
 import { nearestPoint, trackBounds, type TrackPoint } from '@shared/track'
+import type { LatLon } from '@shared/photo'
+import type { ZonedTrack } from '@shared/track-match'
 import { numberText, speedText, trackTime } from './describe'
 import { flagSvg } from './icons'
 
@@ -39,6 +41,8 @@ export class TrackLayer {
   private generation = -1
   /** The point of the track view's profile under the mouse (п. 3.9.6). */
   private probe: L.CircleMarker | null = null
+  /** The place of the current photo on a track (п. 3.9.7); null — none shown. */
+  private hintMark: L.Marker | null = null
 
   constructor(
     private readonly map: L.Map,
@@ -49,6 +53,8 @@ export class TrackLayer {
     // Under the photo markers (600), over the tiles and other overlays (400).
     map.createPane('tracks').style.zIndex = '450'
     map.createPane('trackFlags').style.zIndex = '590'
+    // The place of the current photo is over the photo markers and thumbnails (600), or they hide it.
+    map.createPane('trackHint').style.zIndex = '650'
     map.on('zoomend', () => this.updateLabels())
   }
 
@@ -68,6 +74,7 @@ export class TrackLayer {
   }
 
   clear(): void {
+    this.showHint(null)
     for (const s of this.shown.values()) for (const l of [...s.casings, ...s.lines, ...s.flags]) l.remove()
     this.shown.clear()
     this.current = null
@@ -232,5 +239,39 @@ export class TrackLayer {
 
   get onlyId(): number | null {
     return this.only
+  }
+
+  /** The tracks drawn, in strip order, with their time zones: for the place of a photo (п. 3.9.7). */
+  zoned(): ZonedTrack[] {
+    return [...this.shown.values()].sort((a, b) => a.id - b.id).map((s) => ({ id: s.id, data: s.track.data, zone: s.track.zone }))
+  }
+
+  /** The mark of the place of the current photo on a track (п. 3.9.7): a ring; null hides it. */
+  showHint(at: LatLon | null): void {
+    if (!at) {
+      this.hintMark?.remove()
+      this.hintMark = null
+      return
+    }
+    if (!this.hintMark) {
+      this.hintMark = L.marker([at.lat, at.lon], {
+        pane: 'trackHint',
+        icon: L.divIcon({ className: 'track-hint', html: '<div></div>', iconSize: [26, 26], iconAnchor: [13, 13] }),
+        interactive: false,
+        keyboard: false
+      }).addTo(this.map)
+    } else this.hintMark.setLatLng([at.lat, at.lon])
+  }
+
+  /** The mark comes into view if it is off the map, as the marker of the current photo (п. 4.4.2). */
+  revealHint(): void {
+    const ll = this.hintMark?.getLatLng()
+    if (ll && !this.map.getBounds().pad(-0.08).contains(ll)) this.map.panTo(ll)
+  }
+
+  /** Where the mark stands now; null — none. */
+  get hint(): LatLon | null {
+    const ll = this.hintMark?.getLatLng()
+    return ll ? { lat: ll.lat, lon: ll.lng } : null
   }
 }

@@ -21,6 +21,10 @@ export interface StripHandlers {
   onDropOnPhoto(ids: number[], coords: LatLon): void
   /** The photos being dragged right now (drag data cannot be read before the drop). */
   dragged(): number[] | null
+  /** Whether some of these photos have a place on this track (tz.md, п. 3.9.7). */
+  canDropOnTrack(ids: number[], track: number): boolean
+  /** Photos dropped onto a track: each gets its place on it. */
+  onDropOnTrack(ids: number[], track: number): void
 }
 
 /**
@@ -140,6 +144,7 @@ export class Strip {
     item.addEventListener('dragstart', (e) => this.dragStart(e, p.id))
     item.addEventListener('dragend', () => {
       this.clearDropTarget()
+      this.markTargets(false)
       this.h.onDragEnd()
     })
     // Dropping onto a photo with coordinates gives them to the dragged photos; onto one without,
@@ -155,12 +160,17 @@ export class Strip {
       if (!item.contains(e.relatedTarget as Node | null)) item.classList.remove('drop-target')
     })
     item.addEventListener('drop', (e) => {
-      const drop = this.dropOn(p.id)
+      const ids = this.h.dragged()
+      const onTrack = !!this.photos[p.id]?.track
+      const drop = onTrack ? null : this.dropOn(p.id)
+      const ok = onTrack ? this.canDropOn(p.id) : !!drop
       this.clearDropTarget()
-      if (!drop) return
+      if (!ok || !ids) return
       e.preventDefault()
       e.stopPropagation()
-      this.h.onDropOnPhoto(drop.ids, drop.coords)
+      // Onto a track (п. 3.9.7): each photo to its own place on it.
+      if (onTrack) this.h.onDropOnTrack(ids, p.id)
+      else this.h.onDropOnPhoto(drop!.ids, drop!.coords)
     })
     return item
   }
@@ -172,11 +182,25 @@ export class Strip {
   }
 
   private canDropOn(id: number): boolean {
+    const ids = this.h.dragged()
+    if (!ids) return false
+    if (this.photos[id]?.track) return this.h.canDropOnTrack(ids, id)
     return this.dropOn(id) !== null
+  }
+
+  /**
+   * While photos are dragged, the thumbnails a drop on which would do nothing are dimmed
+   * (tz.md, п. 4.5); the dragged ones themselves are not.
+   */
+  private markTargets(on: boolean): void {
+    const dragged = new Set(on ? (this.h.dragged() ?? []) : [])
+    for (const [id, item] of this.items) item.classList.toggle('no-drop', on && !dragged.has(id) && !this.canDropOn(id))
   }
 
   private dragStart(e: DragEvent, id: number): void {
     const ids = this.h.onDragStart(id)
+    // After the drag image is taken (dimming now would dim it too).
+    requestAnimationFrame(() => this.markTargets(true))
     if (!e.dataTransfer) return
     e.dataTransfer.effectAllowed = 'copy'
     e.dataTransfer.setData(PHOTO_DRAG_TYPE, JSON.stringify(ids))

@@ -218,6 +218,8 @@
   "help.dragToMap": "They get the coordinates of that point",
   "help.action.dragToPhoto": "Drag photos onto another photo in the strip",
   "help.dragToPhoto": "Onto one with coordinates — they get its coordinates; onto one without — it gets theirs (if they share one point)",
+  "help.action.dropOnTrack": "Drag photos onto a track in the strip",
+  "help.dropOnTrack": "Each gets its place on the track at the time it was taken; those outside the track do not change",
   "help.action.dragMarker": "Drag a marker on the map",
   "help.dragMarker": "All shown photos at that point move; the marker of one of several selected photos — all selected ones go there",
   "help.key.drag": "drag on the map",
@@ -231,5 +233,6 @@
   "help.markModified": "Coordinates changed, not saved",
   "help.markNoCoords": "Status bar: photos without coordinates — the ones still to place; a placed photo leaves the list",
   "help.markTrack": "A track (GPX, KML, KMZ, FIT, TCX, GeoJSON): a line on the map; Space — its summary and profile",
+  "help.markTrackHint": "On a track: where the current photo (without coordinates) was taken — drop it next to the ring to place it exactly there",
   "help.markFilters": "Status bar counters: click to show only these photos, click again for all"
 }

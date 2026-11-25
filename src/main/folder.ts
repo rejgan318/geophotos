@@ -78,6 +78,8 @@ const TAGS = [
   '-File:FileType',
   '-File:MIMEType',
   '-EXIF:DateTimeOriginal',
+  // The time zone of the shooting time (phones): the exact instant, for the place on a track (tz.md, п. 3.9.7).
+  '-EXIF:OffsetTimeOriginal',
   '-XMP:DateTimeOriginal',
   // Videos (tz.md, пп. 3.3.6, 4.2): dates, the camera, the length.
   '-XMP:CreateDate',

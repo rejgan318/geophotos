@@ -90,6 +90,11 @@ export interface Photo {
    * (iPhone Live Photo, the MOV of the pair). Absent for others.
    */
   live?: true
+  /**
+   * Offset of the time zone the photo was taken in, "+03:00" (phones write it, EXIF OffsetTimeOriginal):
+   * with it the shooting time is an exact instant (place on a track, tz.md, п. 3.9.7). Absent if unknown.
+   */
+  offset?: string
   /** A video (tz.md, п. 3.3.6): its length in seconds, null if unknown. Absent for photos. */
   video?: { duration: number | null }
   /**

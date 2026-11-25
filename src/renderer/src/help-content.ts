@@ -1,4 +1,4 @@
-import { ADDRESS_SVG, ALTITUDE_SVG, PENCIL_SVG, PHOTO_SVG, PIN_OFF_SVG, PIN_SVG, TRACK_SVG } from './icons'
+import { ADDRESS_SVG, ALTITUDE_SVG, PENCIL_SVG, PHOTO_SVG, PIN_OFF_SVG, PIN_SVG, RING_SVG, TRACK_SVG } from './icons'
 
 /**
  * Help → Keyboard Shortcuts (F1): keys, mouse actions and marks of the program.
@@ -48,6 +48,7 @@ export const SECTIONS: Section[] = [
       { action: 'help.action.doubleClickMap', text: 'help.doubleClickMap' },
       { action: 'help.action.dragToMap', text: 'help.dragToMap' },
       { action: 'help.action.dragToPhoto', text: 'help.dragToPhoto' },
+      { action: 'help.action.dropOnTrack', text: 'help.dropOnTrack' },
       { action: 'help.action.dragMarker', text: 'help.dragMarker' },
       { keys: ['Ctrl+help.key.drag'], text: 'help.boxSelect' },
       { action: 'help.action.dropOnMark', text: 'help.dropOnMark' },
@@ -64,7 +65,8 @@ export const SECTIONS: Section[] = [
       { icon: ALTITUDE_SVG, color: 'var(--altitude)', text: 'help.markAltitude' },
       { icon: PHOTO_SVG, color: 'var(--selected)', text: 'help.markFilters' },
       { icon: PIN_OFF_SVG, color: 'var(--no-coords)', text: 'help.markNoCoords' },
-      { icon: TRACK_SVG, color: 'var(--selected)', text: 'help.markTrack' }
+      { icon: TRACK_SVG, color: 'var(--selected)', text: 'help.markTrack' },
+      { icon: RING_SVG, color: 'var(--marker-selected)', text: 'help.markTrackHint' }
     ]
   }
 ]

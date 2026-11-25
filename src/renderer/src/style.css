@@ -1097,3 +1097,24 @@ body {
 .track-profile .tp-readout[hidden] {
   display: none;
 }
+
+/* The place of the current photo on a track (tz.md, п. 3.9.7): a ring of the selected-marker colour. */
+.track-hint {
+  background: none;
+  border: none;
+}
+
+.track-hint div {
+  width: 26px;
+  height: 26px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 4px solid var(--marker-selected);
+  background: transparent;
+  box-shadow: 0 0 0 2px #fff, 0 1px 6px rgba(0, 0, 0, 0.7);
+}
+
+/* While photos are dragged: thumbnails a drop on which would do nothing (tz.md, п. 4.5). */
+.thumb.no-drop {
+  opacity: 0.35;
+}

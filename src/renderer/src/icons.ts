@@ -52,3 +52,7 @@ export function flagSvg(color: string): string {
     `<path d="M4 2.5h13l-3.2 4.5 3.2 4.5H4z" fill="${color}" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>`
   )
 }
+
+/** The place of the current photo on a track (tz.md, п. 3.9.7): a ring. */
+export const RING_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="3.5"/></svg>'

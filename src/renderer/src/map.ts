@@ -81,6 +81,11 @@ export interface MapHandlers {
   onViewChanged(): void
   /** Ctrl+drag on the map drew a rectangle: the photos with markers inside it (п. 4.4.3). */
   onBoxSelect(ids: number[]): void
+  /**
+   * The point a drop snaps to (the place of the current photo on a track, п. 3.9.7) for these
+   * dropped photos (null — a double click for the current photo); null — none.
+   */
+  snapPoint(ids: number[] | null): LatLon | null
 }
 
 /**
@@ -519,13 +524,20 @@ export class MapView {
       if (!ids || this.still) return
       e.preventDefault()
       e.stopPropagation()
-      this.h.onDropPhotos(ids, this.dropPoint(e))
+      this.h.onDropPhotos(ids, this.dropPoint(e, ids))
     })
   }
 
-  /** The point under the mouse; next to the found place mark — the mark itself (п. 5.3). */
-  private dropPoint(e: MouseEvent): LatLon {
+  /**
+   * The point under the mouse; next to the found place mark — the mark itself (п. 5.3); next to the
+   * mark of the current photo's place on a track — that place, when it is the photo dropped
+   * (п. 3.9.7). `ids` — the photos dropped; null — a double click for the current photo.
+   */
+  private dropPoint(e: MouseEvent, ids: number[] | null = null): LatLon {
     const pt = this.map.mouseEventToContainerPoint(e)
+    const near = (at: LatLon | null): boolean => !!at && this.map.latLngToContainerPoint([at.lat, at.lon]).distanceTo(pt) <= SNAP_PX
+    const hint = this.h.snapPoint(ids)
+    if (near(hint)) return hint!
     if (this.place) {
       const mark = this.map.latLngToContainerPoint(this.place.getLatLng())
       if (mark.distanceTo(pt) <= SNAP_PX) {

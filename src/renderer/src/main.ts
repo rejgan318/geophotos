@@ -27,6 +27,7 @@ import { PHOTO_DRAG_TYPE, Strip } from './strip'
 import type L from './leaflet-global'
 import { TrackLayer } from './track-layer'
 import { TrackSummaryView } from './track-view'
+import { placeAt, photoInstant, placeOnTracks } from '@shared/track-match'
 
 const byId = (id: string): HTMLElement => document.getElementById(id)!
 
@@ -206,6 +207,8 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     sel = next
     strip.setSelection(sel)
     map.setSelection(sel.ids, sel.current)
+    showHint()
+    if (view === 'map') tracks.revealHint()
     // The selected track is wider; if it is wholly off the map, the map shows it (tz.md, п. 3.9.4).
     const track = sel.current !== null && isTrackId(sel.current) ? sel.current : null
     tracks.setCurrent(track)
@@ -213,6 +216,25 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     showStatus()
     showPhoto()
     reportState()
+  }
+
+  /**
+   * The place of the current photo on a track (tz.md, п. 3.9.7): only for a photo without
+   * coordinates whose time falls into a track.
+   */
+  const showHint = (): void => {
+    const p = sel.current === null ? undefined : folder?.photos[sel.current]
+    const place = p && !p.track && !p.coords ? placeOnTracks(p, tracks.zoned()) : null
+    tracks.showHint(place?.at ?? null)
+  }
+
+  /** The place of a photo on one track (п. 3.9.7); null — none (no time, outside, a track itself). */
+  const placeOn = (id: number, trackId: number): LatLon | null => {
+    const p = folder?.photos[id]
+    const tr = tracks.data(trackId)
+    if (!p || p.track || !tr) return null
+    const t = photoInstant(p, tr.zone)
+    return t === null ? null : placeAt(tr.data, t)
   }
 
   /** Main keeps the selection (Save Selected, last session) and the View menu state. */
@@ -360,7 +382,12 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
       return true
     },
     dragged: () => dragged,
-    onViewChanged: () => reportView()
+    onViewChanged: () => reportView(),
+    // Only the current photo, alone, snaps to its place on a track (tz.md, п. 3.9.7).
+    snapPoint: (ids) => {
+      const alone = ids === null || (ids.length === 1 && ids[0] === sel.current)
+      return alone ? tracks.hint : null
+    }
   })
   const strip = new Strip(byId('strip'), t, {
     onClick: (id, mods) => select(clickSelect(sel, id, mods, order, isTrackId)),
@@ -377,7 +404,18 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     },
     onDragEnd: () => (dragged = null),
     onDropOnPhoto: (ids, coords) => void setCoords(ids, coords),
-    dragged: () => dragged
+    dragged: () => dragged,
+    canDropOnTrack: (ids, track) => ids.some((id) => placeOn(id, track) !== null),
+    // Each photo to its place on the track by its time (tz.md, п. 3.9.7); coordinates are
+    // replaced; photos with no place there do not change, silently.
+    onDropOnTrack: (ids, track) => {
+      void (async () => {
+        for (const id of ids) {
+          const at = placeOn(id, track)
+          if (at) await setCoords([id], at)
+        }
+      })()
+    }
   })
   const tracks = new TrackLayer(map.leaflet, init.tracks, t, {
     onClick: (id) => {
@@ -540,6 +578,7 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
         map.fitPhotos(show, b)
       }
       tracks.setCurrent(sel.current !== null && isTrackId(sel.current) ? sel.current : null)
+      showHint()
       // The track view of the current track, if it is on (the window was waiting for its data).
       if (view === 'photo') showPhoto()
     })
@@ -557,6 +596,8 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     for (const p of photos) folder.photos[p.id] = p
     strip.updatePhotos(photos)
     map.updatePhotos(photos)
+    // A placed photo loses its mark on the track; one that lost its coordinates gets it.
+    showHint()
     // The filter is live: a saved photo leaves "modified", a placed one joins "with coordinates".
     applyFilter()
     showStatus()

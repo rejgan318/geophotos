@@ -246,10 +246,14 @@ export function toPhoto(
   const address = pickAddress(rec, sidecar)
   const altitude = pickAltitude(rec, sidecar, opts.track)
   const size = num(tagValue(rec, 'FileSize', 'File'))
+  // The offset belongs to the EXIF shooting time: only when that is the date used.
+  const off = tagValue(rec, 'OffsetTimeOriginal', 'EXIF')
+  const offset = dateSource === 'shot' && typeof off === 'string' && /^[+-]\d\d:\d\d$/.test(off.trim()) ? off.trim() : null
   return {
     name, path, date, dateSource, coords, coordSource, address, altitude, modified: false,
     ...(error ? { error } : {}),
     ...(size !== null ? { size } : {}),
+    ...(offset ? { offset } : {}),
     ...video
   }
 }
