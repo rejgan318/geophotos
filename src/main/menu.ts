@@ -10,6 +10,11 @@ export interface MenuHandlers {
   clearRecent(): void
   save(): void
   saveSelected(): void
+  copyCoords(): void
+  pasteCoords(): void
+  clearCoords(): void
+  removeFromStrip(): void
+  selectAll(): void
   openSettings(): void
   openLogs(): void
   exit(): void
@@ -29,6 +34,11 @@ export const MENU_ID = {
   refresh: 'file.refresh',
   save: 'file.save',
   saveSelected: 'file.saveSelected',
+  copyCoords: 'edit.copyCoords',
+  pasteCoords: 'edit.pasteCoords',
+  clearCoords: 'edit.clearCoords',
+  removeFromStrip: 'edit.removeFromStrip',
+  selectAll: 'edit.selectAll',
   photoView: 'view.photo',
   showOnMap: 'view.showOnMap',
   thumbnails: 'view.thumbnails',
@@ -75,6 +85,29 @@ export function buildMenu(
       ]
     }
   ]
+  // Edit (tz.md, п. 4.9): what the keys already do, made visible — Ctrl+C copies coordinates, not
+  // the photo. The window handles the keys (text fields keep their own copy, paste and select all),
+  // so the shortcuts are only shown here, not registered.
+  const editItem = (id: string, label: string, accelerator: string, click: () => void): MenuItemConstructorOptions => ({
+    id,
+    label: t(label),
+    accelerator,
+    registerAccelerator: false,
+    enabled: false,
+    click
+  })
+  template.push({
+    label: t('menu.edit'),
+    submenu: [
+      editItem(MENU_ID.copyCoords, 'menu.copyCoords', 'CmdOrCtrl+C', h.copyCoords),
+      editItem(MENU_ID.pasteCoords, 'menu.pasteCoords', 'CmdOrCtrl+V', h.pasteCoords),
+      editItem(MENU_ID.clearCoords, 'menu.clearCoords', 'CmdOrCtrl+Delete', h.clearCoords),
+      { type: 'separator' },
+      editItem(MENU_ID.removeFromStrip, 'menu.removeFromStrip', 'Delete', h.removeFromStrip),
+      { type: 'separator' },
+      editItem(MENU_ID.selectAll, 'menu.selectAll', 'CmdOrCtrl+A', h.selectAll)
+    ]
+  })
   // View: map / photo (Space; the window handles the key, so Space still types in text fields)
   // and the filters of the status bar counter (tz.md, пп. 4.13, 9.3).
   const filterItem = (filter: StripFilter, label: string): MenuItemConstructorOptions => ({

@@ -897,6 +897,11 @@ function updateMenu(recent: string[]): void {
         openSettings: () => void openSettingsFile(),
         openLogs: () => void openLogFolder(),
         exit: () => app.quit(),
+        copyCoords: () => win?.webContents.send(IPC.command, { type: 'copyCoords' }),
+        pasteCoords: () => win?.webContents.send(IPC.command, { type: 'pasteCoords' }),
+        clearCoords: () => win?.webContents.send(IPC.command, { type: 'clearCoords' }),
+        removeFromStrip: () => win?.webContents.send(IPC.command, { type: 'removeFromStrip' }),
+        selectAll: () => win?.webContents.send(IPC.command, { type: 'selectAll' }),
         toggleView: () => win?.webContents.send(IPC.command, { type: 'toggleView' }),
         showOnMap: () => win?.webContents.send(IPC.command, { type: 'showOnMap' }),
         toggleAddress: () => toggleAddress(),
@@ -930,6 +935,22 @@ function refreshEditState(): void {
   const selItem = menu?.getMenuItemById(MENU_ID.saveSelected)
   if (saveItem) saveItem.enabled = !saving && photosToSave(photos).length > 0
   if (selItem) selItem.enabled = !saving && photosToSave(photos, selection).length > 0
+
+  // Edit (tz.md, п. 4.9): Copy — the current photo has coordinates; Paste, Clear, Remove — there is
+  // a selection (photos for Paste and Clear: a track has no coordinates of its own); Select All —
+  // there are photos.
+  const picked = [...selection].map((id) => photos[id]).filter((p): p is Photo => !!p)
+  const pickedPhotos = picked.filter((p) => !p.track)
+  const enable = (id: string, on: boolean): void => {
+    const item = menu?.getMenuItemById(id)
+    if (item) item.enabled = on
+  }
+  const currentPhoto = ui.current === null ? undefined : photos[ui.current]
+  enable(MENU_ID.copyCoords, !!currentPhoto?.coords && !currentPhoto.track)
+  enable(MENU_ID.pasteCoords, !saving && pickedPhotos.length > 0)
+  enable(MENU_ID.clearCoords, !saving && pickedPhotos.some((p) => p.coords))
+  enable(MENU_ID.removeFromStrip, !saving && picked.length > 0)
+  enable(MENU_ID.selectAll, photos.some((p) => !p.track))
 
   // The View menu follows the window: mode, active filter; an empty filter is not available.
   const viewItem = menu?.getMenuItemById(MENU_ID.photoView)

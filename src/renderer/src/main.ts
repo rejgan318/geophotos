@@ -214,6 +214,23 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     if (view === 'map') map.reveal(coords)
   }
 
+  /** Del (п. 6.6): the selected photos or track leave the strip; main asks first if some have unsaved changes. */
+  const removeFromStrip = (): void => {
+    if (!folder || saving || !sel.ids.size) return
+    void window.geophotos.removePhotos({ generation: folder.generation, ids: [...sel.ids] })
+  }
+
+  /** Ctrl+Del: the selected photos lose their coordinates (and address, altitude) until Save. */
+  const clearCoords = (): void => {
+    if (!folder || saving || !sel.ids.size) return
+    void setCoords([...sel.ids].filter((id) => !isTrackId(id)), null)
+  }
+
+  /** Ctrl+A: all photos shown in the strip (п. 4.4). */
+  const selectAllShown = (): void => {
+    if (folder) select(selectAll(sel, order, isTrackId))
+  }
+
   /** The one place where the selection changes: strip, map, status and main follow it. */
   const select = (next: Selection): void => {
     sel = next
@@ -488,10 +505,9 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
       if (e.key === 'Delete' && !e.altKey && !e.metaKey && !e.shiftKey) {
         e.preventDefault()
         e.stopPropagation()
-        if (e.repeat || !folder || saving || !sel.ids.size) return
-        const ids = [...sel.ids]
-        if (e.ctrlKey) void setCoords(ids.filter((id) => !isTrackId(id)), null)
-        else void window.geophotos.removePhotos({ generation: folder.generation, ids })
+        if (e.repeat) return
+        if (e.ctrlKey) clearCoords()
+        else removeFromStrip()
         return
       }
       // Ctrl+C / Ctrl+V of coordinates, by the physical key (any layout). Text fields keep
@@ -507,7 +523,7 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
       }
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'a') {
         e.preventDefault()
-        if (folder) select(selectAll(sel, order, isTrackId))
+        selectAllShown()
         return
       }
       if (e.ctrlKey || e.altKey || e.metaKey) return
@@ -535,7 +551,17 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   )
 
   window.geophotos.onCommand((cmd) => {
-    if (cmd.type === 'toggleView') {
+    if (cmd.type === 'copyCoords') {
+      copyCoords()
+    } else if (cmd.type === 'pasteCoords') {
+      void pasteCoords()
+    } else if (cmd.type === 'clearCoords') {
+      clearCoords()
+    } else if (cmd.type === 'removeFromStrip') {
+      removeFromStrip()
+    } else if (cmd.type === 'selectAll') {
+      selectAllShown()
+    } else if (cmd.type === 'toggleView') {
       if (folder) toggleView()
     } else if (cmd.type === 'showOnMap') {
       showOnMap()

@@ -190,6 +190,11 @@ export type WindowCommand =
   | { type: 'showOnMap' }
   | { type: 'toggleThumbnails' }
   | { type: 'setFilter'; filter: StripFilter }
+  | { type: 'copyCoords' }
+  | { type: 'pasteCoords' }
+  | { type: 'clearCoords' }
+  | { type: 'removeFromStrip' }
+  | { type: 'selectAll' }
   | { type: 'toggleHelp' }
   | { type: 'showAbout' }
 
