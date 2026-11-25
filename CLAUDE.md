@@ -4,7 +4,7 @@
 
 ## Проект
 
-**GeoPhotos** — приложение для Windows на Electron + Node.js для ручной привязки фото к карте (по образцу модуля Map в Lightroom). Git-репозиторий, удалённый — публичный на GitHub (релизы — GitHub Releases, сборка — GitHub Actions). Версия 0.30.0; каждая новая фича — очередная подверсия (`make-project.md`, п. 5), текущее состояние — в разделе «Статус» `make-project.md`.
+**GeoPhotos** — приложение для Windows на Electron + Node.js для ручной привязки фото к карте (по образцу модуля Map в Lightroom). Git-репозиторий, удалённый — публичный на GitHub (релизы — GitHub Releases, сборка — GitHub Actions). Версия 0.32.0; каждая новая фича — очередная подверсия (`make-project.md`, п. 5), текущее состояние — в разделе «Статус» `make-project.md`.
 
 ## Команды
 
