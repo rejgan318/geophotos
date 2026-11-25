@@ -69,6 +69,7 @@ const api: GeoPhotosApi = {
     ipcRenderer.on(IPC.batchDone, (_e, d: BatchDone) => cb(d))
   },
   batchCancel: () => ipcRenderer.send(IPC.batchCancel),
+  batchFit: (height) => ipcRenderer.send(IPC.batchFit, height),
   readClipboard: () => ipcRenderer.invoke(IPC.clipboardRead) as Promise<string>,
   writeClipboard: (text) => ipcRenderer.invoke(IPC.clipboardWrite, text) as Promise<void>
 }

@@ -19,7 +19,6 @@ body {
 
 #batch {
   box-sizing: border-box;
-  height: 100%;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
@@ -38,8 +37,7 @@ body {
 }
 
 #errors {
-  flex: 1;
-  min-height: 0;
+  max-height: 260px;
   margin: 0;
   padding: 6px 8px 6px 22px;
   overflow: auto;
@@ -50,7 +48,7 @@ body {
 }
 
 .row {
-  margin-top: auto;
+  margin-top: 4px;
   display: flex;
   align-items: center;
   justify-content: space-between;

@@ -78,7 +78,8 @@ export class PhotoView {
     // Name and date (and a video's length); under them the coordinates with the altitude and the
     // address, if any (п. 4.14).
     const coords = photoCoords(photo, this.t) + (photo.altitude === null ? '' : ` · ${altitudeText(photo.altitude)}`)
-    const lines = [nameLine(photo, this.t), coords]
+    // The camera or phone (tz.md, 0.36.0): under the name, when the file names it.
+    const lines = [nameLine(photo, this.t), ...(photo.camera ? [photo.camera] : []), coords]
     if (photo.address) lines.push(addressText(photo.address))
     this.caption.replaceChildren(
       ...lines.map((text) => {

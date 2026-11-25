@@ -19,6 +19,7 @@
   "menu.clearCoords": "&Delete Coordinates",
   "menu.removeFromStrip": "&Take off the Strip",
   "menu.selectAll": "Select &All",
+  "menu.openGoogleMaps": "Open in &Google Maps",
   "menu.showInExplorer": "Show in &Explorer",
   "menu.openDefault": "Open in &Another Program",
   "menu.view": "&View",

@@ -46,7 +46,7 @@ Two ways, both on the page of the [latest release](https://github.com/rejgan318/
 - **Thumbnail strip:** sorted by shooting date. Marks show photos with coordinates, an address, an altitude, and unsaved changes. Photos of subfolders can be loaded too. The strip is at the bottom or on the left (*View → Strip Position*); G opens it as a grid over the whole window — handy for picking among many photos (G or Esc — back to the map); Ctrl+wheel makes the grid thumbnails larger or smaller.
 - **Shooting direction:** if the phone wrote where the camera looked (iPhone does), the current photo's marker shows a sector that way.
 - **One window:** starting GeoPhotos again brings the open window forward; a folder dropped onto its icon opens there. Right-click the taskbar icon for the recent folders.
-- **Right click** on a photo (in the strip or on the map) opens its menu: coordinates, *Show in Explorer*, *Open in Another Program*.
+- **Right click** on a photo (in the strip or on the map) opens its menu: coordinates, *Open in Google Maps* (for Street View and the satellite), *Show in Explorer*, *Open in Another Program*.
 - **Ways to set coordinates:**
   - drag thumbnails from the strip onto the map, or double-click the map for the current photo;
   - drag a photo onto another one in the strip (both ways: the one without coordinates gets them);
@@ -56,7 +56,7 @@ Two ways, both on the page of the [latest release](https://github.com/rejgan318/
 - **Selection:** click, Ctrl+click, Shift+click, Ctrl+A; Ctrl+drag on the map selects the photos in a rectangle. Arrow keys move through the photos. Dragging the marker of one of several selected photos moves them all to that point.
 - **Filters:** all photos, with coordinates, without coordinates, modified — as buttons in the status bar and in the View menu.
 - **Address and altitude** (*Tools → Get Address / Get Altitude*): the address from Nominatim (OpenStreetMap) in the interface language, the altitude from the Open-Meteo Elevation API, for every photo of the folder that has coordinates. Points the service did not answer are asked again in the background.
-- **Photo view (Space):** a large preview in place of the map.
+- **Photo view (Space):** a large preview in place of the map, with the camera or phone model.
 - **Save:** *Save* writes all modified photos, *Save Selected* only the selected ones. Progress is shown, and a list of files that could not be written appears at the end. You are warned about unsaved changes.
 - **Log:** every write is logged with its old and new coordinates, so they can be restored by hand.
 - **Interface:** English, Russian and Ukrainian (*Tools → Language*). New languages are added as files, without code changes.

@@ -8,7 +8,7 @@ describe('context menu of a photo (tz.md, 0.34.0)', () => {
   it('a photo with coordinates, selected alone: everything is available', () => {
     const p = { coords }
     expect(on(contextItems(p, [p], false))).toEqual([
-      'showOnMap', 'copyCoords', 'pasteCoords', 'clearCoords', 'removeFromStrip', 'showInExplorer', 'openDefault'
+      'showOnMap', 'openGoogleMaps', 'copyCoords', 'pasteCoords', 'clearCoords', 'removeFromStrip', 'showInExplorer', 'openDefault'
     ])
   })
 
@@ -19,7 +19,7 @@ describe('context menu of a photo (tz.md, 0.34.0)', () => {
 
   it('while saving: no editing', () => {
     const p = { coords }
-    expect(on(contextItems(p, [p], true))).toEqual(['showOnMap', 'copyCoords', 'showInExplorer', 'openDefault'])
+    expect(on(contextItems(p, [p], true))).toEqual(['showOnMap', 'openGoogleMaps', 'copyCoords', 'showInExplorer', 'openDefault'])
   })
 
   it('a track: only Show on Map, Take off the Strip, Explorer, default program', () => {

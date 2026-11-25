@@ -3,7 +3,7 @@
  * available. The same conditions as the Edit and View menus (п. 4.9); a track has only the items
  * that make sense for it.
  */
-export type ContextItem = 'showOnMap' | 'copyCoords' | 'pasteCoords' | 'clearCoords' | 'removeFromStrip' | 'showInExplorer' | 'openDefault'
+export type ContextItem = 'showOnMap' | 'openGoogleMaps' | 'copyCoords' | 'pasteCoords' | 'clearCoords' | 'removeFromStrip' | 'showInExplorer' | 'openDefault'
 
 export interface ContextItemState {
   item: ContextItem
@@ -23,6 +23,7 @@ export function contextItems(current: Item, picked: readonly Item[], saving: boo
   const photos = picked.filter((p) => !p.track)
   const all: ContextItemState[] = [
     { item: 'showOnMap', enabled: !!current.coords || !!current.track },
+    { item: 'openGoogleMaps', enabled: !!current.coords && !current.track },
     { item: 'copyCoords', enabled: !!current.coords && !current.track },
     { item: 'pasteCoords', enabled: !saving && photos.length > 0 },
     { item: 'clearCoords', enabled: !saving && photos.some((p) => p.coords) },

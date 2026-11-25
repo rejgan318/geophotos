@@ -59,6 +59,8 @@ export const IPC = {
   batchDone: 'batch:done',
   /** send, batch window → main: Cancel. */
   batchCancel: 'batch:cancel',
+  /** send, batch window → main: the height its content needs — the window fits it (no empty space). */
+  batchFit: 'batch:fit',
   /** invoke, window → main: text of the clipboard (Ctrl+V). */
   clipboardRead: 'clipboard:read',
   /** invoke, window → main: put text into the clipboard (Ctrl+C). */

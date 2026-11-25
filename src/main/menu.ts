@@ -220,6 +220,7 @@ export function buildMenu(
 /** Labels and shown keys of the context menu items: the same as in the Edit and View menus (tz.md, п. 4.19). */
 const CONTEXT: Record<ContextItem, { label: string; accelerator?: string }> = {
   showOnMap: { label: 'menu.showOnMap', accelerator: 'C' },
+  openGoogleMaps: { label: 'menu.openGoogleMaps' },
   copyCoords: { label: 'menu.copyCoords', accelerator: 'CmdOrCtrl+C' },
   pasteCoords: { label: 'menu.pasteCoords', accelerator: 'CmdOrCtrl+V' },
   clearCoords: { label: 'menu.clearCoords', accelerator: 'CmdOrCtrl+Delete' },
@@ -232,7 +233,10 @@ const CONTEXT: Record<ContextItem, { label: string; accelerator?: string }> = {
 export function buildContextMenu(t: Translate, items: ContextItemState[], run: (item: ContextItem) => void): Menu {
   const template: MenuItemConstructorOptions[] = []
   items.forEach(({ item, enabled }, i) => {
-    if (i > 0 && (item === 'showInExplorer' || items[i - 1]!.item === 'showOnMap')) template.push({ type: 'separator' })
+    // Groups: the map items, the editing items, the file items.
+    const prev = items[i - 1]?.item
+    const mapItem = (x: ContextItem | undefined): boolean => x === 'showOnMap' || x === 'openGoogleMaps'
+    if (prev && (item === 'showInExplorer' || (mapItem(prev) && !mapItem(item)))) template.push({ type: 'separator' })
     const c = CONTEXT[item]
     template.push({
       label: t(c.label),

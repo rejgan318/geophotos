@@ -148,3 +148,14 @@ describe('direction of the camera (tz.md, 0.35.0)', () => {
     expect(pickDirection({})).toBeNull()
   })
 })
+
+describe('camera model (tz.md, 0.36.0)', () => {
+  it('the model as written, without the maker; none — null', async () => {
+    const { cameraModel } = await import('@shared/metadata')
+    expect(cameraModel({ 'IFD0:Make': 'Apple', 'IFD0:Model': 'iPhone 14 Pro Max' })).toBe('iPhone 14 Pro Max')
+    expect(cameraModel({ Make: 'Canon', Model: 'Canon EOS 5D Mark II' })).toBe('Canon EOS 5D Mark II')
+    expect(cameraModel({ Model: '  2201122G \u0000' })).toBe('2201122G')
+    expect(cameraModel({ Make: 'Canon' })).toBeNull()
+    expect(cameraModel({ Model: '   ' })).toBeNull()
+  })
+})

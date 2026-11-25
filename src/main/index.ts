@@ -1589,9 +1589,17 @@ function showContextMenu(x: number, y: number): void {
   const menu = buildContextMenu(t, contextItems(photo, picked, saving), (item) => {
     if (item === 'showInExplorer') shell.showItemInFolder(photo.path)
     else if (item === 'openDefault') void openDefault(photo)
+    else if (item === 'openGoogleMaps') void openGoogleMaps(photo)
     else win?.webContents.send(IPC.command, { type: item })
   })
   menu.popup({ window: win, x: Math.round(x), y: Math.round(y) })
+}
+
+/** The place of the photo in Google Maps, in the browser (tz.md, 0.36.0): only on this click. */
+async function openGoogleMaps(photo: Photo): Promise<void> {
+  if (!photo.coords) return
+  const { lat, lon } = photo.coords
+  await shell.openExternal(`https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lon.toFixed(6)}`)
 }
 
 /** The photo, video or track file in the program Windows opens it with (tz.md, п. 4.19). */
@@ -1773,10 +1781,12 @@ function createWindow(): BrowserWindow {
 /** The progress window of the batch mode (tz.md, п. 10): small, no menu. */
 function createBatchWindow(): BrowserWindow {
   const w = new BrowserWindow({
-    width: 520,
-    height: 250,
-    minWidth: 360,
-    minHeight: 180,
+    // The height follows the content (batch:fit): no empty space under a short text.
+    useContentSize: true,
+    width: 400,
+    height: 150,
+    minWidth: 320,
+    minHeight: 100,
     maximizable: false,
     title: 'GeoPhotos',
     show: false,
@@ -1866,6 +1876,13 @@ void app.whenReady().then(async () => {
   nativeTheme.themeSource = 'dark'
   // Before startup: the progress window of installing exiftool asks for its texts (tz.md, п. 2.2).
   ipcMain.handle(IPC.batchInit, () => ({ strings }))
+  // The batch window is as tall as its content, within limits: a long list of errors scrolls.
+  ipcMain.on(IPC.batchFit, (e, h: unknown) => {
+    const w = BrowserWindow.fromWebContents(e.sender)
+    if (!w || w === win || typeof h !== 'number' || !Number.isFinite(h)) return
+    const [width] = w.getContentSize()
+    w.setContentSize(width!, Math.round(Math.min(Math.max(h, 100), 480)))
+  })
   if (!(await startup())) {
     app.exit(1)
     return

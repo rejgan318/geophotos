@@ -21,6 +21,9 @@ async function start(): Promise<void> {
   const auto = byId('auto')
   const button = byId('button') as HTMLButtonElement
   let finished = false
+  // The window follows the height of its content (no empty space; a list of errors makes it taller).
+  const box = byId('batch')
+  new ResizeObserver(() => window.geophotos.batchFit(Math.ceil(box.getBoundingClientRect().height))).observe(box)
 
   phase.textContent = t('batch.starting')
   button.textContent = t('batch.cancel')

@@ -68,6 +68,8 @@ export interface GeoPhotosApi {
   onBatchState(cb: (s: BatchState) => void): void
   onBatchDone(cb: (d: BatchDone) => void): void
   batchCancel(): void
+  /** The batch window asks to be as tall as its content, px. */
+  batchFit(height: number): void
   readClipboard(): Promise<string>
   writeClipboard(text: string): Promise<void>
 }

@@ -100,6 +100,8 @@ export interface Photo {
    * 0.35.0): shown as a sector at the marker of the current photo. Absent if unknown.
    */
   direction?: number
+  /** Model of the camera or phone, as written in the file (photo view, tz.md, 0.36.0). Absent if not written. */
+  camera?: string
   /** A video (tz.md, п. 3.3.6): its length in seconds, null if unknown. Absent for photos. */
   video?: { duration: number | null }
   /**

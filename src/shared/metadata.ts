@@ -231,6 +231,17 @@ export function pickDirection(rec: ExifRecord): number | null {
   return null
 }
 
+/**
+ * The camera or phone of the photo view (tz.md, 0.36.0): the model as written — it already names
+ * the camera ("iPhone 14 Pro Max", "Canon EOS 5D Mark II"); the maker is not added. Null — none.
+ */
+export function cameraModel(rec: ExifRecord): string | null {
+  const v = tagValue(rec, 'Model')
+  const s = typeof v === 'string' ? v : typeof v === 'number' ? String(v) : ''
+  const model = s.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return model || null
+}
+
 /** Builds a photo from its exiftool record (`id` is assigned after sorting). */
 export function toPhoto(
   name: string,
@@ -259,9 +270,11 @@ export function toPhoto(
   const off = tagValue(rec, 'OffsetTimeOriginal', 'EXIF')
   const offset = dateSource === 'shot' && typeof off === 'string' && /^[+-]\d\d:\d\d$/.test(off.trim()) ? off.trim() : null
   const direction = pickDirection(rec)
+  const camera = cameraModel(rec)
   return {
     name, path, date, dateSource, coords, coordSource, address, altitude, modified: false,
     ...(direction !== null ? { direction } : {}),
+    ...(camera ? { camera } : {}),
     ...(error ? { error } : {}),
     ...(size !== null ? { size } : {}),
     ...(offset ? { offset } : {}),
