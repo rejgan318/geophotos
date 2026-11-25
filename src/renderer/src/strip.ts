@@ -2,7 +2,7 @@ import type { Translate } from '@shared/i18n'
 import { liveUrl, thumbUrl } from '@shared/ipc'
 import { dropOnPhoto } from '@shared/edits'
 import { type FolderData, type LatLon, type Photo } from '@shared/photo'
-import { photoTooltip } from './describe'
+import { badgeTitles, photoTooltip } from './describe'
 import { ADDRESS_SVG, ALTITUDE_SVG, FILE_SVG, LIVE_SVG, PENCIL_SVG, PIN_SVG, TRACK_SVG, VIDEO_SVG } from './icons'
 import type { Selection } from './selection'
 
@@ -120,7 +120,7 @@ export class Strip {
     if (p.video) {
       const v = document.createElement('div')
       v.className = 'badge-video'
-      v.title = this.t('photo.video')
+      v.title = badgeTitles(p, this.t).video ?? ''
       v.innerHTML = VIDEO_SVG
       item.append(v)
     }
@@ -229,38 +229,39 @@ export class Strip {
   /** Marks of a photo (п. 4.3): has coordinates, modified and not saved; tooltip (п. 4.13). */
   private decorate(item: HTMLElement, p: Photo): void {
     item.title = photoTooltip(p, this.t)
+    // The tooltip of a badge is its value (п. 4.3).
+    const titles = badgeTitles(p, this.t)
     item.classList.toggle('modified', p.modified)
     let badge = item.querySelector<HTMLElement>('.badge-coords')
     if (p.coords && !badge) {
       badge = document.createElement('div')
       badge.className = 'badge-coords'
-      badge.title = this.t('photo.hasCoords')
       badge.innerHTML = PIN_SVG
       item.append(badge)
     } else if (!p.coords && badge) {
       badge.remove()
     }
-    // Only the fact that there is an address; the address itself is in the photo view (п. 4.3).
+    if (badge && titles.coords) badge.title = titles.coords
     let addr = item.querySelector<HTMLElement>('.badge-address')
     if (p.address && !addr) {
       addr = document.createElement('div')
       addr.className = 'badge-address'
-      addr.title = this.t('photo.hasAddress')
       addr.innerHTML = ADDRESS_SVG
       item.append(addr)
     } else if (!p.address && addr) {
       addr.remove()
     }
+    if (addr && titles.address) addr.title = titles.address
     let alt = item.querySelector<HTMLElement>('.badge-altitude')
     if (p.altitude !== null && !alt) {
       alt = document.createElement('div')
       alt.className = 'badge-altitude'
-      alt.title = this.t('photo.hasAltitude')
       alt.innerHTML = ALTITUDE_SVG
       item.append(alt)
     } else if (p.altitude === null && alt) {
       alt.remove()
     }
+    if (alt && titles.altitude) alt.title = titles.altitude
     let mod = item.querySelector<HTMLElement>('.badge-modified')
     if (p.modified && !mod) {
       mod = document.createElement('div')

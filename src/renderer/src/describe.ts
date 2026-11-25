@@ -1,6 +1,6 @@
 import type { Translate } from '@shared/i18n'
 import { formatInstant, formatWallTime } from '@shared/date-format'
-import { durationText, fileSizeParts, formatCoords, type Photo } from '@shared/photo'
+import { addressText, altitudeText, durationText, fileSizeParts, formatCoords, type Photo } from '@shared/photo'
 
 /** Regional format of the system for dates (tz.md, п. 4.13); set once at start. */
 let dateLocale = 'en-US'
@@ -91,4 +91,17 @@ export function photoTooltip(p: Photo, t: Translate): string {
   if (p.modified) lines.push(t('photo.modified'))
   if (p.error) lines.push(t('photo.readError', { error: p.error }))
   return lines.join('\n')
+}
+
+/**
+ * Tooltips of the badges of a thumbnail (tz.md, п. 4.3): the value itself, not "has coordinates" —
+ * the badge already says the value is there. Only the badges the photo has.
+ */
+export function badgeTitles(p: Photo, t: Translate): { coords?: string; address?: string; altitude?: string; video?: string } {
+  const r: { coords?: string; address?: string; altitude?: string; video?: string } = {}
+  if (p.coords) r.coords = formatCoords(p.coords)
+  if (p.address) r.address = addressText(p.address)
+  if (p.altitude !== null) r.altitude = altitudeText(p.altitude)
+  if (p.video) r.video = p.video.duration === null ? t('photo.video') : durationText(p.video.duration)
+  return r
 }

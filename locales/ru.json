@@ -83,9 +83,6 @@
 
   "photo.noDate": "нет даты",
   "photo.noCoords": "нет координат",
-  "photo.hasCoords": "Есть координаты",
-  "photo.hasAddress": "Есть адрес",
-  "photo.hasAltitude": "Есть высота",
   "batch.title": "адреса и высоты",
   "batch.starting": "Запуск…",
   "batch.phase.scan": "Чтение папок: {done} из {total}",
