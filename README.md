@@ -16,6 +16,8 @@ In short: you open a folder of photos from a trip, drag thumbnails onto the map 
 
 Two ways, both on the page of the [latest release](https://github.com/rejgan318/geophotos/releases/latest) (Assets at the bottom of the page): the installer, which also keeps GeoPhotos up to date, or a zip to unpack.
 
+**Which one.** It is the same program either way. Beyond the zip, the installer does only three things: puts the program into a folder in your profile, adds it to the Start menu (and, if you like, to the desktop), and registers it in Windows *Apps*, where you can uninstall it. No services, no system libraries, no administrator rights. In return, the installed program **updates itself**. The zip is for those who keep programs in a folder of their own: it tells you about a new version, but you update it yourself by unpacking the new zip.
+
 **Installer** (from 0.30.0) — `GeoPhotos-Setup-<version>.exe`:
 1. Run it. It installs for you only, without administrator rights, into `%LOCALAPPDATA%\Programs\GeoPhotos` (the folder can be changed), adds GeoPhotos to the Start menu and, if you leave the box ticked, a shortcut to the desktop.
    The program is not signed, so Windows may show *"Windows protected your PC"*: click *More info → Run anyway*.
