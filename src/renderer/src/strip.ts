@@ -9,6 +9,9 @@ import type { Selection } from './selection'
 /** Type of the data carried by a drag of photos out of the strip. */
 export const PHOTO_DRAG_TYPE = 'application/x-geophotos-photos'
 
+/** How the strip is laid out (tz.md, пп. 4.1, 4.17): a row at the bottom, a column on the left, a grid. */
+export type StripLayout = 'bottom' | 'left' | 'grid'
+
 export interface StripHandlers {
   /** A click on a photo, with the modifier keys. */
   onClick(id: number, mods: { ctrl: boolean; shift: boolean }): void
@@ -39,17 +42,19 @@ export class Strip {
   private selected: ReadonlySet<number> = new Set()
   private current: number | null = null
   private ghost: HTMLElement
+  private layout: StripLayout = 'bottom'
 
   constructor(
     private readonly el: HTMLElement,
     private readonly t: Translate,
     private readonly h: StripHandlers
   ) {
-    // Mouse wheel scrolls the strip sideways.
+    // Mouse wheel scrolls the strip at the bottom sideways; on the left and in the grid it scrolls
+    // down as usual.
     el.addEventListener(
       'wheel',
       (e) => {
-        if (e.deltaY && !e.shiftKey) {
+        if (this.layout === 'bottom' && e.deltaY && !e.shiftKey) {
           el.scrollLeft += e.deltaY
           e.preventDefault()
         }
@@ -81,7 +86,63 @@ export class Strip {
       frag.append(item)
     }
     this.el.append(frag)
-    this.el.scrollLeft = 0
+    this.el.scrollTo(0, 0)
+  }
+
+  /** A row at the bottom, a column on the left or a grid; the current photo stays in view. */
+  setLayout(layout: StripLayout): void {
+    if (layout === this.layout) return
+    this.layout = layout
+    this.revealCurrent()
+  }
+
+  /** The scroll along the strip (kept for the next run, tz.md, п. 7.1): sideways at the bottom, down on the left. */
+  get scroll(): number {
+    return this.layout === 'bottom' ? this.el.scrollLeft : this.el.scrollTop
+  }
+
+  set scroll(v: number) {
+    if (this.layout === 'bottom') this.el.scrollLeft = v
+    else this.el.scrollTop = v
+  }
+
+  /** How many photos a row of the grid holds (↑ ↓ go that far, tz.md, п. 4.17); 1 when not known. */
+  columns(): number {
+    let top: number | null = null
+    let n = 0
+    for (const item of this.items.values()) {
+      if (item.hidden) continue
+      if (top === null) top = item.offsetTop
+      else if (item.offsetTop !== top) break
+      n++
+    }
+    return Math.max(n, 1)
+  }
+
+  private lastPage = 1
+
+  /**
+   * How many photos one screen of the strip holds (PageUp / PageDown, tz.md, п. 4.4.1): along the
+   * row at the bottom, down the column on the left, the visible rows times the columns in the grid.
+   * While the strip is hidden (the photo view of the grid), the last measured value.
+   */
+  pageSize(): number {
+    let item: HTMLElement | undefined
+    for (const it of this.items.values()) if (!it.hidden) { item = it; break }
+    if (!item || !this.el.clientHeight) return this.lastPage
+    const gap = 6
+    const fit = (room: number, size: number): number => Math.max(1, Math.floor((room + gap) / (size + gap)))
+    const across = this.layout === 'bottom'
+    let n = across ? fit(this.el.clientWidth, item.offsetWidth) : fit(this.el.clientHeight, item.offsetHeight)
+    if (this.layout === 'grid') n *= this.columns()
+    this.lastPage = n
+    return n
+  }
+
+  /** Scrolls so that the current photo is visible. */
+  revealCurrent(): void {
+    const item = this.current === null ? undefined : this.items.get(this.current)
+    item?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   }
 
   /** Changed photos: marks and tooltip follow; the image stays. */

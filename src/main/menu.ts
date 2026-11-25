@@ -1,6 +1,6 @@
 import { Menu, type MenuItemConstructorOptions } from 'electron'
 import type { Translate } from '@shared/i18n'
-import type { StripFilter } from '@shared/ipc'
+import type { StripFilter, StripPosition } from '@shared/ipc'
 
 export interface MenuHandlers {
   openFolder(): void
@@ -21,6 +21,8 @@ export interface MenuHandlers {
   toggleView(): void
   showOnMap(): void
   toggleThumbnails(): void
+  toggleGrid(): void
+  setStripPosition(position: StripPosition): void
   setFilter(filter: StripFilter): void
   toggleAddress(): void
   toggleAltitude(): void
@@ -42,6 +44,8 @@ export const MENU_ID = {
   photoView: 'view.photo',
   showOnMap: 'view.showOnMap',
   thumbnails: 'view.thumbnails',
+  grid: 'view.grid',
+  strip: { bottom: 'view.strip.bottom', left: 'view.strip.left' },
   address: 'tools.address',
   altitude: 'tools.altitude',
   filter: {
@@ -149,6 +153,26 @@ export function buildMenu(
         accelerator: 'T',
         registerAccelerator: false,
         click: h.toggleThumbnails
+      },
+      { type: 'separator' },
+      // Layout (tz.md, пп. 4.1, 4.17): where the strip is, and the strip over the whole window.
+      {
+        label: t('menu.stripPosition'),
+        submenu: (['bottom', 'left'] as const).map((p) => ({
+          id: MENU_ID.strip[p],
+          label: t(p === 'bottom' ? 'menu.stripBottom' : 'menu.stripLeft'),
+          type: 'radio' as const,
+          checked: p === 'bottom',
+          click: () => h.setStripPosition(p)
+        }))
+      },
+      {
+        id: MENU_ID.grid,
+        label: t('menu.grid'),
+        type: 'checkbox',
+        accelerator: 'G',
+        registerAccelerator: false,
+        click: h.toggleGrid
       },
       { type: 'separator' },
       filterItem('all', 'menu.filterAll'),

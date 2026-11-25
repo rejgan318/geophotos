@@ -15,7 +15,7 @@ afterEach(() => {
   tmp = undefined
 })
 
-const NIGHT = 'T:\\MyMedia\\Фото\\Харьков\\20210708 Ночной поход'
+const NIGHT = 'T:\\Медиа\\Фото\\2021-07 Поход в горы'
 
 describe('recent folders (tz.md, п. 3.1)', () => {
   it('latest first, no duplicates (case and trailing slash ignored), at most 10', () => {
@@ -43,7 +43,7 @@ describe('File → Refresh keeps the selection by path (tz.md, п. 3.8)', () => 
 })
 
 describe('state between runs (tz.md, п. 7.5)', () => {
-  const NONE = { lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: null }
+  const NONE = { lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: null, stripPosition: 'bottom' as const }
 
   it('recent folders survive a restart, including non-Latin paths', () => {
     const file = stateFile()
@@ -104,8 +104,8 @@ describe('state between runs (tz.md, п. 7.5)', () => {
     const window = { x: -1200, y: 40, width: 1100, height: 700, maximized: true }
     const map = { lat: -33.85, lon: 151.21, zoom: 13, source: 'topo', thumbnails: true }
     const tools = { address: true, altitude: true }
-    writeState(file, { recentFolders: [], lastSession: null, window, map, tools, addFolder: null })
-    expect(readState(file)).toEqual({ recentFolders: [], lastSession: null, window, map, tools, addFolder: null })
+    writeState(file, { recentFolders: [], lastSession: null, window, map, tools, addFolder: null, stripPosition: 'left' })
+    expect(readState(file)).toEqual({ recentFolders: [], lastSession: null, window, map, tools, addFolder: null, stripPosition: 'left' })
   })
 
   it('broken window or map parts are dropped, the rest is kept', () => {
@@ -133,12 +133,24 @@ describe('state: the folder of Add Files (tz.md, п. 3.1)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'geophotos-state-'))
     try {
       const file = join(dir, 'state.json')
-      writeState(file, { recentFolders: [], lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: 'E:\Phone' })
+      writeState(file, { recentFolders: [], lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: 'E:\Phone', stripPosition: 'bottom' })
       expect(readState(file).addFolder).toBe('E:\Phone')
       writeFileSync(file, JSON.stringify({ recentFolders: [] }))
       expect(readState(file).addFolder).toBeNull()
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('state: where the strip is (tz.md, п. 4.1)', () => {
+  it('survives a restart; missing or unknown in older files: at the bottom', () => {
+    const file = stateFile()
+    writeFileSync(file, JSON.stringify({ recentFolders: [], stripPosition: 'left' }))
+    expect(readState(file).stripPosition).toBe('left')
+    writeFileSync(file, JSON.stringify({ recentFolders: [], stripPosition: 'top' }))
+    expect(readState(file).stripPosition).toBe('bottom')
+    writeFileSync(file, JSON.stringify({ recentFolders: [] }))
+    expect(readState(file).stripPosition).toBe('bottom')
   })
 })

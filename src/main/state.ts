@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 import { dirname } from 'node:path'
 import { applyEdits, modify, parse } from 'jsonc-parser'
 import { MAX_RECENT } from '@shared/recent'
+import { isStripPosition, type StripPosition } from '@shared/ipc'
 
 /**
  * Program state between runs (tz.md, п. 7.5): a service file in userData, separate from the
@@ -24,6 +25,8 @@ export interface AppState {
   tools: ToolsState
   /** The folder files were last added from (Add Files…, tz.md, п. 3.1): its dialog opens there. */
   addFolder: string | null
+  /** Where the strip is (View → Strip Position, tz.md, п. 4.1). */
+  stripPosition: StripPosition
 }
 
 export interface Session {
@@ -58,7 +61,7 @@ export interface MapState {
   thumbnails: boolean
 }
 
-const EMPTY: AppState = { recentFolders: [], lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: null }
+const EMPTY: AppState = { recentFolders: [], lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: null, stripPosition: 'bottom' }
 
 type Obj = Record<string, unknown>
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -117,7 +120,8 @@ export function readState(file: string): AppState {
         address: isObj(v['tools']) && v['tools']['address'] === true,
         altitude: isObj(v['tools']) && v['tools']['altitude'] === true
       },
-      addFolder: typeof v['addFolder'] === 'string' && v['addFolder'] ? v['addFolder'] : null
+      addFolder: typeof v['addFolder'] === 'string' && v['addFolder'] ? v['addFolder'] : null,
+      stripPosition: isStripPosition(v['stripPosition']) ? v['stripPosition'] : 'bottom'
     }
   } catch {
     return { ...EMPTY }

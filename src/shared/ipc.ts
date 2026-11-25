@@ -82,6 +82,8 @@ export interface InitData {
   dateLocale: string
   /** Already known at start (tz.md, п. 2.5); later ones come as events. */
   update: UpdateState | null
+  /** Where the strip is, as at the end of the last run (tz.md, п. 4.1). */
+  stripPosition: StripPosition
 }
 
 /** What the window reports for the next run (tz.md, п. 7.1): the map and the strip scroll. */
@@ -176,6 +178,13 @@ export type ViewMode = 'map' | 'photo'
 /** What stands for a photo on the map: a marker or its thumbnail (T, View menu; tz.md, п. 4.8.3). */
 export type MapMode = 'pins' | 'thumbs'
 
+/** Where the strip is: under the map or left of it (View → Strip Position; tz.md, п. 4.1). */
+export type StripPosition = 'bottom' | 'left'
+
+export function isStripPosition(v: unknown): v is StripPosition {
+  return v === 'bottom' || v === 'left'
+}
+
 export interface UiState {
   ids: number[]
   /** The photo of the status bar, followed by the map and the photo view. */
@@ -183,12 +192,16 @@ export interface UiState {
   filter: StripFilter
   view: ViewMode
   mapMode: MapMode
+  /** The strip fills the window instead of the map (G, View → Grid; tz.md, п. 4.17). */
+  grid: boolean
 }
 
 export type WindowCommand =
   | { type: 'toggleView' }
   | { type: 'showOnMap' }
   | { type: 'toggleThumbnails' }
+  | { type: 'toggleGrid' }
+  | { type: 'setStripPosition'; position: StripPosition }
   | { type: 'setFilter'; filter: StripFilter }
   | { type: 'copyCoords' }
   | { type: 'pasteCoords' }
@@ -295,11 +308,13 @@ export function validUiState(v: unknown): UiState | null {
   if (!FILTERS.includes(r['filter'] as StripFilter)) return null
   if (r['view'] !== 'map' && r['view'] !== 'photo') return null
   if (r['mapMode'] !== 'pins' && r['mapMode'] !== 'thumbs') return null
+  if (typeof r['grid'] !== 'boolean') return null
   return {
     ids: ids as number[],
     current: current as number | null,
     filter: r['filter'] as StripFilter,
     view: r['view'],
-    mapMode: r['mapMode']
+    mapMode: r['mapMode'],
+    grid: r['grid']
   }
 }

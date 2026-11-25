@@ -25,6 +25,7 @@ import {
   type PhotosChanged,
   type SaveState,
   type StripFilter,
+  type StripPosition,
   type UiState,
   validUiState,
   validViewState,
@@ -188,7 +189,9 @@ let mapState: AppState['map'] = null
 /** The map and strip as the window last reported them. */
 let viewState: ViewState | null = null
 /** What the window reports: selection, filter, view mode. */
-let ui: UiState = { ids: [], current: null, filter: 'all', view: 'map', mapMode: 'pins' }
+let ui: UiState = { ids: [], current: null, filter: 'all', view: 'map', mapMode: 'pins', grid: false }
+/** Where the strip is (tz.md, п. 4.1); kept in the state file. */
+let stripPosition: StripPosition = 'bottom'
 /** Started with --batch (tz.md, п. 10): no main window, the batch and the exit code. */
 const batchArgs = isBatch(process.argv.slice(1)) ? parseBatchArgs(process.argv.slice(1), app.getAppPath()) : null
 /** The batch window is running: the program state of the main window is not touched. */
@@ -418,7 +421,8 @@ function initData(): InitData {
     thumbScheme: THUMB_SCHEME,
     // Regional format of Windows (as in Explorer), for dates (tz.md, п. 4.13).
     dateLocale: app.getSystemLocale() || strings['locale'] || 'en-US',
-    update: updateState
+    update: updateState,
+    stripPosition
   }
 }
 
@@ -434,7 +438,7 @@ function setRecent(update: (list: string[]) => string[]): void {
 
 function saveAppState(): void {
   try {
-    writeState(paths.state, { recentFolders, lastSession, window: windowState, map: mapState, tools, addFolder })
+    writeState(paths.state, { recentFolders, lastSession, window: windowState, map: mapState, tools, addFolder, stripPosition })
   } catch (e) {
     log.warn(`Cannot save state ${paths.state}: ${String(e)}`)
   }
@@ -908,6 +912,8 @@ function updateMenu(recent: string[]): void {
         toggleAltitude: () => toggleAltitude(),
         setLanguage: (code) => void setLanguage(code),
         toggleThumbnails: () => win?.webContents.send(IPC.command, { type: 'toggleThumbnails' }),
+        toggleGrid: () => win?.webContents.send(IPC.command, { type: 'toggleGrid' }),
+        setStripPosition: (position) => setStripPosition(position),
         setFilter: (filter: StripFilter) => win?.webContents.send(IPC.command, { type: 'setFilter', filter }),
         shortcuts: () => win?.webContents.send(IPC.command, { type: 'toggleHelp' }),
         about: () => win?.webContents.send(IPC.command, { type: 'showAbout' })
@@ -917,6 +923,14 @@ function updateMenu(recent: string[]): void {
       { list: languages, current: settings.language }
     )
   )
+  refreshEditState()
+}
+
+/** View → Strip Position (tz.md, п. 4.1): the window rearranges at once; kept for the next run. */
+function setStripPosition(position: StripPosition): void {
+  stripPosition = position
+  saveAppState()
+  win?.webContents.send(IPC.command, { type: 'setStripPosition', position })
   refreshEditState()
 }
 
@@ -968,6 +982,13 @@ function refreshEditState(): void {
   if (altitudeItem) altitudeItem.checked = tools.altitude
   const thumbsItem = menu?.getMenuItemById(MENU_ID.thumbnails)
   if (thumbsItem) thumbsItem.checked = ui.mapMode === 'thumbs'
+  const gridItem = menu?.getMenuItemById(MENU_ID.grid)
+  if (gridItem) {
+    gridItem.enabled = photos.length > 0
+    gridItem.checked = ui.grid
+  }
+  const stripItem = menu?.getMenuItemById(MENU_ID.strip[stripPosition])
+  if (stripItem) stripItem.checked = true
   const counts = photoCounts(photos)
   const available: Record<StripFilter, boolean> = {
     all: photos.length > 0,
@@ -1843,6 +1864,7 @@ void app.whenReady().then(async () => {
   mapState = saved.map
   tools = saved.tools
   addFolder = saved.addFolder
+  stripPosition = saved.stripPosition
   ui = { ...ui, mapMode: mapState?.thumbnails ? 'thumbs' : 'pins' }
   updateMenu(recentFolders)
   win = createWindow()

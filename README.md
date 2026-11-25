@@ -43,7 +43,7 @@ Two ways, both on the page of the [latest release](https://github.com/rejgan318/
 - **Placing by a track:** for the current photo without coordinates a red ring on the track shows where you were when it was taken (by its time and time zone); a photo dropped next to the ring lands exactly there. Photos dragged onto a track in the strip each get their own place on it by their time; those taken outside the track stay as they are.
 - **Map:** OpenStreetMap, Esri satellite, Google satellite and OpenTopoMap. Nearby markers are grouped. Markers or photo thumbnails on the map (key T); hovering a marker shows its thumbnail.
 - **Place search:** by name or address, through Nominatim.
-- **Thumbnail strip:** sorted by shooting date. Marks show photos with coordinates, an address, an altitude, and unsaved changes. Photos of subfolders can be loaded too.
+- **Thumbnail strip:** sorted by shooting date. Marks show photos with coordinates, an address, an altitude, and unsaved changes. Photos of subfolders can be loaded too. The strip is at the bottom or on the left (*View → Strip Position*); G opens it as a grid over the whole window — handy for picking among many photos (G or Esc — back to the map).
 - **Ways to set coordinates:**
   - drag thumbnails from the strip onto the map, or double-click the map for the current photo;
   - drag a photo onto another one in the strip (both ways: the one without coordinates gets them);

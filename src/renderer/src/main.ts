@@ -3,7 +3,7 @@ import { clipboardText, parseCoords } from '@shared/coords-parse'
 import { photoCounts, photosAt } from '@shared/edits'
 import { formatDuration } from '@shared/duration'
 import { makeTranslate } from '@shared/i18n'
-import type { MapMode, ViewMode } from '@shared/ipc'
+import type { MapMode, StripPosition, ViewMode } from '@shared/ipc'
 import type { Address, FolderData, LatLon } from '@shared/photo'
 import type { UpdateState } from '@shared/updates'
 import { setDateLocale, statusParts } from './describe'
@@ -78,6 +78,12 @@ async function start(): Promise<void> {
   let view: ViewMode = 'map'
   /** Markers or thumbnails on the map (T, View menu; tz.md, п. 4.8.3). */
   let mapMode: MapMode = init.map.thumbnails ? 'thumbs' : 'pins'
+  /** Where the strip is (View → Strip Position, tz.md, п. 4.1); kept by main. */
+  let stripPosition: StripPosition = init.stripPosition
+  /** The strip over the whole window instead of the map (G, View → Grid, tz.md, п. 4.17); not kept. */
+  let grid = false
+  /** The strip scroll outside the grid: this one is kept for the next run (п. 7.1). */
+  let lastScroll = 0
 
   const showStatus = (): void => {
     const p = sel.current === null ? undefined : folder?.photos[sel.current]
@@ -268,7 +274,7 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
 
   /** Main keeps the selection (Save Selected, last session) and the View menu state. */
   const reportState = (): void => {
-    window.geophotos.reportState({ ids: [...sel.ids], current: sel.current, filter, view, mapMode })
+    window.geophotos.reportState({ ids: [...sel.ids], current: sel.current, filter, view, mapMode, grid })
   }
 
   /** The photo view, or for a track the track view (tz.md, пп. 4.14, 3.9.6). */
@@ -324,6 +330,8 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
 
   /** Double click, C, View → Show on Map: the current photo on the map (tz.md, п. 4.4.2). */
   const showOnMap = (): void => {
+    // From the grid: back to the map first (tz.md, п. 4.17).
+    if (grid) leaveGrid()
     if (sel.current === null) return
     const p = folder?.photos[sel.current]
     // A track: the whole of it (tz.md, п. 3.9.4).
@@ -345,7 +353,10 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   const reportView = (): void => {
     window.clearTimeout(viewTimer)
     viewTimer = window.setTimeout(
-      () => window.geophotos.reportView({ ...map.view(), scroll: byId('strip').scrollLeft }),
+      () => {
+        if (!grid) lastScroll = strip.scroll
+        window.geophotos.reportView({ ...map.view(), scroll: lastScroll })
+      },
       300
     )
   }
@@ -357,12 +368,55 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     reportState()
   }
 
-  /** Space and View menu: the map or the current photo (tz.md, п. 9.3). */
+  /** Space and View menu: the map or the current photo (tz.md, п. 9.3); in the grid, the grid or the photo. */
   const toggleView = (): void => {
     view = view === 'map' ? 'photo' : 'map'
+    applyLayout()
     showPhoto()
     if (view === 'map') map.invalidateSize()
     reportState()
+  }
+
+  /**
+   * The window follows the strip position and the grid (tz.md, пп. 4.1, 4.17): the strip at the
+   * bottom or on the left of the map; the grid instead of the map; the photo view from the grid
+   * over the whole window.
+   */
+  const applyLayout = (): void => {
+    const cls = document.body.classList
+    cls.toggle('strip-left', stripPosition === 'left')
+    cls.toggle('grid', grid)
+    cls.toggle('grid-photo', grid && view === 'photo')
+    strip.setLayout(grid ? 'grid' : stripPosition)
+    map.invalidateSize()
+  }
+
+  /** G and View → Grid; leaving it, the map comes back (also from the photo view). */
+  const toggleGrid = (): void => {
+    if (grid) return leaveGrid()
+    if (!folder) return
+    grid = true
+    view = 'map'
+    applyLayout()
+    showPhoto()
+    reportState()
+  }
+
+  const leaveGrid = (): void => {
+    if (!grid) return
+    grid = false
+    view = 'map'
+    applyLayout()
+    showPhoto()
+    // The strip back where it was outside the grid, with the current photo in view.
+    strip.revealCurrent()
+    reportState()
+  }
+
+  const setStripPosition = (p: StripPosition): void => {
+    stripPosition = p
+    applyLayout()
+    reportView()
   }
 
   /** New coordinates for the photos; null removes them (Del, tz.md, п. 6.6). */
@@ -477,6 +531,20 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
         return
       }
       if (isTextInput(e.target)) return
+      // Esc leaves the grid (tz.md, п. 4.17), also from the photo view opened in it.
+      if (e.key === 'Escape' && grid) {
+        e.preventDefault()
+        e.stopPropagation()
+        leaveGrid()
+        return
+      }
+      // G: the grid of thumbnails, by the physical key (also «П» in the Russian layout).
+      if (e.code === 'KeyG' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!e.repeat) toggleGrid()
+        return
+      }
       // Space switches map / photo; it must not press a focused button.
       if (e.key === ' ' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
         e.preventDefault()
@@ -527,15 +595,15 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
         return
       }
       if (e.ctrlKey || e.altKey || e.metaKey) return
-      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-        e.preventDefault()
-        e.stopPropagation()
-        return
-      }
       if (!isNavKey(e.key)) return
+      // Taken also when they do nothing: the map must not pan on arrows, the strip must not scroll
+      // on PageUp / PageDown by itself.
       e.preventDefault()
       e.stopPropagation()
-      const next = navigateShown(e.key, sel.current, order)
+      // How far ↑ ↓ go (tz.md, п. 4.17): a row in the grid, one photo in the strip on the left;
+      // at the bottom and in the photo view of the grid (no strip on screen) they do nothing.
+      const row = grid ? (view === 'photo' ? 0 : strip.columns()) : stripPosition === 'left' ? 1 : 0
+      const next = navigateShown(e.key, sel.current, order, row, strip.pageSize())
       if (next !== null && (next !== sel.current || sel.ids.size !== 1)) select(single(next))
     },
     true
@@ -567,6 +635,10 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
       showOnMap()
     } else if (cmd.type === 'toggleThumbnails') {
       toggleThumbnails()
+    } else if (cmd.type === 'toggleGrid') {
+      toggleGrid()
+    } else if (cmd.type === 'setStripPosition') {
+      setStripPosition(cmd.position)
     } else if (cmd.type === 'setFilter') {
       setFilter(cmd.filter)
     } else if (cmd.type === 'toggleHelp') {
@@ -590,6 +662,8 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     if (statusNote.textContent === t('status.adding')) note('')
     // Everything taken off the strip, no folder: nothing is open.
     folder = data.folder || data.photos.length ? data : null
+    // Nothing open: no grid either.
+    if (!folder && grid) leaveGrid()
     // Refresh keeps the selection and the filter (tz.md, п. 3.8); any other opening starts afresh.
     const keep = data.keep
     const cur = keep ? (data.selected ?? keep.ids.at(-1) ?? null) : null
@@ -625,7 +699,7 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     // Otherwise the first photo already is (a photo is always selected, п. 4.4).
     else if (data.selected !== null) select(single(data.selected))
     // …and the strip scrolls back to where it was.
-    if (data.restored) byId('strip').scrollLeft = data.restored.scroll
+    if (data.restored) strip.scroll = lastScroll = data.restored.scroll
     reportView()
   })
 
@@ -695,6 +769,7 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
 
   byId('strip').addEventListener('scroll', reportView, { passive: true })
 
+  applyLayout()
   showStatus()
   showCounts()
   // The View menu shows the mode of the map from the start, also without a folder.

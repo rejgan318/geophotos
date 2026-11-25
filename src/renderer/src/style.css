@@ -30,11 +30,24 @@ body {
   flex-direction: column;
 }
 
+/* The map with the strip under it, or on the left of it (tz.md, п. 4.1). */
+#work {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+body.strip-left #work {
+  flex-direction: row-reverse;
+}
+
 /* The main area: the map, or the photo view over it (tz.md, п. 9.3). */
 #main {
   position: relative;
   flex: 1;
   min-height: 0;
+  min-width: 0;
 }
 
 #map {
@@ -123,7 +136,48 @@ body {
 }
 
 #strip::-webkit-scrollbar {
+  width: 10px;
   height: 10px;
+}
+
+/* The strip on the left: a column of the same thumbnails, scrolled down (tz.md, п. 4.1). */
+body.strip-left #strip {
+  width: var(--strip-height);
+  height: auto;
+  flex-direction: column;
+  padding: 8px 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-top: none;
+  border-right: 1px solid #111;
+}
+
+/* The grid (tz.md, п. 4.17): the strip instead of the map, in rows; the photo view from it
+   takes the whole window. */
+body.grid #main {
+  display: none;
+}
+
+body.grid #strip {
+  flex: 1;
+  width: auto;
+  height: auto;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  padding: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: none;
+}
+
+body.grid.grid-photo #main {
+  display: block;
+}
+
+body.grid.grid-photo #strip {
+  display: none;
 }
 
 #strip::-webkit-scrollbar-track {

@@ -21,10 +21,13 @@ export const SECTIONS: Section[] = [
     title: 'help.keyboard',
     rows: [
       { keys: ['←', '→'], text: 'help.prevNext' },
+      { keys: ['↑', '↓'], text: 'help.upDown' },
       { keys: ['Home', 'End'], text: 'help.firstLast' },
+      { keys: ['PgUp', 'PgDn'], text: 'help.page' },
       { keys: ['help.key.space'], text: 'help.photoView' },
       { keys: ['C'], text: 'help.showOnMap' },
       { keys: ['T'], text: 'help.thumbnails' },
+      { keys: ['G'], text: 'help.grid' },
       { keys: ['Ctrl+A'], text: 'help.selectAll' },
       { keys: ['Ctrl+C'], text: 'help.copy' },
       { keys: ['Ctrl+V'], text: 'help.paste' },
