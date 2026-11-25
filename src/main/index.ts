@@ -1,7 +1,7 @@
 import { statSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, protocol, screen, session, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, protocol, screen, session, shell } from 'electron'
 import { windowTitle } from '@shared/app-info'
 import { pathsFromArgv } from '@shared/argv'
 import { isBatch, parseBatchArgs } from '@shared/batch-args'
@@ -1587,6 +1587,7 @@ function createWindow(): BrowserWindow {
     ...(place ? { x: place.x, y: place.y, width: place.width, height: place.height } : { width: 1280, height: 860 }),
     title: windowTitle(),
     show: false,
+    backgroundColor: WINDOW_BG,
     // The built program takes its icon from the .exe; in development it is set here.
     ...(dev ? { icon: join(app.getAppPath(), 'build', 'icon.png') } : {}),
     webPreferences: {
@@ -1658,6 +1659,7 @@ function createBatchWindow(): BrowserWindow {
     maximizable: false,
     title: 'GeoPhotos',
     show: false,
+    backgroundColor: WINDOW_BG,
     ...(dev ? { icon: join(app.getAppPath(), 'build', 'icon.png') } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -1732,7 +1734,13 @@ async function runBatchWindow(paths: string[], opts: BatchOptions): Promise<numb
   return outcome.cancelled ? 3 : outcome.failed.length ? 1 : 0
 }
 
+/** The window background before the page paints: the same as --bg in style.css (tz.md, п. 4.16). */
+const WINDOW_BG = '#2b2b2b'
+
 void app.whenReady().then(async () => {
+  // The program is dark whatever the Windows theme: the menu bar, title bar, scrollbars and the
+  // Windows dialogs too (tz.md, п. 4.16).
+  nativeTheme.themeSource = 'dark'
   // Before startup: the progress window of installing exiftool asks for its texts (tz.md, п. 2.2).
   ipcMain.handle(IPC.batchInit, () => ({ strings }))
   if (!(await startup())) {
