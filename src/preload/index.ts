@@ -13,6 +13,7 @@ import {
   type SaveState,
   type SearchResult,
   type TrackForMap,
+  type WindowAction,
   type WindowCommand
 } from '@shared/ipc'
 import type { GeoPhotosApi } from './api'
@@ -36,6 +37,10 @@ const api: GeoPhotosApi = {
   },
   reportState: (state) => ipcRenderer.send(IPC.uiState, state),
   reportView: (view) => ipcRenderer.send(IPC.viewState, view),
+  action: (a: WindowAction) => ipcRenderer.send(IPC.action, a),
+  onRecent: (cb) => {
+    ipcRenderer.on(IPC.recent, (_e, list: string[]) => cb(list))
+  },
   onCommand: (cb) => {
     ipcRenderer.on(IPC.command, (_e, cmd: WindowCommand) => cb(cmd))
   },

@@ -16,6 +16,7 @@ import type {
   TrackForMap,
   UiState,
   ViewState,
+  WindowAction,
   WindowCommand
 } from '../shared/ipc'
 
@@ -42,6 +43,10 @@ export interface GeoPhotosApi {
   reportState(state: UiState): void
   /** Tells main the place of the map, tile source and strip scroll (next run). */
   reportView(view: ViewState): void
+  /** The context menu, the start screen, the grid size (tz.md, пп. 4.17–4.19). */
+  action(a: WindowAction): void
+  /** The recent folders changed (the start screen). */
+  onRecent(cb: (list: string[]) => void): void
   /** Commands of the View menu. */
   onCommand(cb: (cmd: WindowCommand) => void): void
   onSaveState(cb: (state: SaveState) => void): void

@@ -17,6 +17,10 @@ export interface StripHandlers {
   onClick(id: number, mods: { ctrl: boolean; shift: boolean }): void
   /** A double click on a photo: show it on the map. */
   onDoubleClick(id: number): void
+  /** A right click on a photo: its context menu at this point (tz.md, п. 4.19). */
+  onContextMenu(id: number, x: number, y: number): void
+  /** Ctrl+wheel: larger (1) or smaller (-1) thumbnails in the grid (п. 4.17). */
+  onZoom(dir: 1 | -1): void
   /** A drag starts on a photo: returns the photos it carries (п. 4.5). */
   onDragStart(id: number): number[]
   onDragEnd(): void
@@ -54,6 +58,11 @@ export class Strip {
     el.addEventListener(
       'wheel',
       (e) => {
+        if (e.ctrlKey) {
+          e.preventDefault()
+          if (this.layout === 'grid' && e.deltaY) this.h.onZoom(e.deltaY < 0 ? 1 : -1)
+          return
+        }
         if (this.layout === 'bottom' && e.deltaY && !e.shiftKey) {
           el.scrollLeft += e.deltaY
           e.preventDefault()
@@ -139,6 +148,14 @@ export class Strip {
     return n
   }
 
+  /** Where the context menu of the current photo opens from the keyboard: its thumbnail; null — not on screen. */
+  currentPoint(): { x: number; y: number } | null {
+    const item = this.current === null ? undefined : this.items.get(this.current)
+    if (!item || !this.el.clientHeight) return null
+    const b = item.getBoundingClientRect()
+    return { x: b.left + b.width / 2, y: b.top + b.height / 2 }
+  }
+
   /** Scrolls so that the current photo is visible. */
   revealCurrent(): void {
     const item = this.current === null ? undefined : this.items.get(this.current)
@@ -201,6 +218,10 @@ export class Strip {
     item.addEventListener('click', (e) => this.h.onClick(p.id, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey }))
     item.addEventListener('dblclick', (e) => {
       if (!e.ctrlKey && !e.shiftKey && !e.metaKey) this.h.onDoubleClick(p.id)
+    })
+    item.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      this.h.onContextMenu(p.id, e.clientX, e.clientY)
     })
     item.addEventListener('dragstart', (e) => this.dragStart(e, p.id))
     item.addEventListener('dragend', () => {

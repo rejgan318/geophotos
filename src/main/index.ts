@@ -26,6 +26,8 @@ import {
   type SaveState,
   type StripFilter,
   type StripPosition,
+  type WindowAction,
+  validWindowAction,
   type UiState,
   validUiState,
   validViewState,
@@ -35,6 +37,7 @@ import {
   type TrackForMap
 } from '@shared/ipc'
 import { addressText, formatCoords, type FileMeta, type Photo } from '@shared/photo'
+import { contextItems, GRID_THUMB, validGridThumb } from '@shared/context-menu'
 import { addRecent, idsByPath, removeRecent, samePath } from '@shared/recent'
 import {
   afterRemoval,
@@ -55,7 +58,7 @@ import { hasSubfolders, scanFiles, scanFolder, type PhotoSource, type ScannedFol
 import { listLanguages, loadStrings } from './locales'
 import { AUTO_LANGUAGE, resolveLanguage } from '@shared/language'
 import { log, setupLog } from './logger'
-import { buildMenu, MENU_ID } from './menu'
+import { buildContextMenu, buildMenu, MENU_ID } from './menu'
 import { savePhotos, type SaveFailure } from './save'
 import { PlaceSearch } from './search'
 import { DefaultSettingsError, ensureUserSettingsFile, formatProblem, loadSettings, setUserSetting } from './settings'
@@ -192,6 +195,8 @@ let viewState: ViewState | null = null
 let ui: UiState = { ids: [], current: null, filter: 'all', view: 'map', mapMode: 'pins', grid: false }
 /** Where the strip is (tz.md, п. 4.1); kept in the state file. */
 let stripPosition: StripPosition = 'bottom'
+/** Size of the thumbnails in the grid (tz.md, п. 4.17); kept in the state file. */
+let gridThumb: number = GRID_THUMB.normal
 /** Started with --batch (tz.md, п. 10): no main window, the batch and the exit code. */
 const batchArgs = isBatch(process.argv.slice(1)) ? parseBatchArgs(process.argv.slice(1), app.getAppPath()) : null
 /** The batch window is running: the program state of the main window is not touched. */
@@ -422,7 +427,9 @@ function initData(): InitData {
     // Regional format of Windows (as in Explorer), for dates (tz.md, п. 4.13).
     dateLocale: app.getSystemLocale() || strings['locale'] || 'en-US',
     update: updateState,
-    stripPosition
+    stripPosition,
+    gridThumb,
+    recent: recentFolders
   }
 }
 
@@ -433,12 +440,13 @@ function initData(): InitData {
 function setRecent(update: (list: string[]) => string[]): void {
   recentFolders = update(recentFolders)
   updateMenu(recentFolders)
+  win?.webContents.send(IPC.recent, recentFolders)
   saveAppState()
 }
 
 function saveAppState(): void {
   try {
-    writeState(paths.state, { recentFolders, lastSession, window: windowState, map: mapState, tools, addFolder, stripPosition })
+    writeState(paths.state, { recentFolders, lastSession, window: windowState, map: mapState, tools, addFolder, stripPosition, gridThumb })
   } catch (e) {
     log.warn(`Cannot save state ${paths.state}: ${String(e)}`)
   }
@@ -1503,6 +1511,44 @@ async function systemThumbnail(path: string, size: number): Promise<Buffer> {
 }
 
 /** "Open in Player" of the photo view (п. 4.14): the video in the default program of Windows. */
+/** What the window asks for (tz.md, пп. 4.17–4.19): the context menu, the start screen, the grid size. */
+async function windowAction(a: WindowAction): Promise<void> {
+  if (a.type === 'openFolder') return chooseFolder()
+  if (a.type === 'openRecent') return openRecent(a.folder)
+  if (a.type === 'gridThumb') {
+    gridThumb = validGridThumb(a.size)
+    saveAppState()
+    return
+  }
+  showContextMenu(a.x, a.y)
+}
+
+/**
+ * The context menu of the current photo (tz.md, п. 4.19): the window has already selected it.
+ * The editing items work as the Edit menu does — the window does them.
+ */
+function showContextMenu(x: number, y: number): void {
+  const photos = current?.data.photos ?? []
+  const photo = ui.current === null ? undefined : photos[ui.current]
+  if (!win || !photo) return
+  const picked = [...selection].map((id) => photos[id]).filter((p): p is Photo => !!p)
+  const menu = buildContextMenu(t, contextItems(photo, picked, saving), (item) => {
+    if (item === 'showInExplorer') shell.showItemInFolder(photo.path)
+    else if (item === 'openDefault') void openDefault(photo)
+    else win?.webContents.send(IPC.command, { type: item })
+  })
+  menu.popup({ window: win, x: Math.round(x), y: Math.round(y) })
+}
+
+/** The photo, video or track file in the program Windows opens it with (tz.md, п. 4.19). */
+async function openDefault(photo: Photo): Promise<void> {
+  const err = await shell.openPath(photo.path)
+  if (err) {
+    log.error(`Cannot open ${photo.path}: ${err}`)
+    if (win) void dialog.showMessageBox(win, { type: 'error', message: `${err}\n${photo.path}`, buttons: [t('dialog.ok')] })
+  } else log.info(`Opened in the default program: ${photo.path}`)
+}
+
 async function openInPlayer(id: unknown): Promise<void> {
   const photo = typeof id === 'number' ? current?.data.photos[id] : undefined
   if (!photo?.video) return
@@ -1831,6 +1877,10 @@ void app.whenReady().then(async () => {
     viewState = validViewState(v) ?? viewState
   })
   ipcMain.handle(IPC.openInPlayer, (_e, id: unknown) => openInPlayer(id))
+  ipcMain.on(IPC.action, (_e, a: unknown) => {
+    const action = validWindowAction(a)
+    if (action) void windowAction(action)
+  })
   ipcMain.handle(IPC.aboutInfo, () => aboutInfo())
   // The update in the status bar (tz.md, п. 2.5): the release page, or exit and install.
   ipcMain.handle(IPC.updateApply, async () => {
@@ -1865,6 +1915,7 @@ void app.whenReady().then(async () => {
   tools = saved.tools
   addFolder = saved.addFolder
   stripPosition = saved.stripPosition
+  gridThumb = saved.gridThumb
   ui = { ...ui, mapMode: mapState?.thumbnails ? 'thumbs' : 'pins' }
   updateMenu(recentFolders)
   win = createWindow()

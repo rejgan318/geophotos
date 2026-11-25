@@ -1,6 +1,7 @@
 import { Menu, type MenuItemConstructorOptions } from 'electron'
 import type { Translate } from '@shared/i18n'
 import type { StripFilter, StripPosition } from '@shared/ipc'
+import type { ContextItem, ContextItemState } from '@shared/context-menu'
 
 export interface MenuHandlers {
   openFolder(): void
@@ -212,6 +213,33 @@ export function buildMenu(
       { type: 'separator' },
       { label: t('menu.about'), click: h.about }
     ]
+  })
+  return Menu.buildFromTemplate(template)
+}
+
+/** Labels and shown keys of the context menu items: the same as in the Edit and View menus (tz.md, п. 4.19). */
+const CONTEXT: Record<ContextItem, { label: string; accelerator?: string }> = {
+  showOnMap: { label: 'menu.showOnMap', accelerator: 'C' },
+  copyCoords: { label: 'menu.copyCoords', accelerator: 'CmdOrCtrl+C' },
+  pasteCoords: { label: 'menu.pasteCoords', accelerator: 'CmdOrCtrl+V' },
+  clearCoords: { label: 'menu.clearCoords', accelerator: 'CmdOrCtrl+Delete' },
+  removeFromStrip: { label: 'menu.removeFromStrip', accelerator: 'Delete' },
+  showInExplorer: { label: 'menu.showInExplorer' },
+  openDefault: { label: 'menu.openDefault' }
+}
+
+/** The context menu of a photo: Show on Map, the editing items, then the file ones. */
+export function buildContextMenu(t: Translate, items: ContextItemState[], run: (item: ContextItem) => void): Menu {
+  const template: MenuItemConstructorOptions[] = []
+  items.forEach(({ item, enabled }, i) => {
+    if (i > 0 && (item === 'showInExplorer' || items[i - 1]!.item === 'showOnMap')) template.push({ type: 'separator' })
+    const c = CONTEXT[item]
+    template.push({
+      label: t(c.label),
+      enabled,
+      ...(c.accelerator ? { accelerator: c.accelerator, registerAccelerator: false } : {}),
+      click: () => run(item)
+    })
   })
   return Menu.buildFromTemplate(template)
 }

@@ -25,6 +25,7 @@ import {
   type Selection
 } from './selection'
 import { PHOTO_DRAG_TYPE, Strip } from './strip'
+import { nextGridThumb } from '@shared/context-menu'
 import type L from './leaflet-global'
 import { TrackLayer } from './track-layer'
 import { TrackSummaryView } from './track-view'
@@ -84,6 +85,9 @@ async function start(): Promise<void> {
   let grid = false
   /** The strip scroll outside the grid: this one is kept for the next run (п. 7.1). */
   let lastScroll = 0
+  /** Size of the thumbnails in the grid (п. 4.17); kept by main. */
+  let gridThumb = init.gridThumb
+  document.documentElement.style.setProperty('--grid-thumb', `${gridThumb}px`)
 
   const showStatus = (): void => {
     const p = sel.current === null ? undefined : folder?.photos[sel.current]
@@ -413,6 +417,35 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     reportState()
   }
 
+  /** Ctrl+wheel, Ctrl + «+» / «−», Ctrl+0 in the grid (tz.md, п. 4.17); the current photo stays in view. */
+  const zoomGrid = (dir: 1 | -1 | 0): void => {
+    if (!grid || view !== 'map') return
+    const next = nextGridThumb(gridThumb, dir)
+    if (next === gridThumb) return
+    gridThumb = next
+    document.documentElement.style.setProperty('--grid-thumb', `${gridThumb}px`)
+    strip.revealCurrent()
+    window.geophotos.action({ type: 'gridThumb', size: gridThumb })
+  }
+
+  /**
+   * The context menu of a photo (tz.md, п. 4.19): a photo not selected becomes the only selected
+   * one; a selected one becomes the current one, the selection stays (as in Explorer).
+   */
+  const openContextMenu = (id: number, x: number, y: number): void => {
+    if (!folder) return
+    if (!sel.ids.has(id)) select(single(id))
+    else if (sel.current !== id) select({ ids: sel.ids, current: id, anchor: sel.anchor })
+    window.geophotos.action({ type: 'contextMenu', x, y })
+  }
+
+  /** The Menu key or Shift+F10: the context menu of the current photo, at its thumbnail or mid-window. */
+  const contextMenuFromKeyboard = (): void => {
+    if (sel.current === null) return
+    const at = strip.currentPoint() ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 }
+    openContextMenu(sel.current, at.x, at.y)
+  }
+
   const setStripPosition = (p: StripPosition): void => {
     stripPosition = p
     applyLayout()
@@ -432,6 +465,7 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
 
   // Photo ids are their positions in the strip, so they double as indexes.
   const map = new MapView(byId('map'), init.map, {
+    onMarkerContextMenu: (id, x, y) => openContextMenu(id, x, y),
     onMarkerClick: (id, mods) =>
       select(mods.ctrl ? clickSelect(sel, id, { ctrl: true, shift: false }, order) : single(id)),
     // All photos at the marker's point move with it (tz.md, п. 4.7); with a filter on, only
@@ -479,6 +513,8 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
       if (sel.current !== id || sel.ids.size !== 1) select(single(id))
       showOnMap()
     },
+    onContextMenu: (id, x, y) => openContextMenu(id, x, y),
+    onZoom: (dir) => zoomGrid(dir),
     onDragStart: (id) => {
       const next = dragSelection(sel, id)
       if (next.ids !== sel.ids || next.current !== sel.current) select(next)
@@ -537,6 +573,23 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
         e.stopPropagation()
         leaveGrid()
         return
+      }
+      // The context menu from the keyboard (tz.md, п. 4.19).
+      if ((e.key === 'ContextMenu' && !e.ctrlKey && !e.altKey) || (e.key === 'F10' && e.shiftKey && !e.ctrlKey && !e.altKey)) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!e.repeat) contextMenuFromKeyboard()
+        return
+      }
+      // Ctrl + «+» / «−» / 0: the size of the thumbnails in the grid (п. 4.17); by the physical keys.
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && grid) {
+        const dir = e.code === 'Equal' || e.code === 'NumpadAdd' ? 1 : e.code === 'Minus' || e.code === 'NumpadSubtract' ? -1 : e.code === 'Digit0' || e.code === 'Numpad0' ? 0 : null
+        if (dir !== null) {
+          e.preventDefault()
+          e.stopPropagation()
+          zoomGrid(dir)
+          return
+        }
       }
       // G: the grid of thumbnails, by the physical key (also «П» in the Russian layout).
       if (e.code === 'KeyG' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
@@ -768,6 +821,51 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   })
 
   byId('strip').addEventListener('scroll', reportView, { passive: true })
+
+  // The start screen (tz.md, п. 4.18): when nothing is open, over the map — Open Folder…, the
+  // recent folders, a hint about dropping.
+  const start = byId('start')
+  let recent = init.recent
+  const showStart = (): void => {
+    start.hidden = !!folder
+    if (folder) return
+    const open = document.createElement('button')
+    open.type = 'button'
+    open.className = 'start-open'
+    open.textContent = t('start.open')
+    open.addEventListener('click', () => window.geophotos.action({ type: 'openFolder' }))
+    const parts: HTMLElement[] = [open]
+    if (recent.length) {
+      const title = document.createElement('div')
+      title.className = 'start-title'
+      title.textContent = t('start.recent')
+      const list = document.createElement('div')
+      list.className = 'start-recent'
+      for (const path of recent) {
+        const b = document.createElement('button')
+        b.type = 'button'
+        b.textContent = path
+        b.title = path
+        b.addEventListener('click', () => window.geophotos.action({ type: 'openRecent', folder: path }))
+        list.append(b)
+      }
+      parts.push(title, list)
+    }
+    const hint = document.createElement('div')
+    hint.className = 'start-hint'
+    hint.textContent = t('start.hint')
+    parts.push(hint)
+    const box = document.createElement('div')
+    box.className = 'start-box'
+    box.append(...parts)
+    start.replaceChildren(box)
+  }
+  window.geophotos.onRecent((list) => {
+    recent = list
+    showStart()
+  })
+  window.geophotos.onFolderLoaded(() => showStart())
+  showStart()
 
   applyLayout()
   showStatus()

@@ -66,6 +66,8 @@ interface ClusterNode {
 
 export interface MapHandlers {
   onMarkerClick(photoId: number, mods: { ctrl: boolean; shift: boolean }): void
+  /** A right click on the marker of a photo (not of a group): its context menu (tz.md, п. 4.19). */
+  onMarkerContextMenu(photoId: number, x: number, y: number): void
   /** A marker was dragged to a new point: all photos at its old point move there (п. 4.7). */
   onMarkerMoved(photoId: number, to: LatLon): Promise<void>
   /** Photos dragged from the strip were dropped onto the map (п. 4.5). */
@@ -417,6 +419,10 @@ export class MapView {
     m.on('click', (e: L.LeafletMouseEvent) =>
       this.h.onMarkerClick(p.id, { ctrl: e.originalEvent.ctrlKey, shift: e.originalEvent.shiftKey })
     )
+    m.on('contextmenu', (e: L.LeafletMouseEvent) => {
+      e.originalEvent.preventDefault()
+      this.h.onMarkerContextMenu(p.id, e.originalEvent.clientX, e.originalEvent.clientY)
+    })
     m.on('dragend', () => {
       const to = m.getLatLng().wrap()
       // Whatever main decides, the marker then shows the photo's actual coordinates.

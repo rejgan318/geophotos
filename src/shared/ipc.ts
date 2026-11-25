@@ -29,6 +29,10 @@ export const IPC = {
   viewState: 'ui:viewState',
   /** event, main → window: a command from the menu (View). */
   command: 'ui:command',
+  /** send, window → main: the context menu, the start screen, the grid size (tz.md, 0.34.0). */
+  action: 'ui:action',
+  /** event, main → window: the recent folders changed (the start screen). */
+  recent: 'ui:recent',
   /** event, main → window: how many points still wait for their address and altitude (пп. 5.5, 5.6). */
   queueState: 'queue:state',
   /** event, main → window: progress and result of saving. */
@@ -84,6 +88,10 @@ export interface InitData {
   update: UpdateState | null
   /** Where the strip is, as at the end of the last run (tz.md, п. 4.1). */
   stripPosition: StripPosition
+  /** Size of the thumbnails in the grid, px (п. 4.17). */
+  gridThumb: number
+  /** Recent folders, latest first (the start screen, п. 4.18). */
+  recent: string[]
 }
 
 /** What the window reports for the next run (tz.md, п. 7.1): the map and the strip scroll. */
@@ -194,6 +202,33 @@ export interface UiState {
   mapMode: MapMode
   /** The strip fills the window instead of the map (G, View → Grid; tz.md, п. 4.17). */
   grid: boolean
+}
+
+/** What the window asks main to do (tz.md, пп. 4.17–4.19). */
+export type WindowAction =
+  /** The context menu of the current photo, at this point of the window. */
+  | { type: 'contextMenu'; x: number; y: number }
+  | { type: 'openFolder' }
+  | { type: 'openRecent'; folder: string }
+  | { type: 'gridThumb'; size: number }
+
+/** Checks an action coming from the window; null if it is not one. */
+export function validWindowAction(v: unknown): WindowAction | null {
+  if (!v || typeof v !== 'object') return null
+  const r = v as Record<string, unknown>
+  const num = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x)
+  switch (r['type']) {
+    case 'contextMenu':
+      return num(r['x']) && num(r['y']) ? { type: 'contextMenu', x: r['x'], y: r['y'] } : null
+    case 'openFolder':
+      return { type: 'openFolder' }
+    case 'openRecent':
+      return typeof r['folder'] === 'string' && r['folder'] ? { type: 'openRecent', folder: r['folder'] } : null
+    case 'gridThumb':
+      return num(r['size']) ? { type: 'gridThumb', size: r['size'] } : null
+    default:
+      return null
+  }
 }
 
 export type WindowCommand =
