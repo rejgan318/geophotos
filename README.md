@@ -2,9 +2,15 @@
 
 **English** | [Русский](README.ru.md) | [Українська](README.uk.md)
 
-Manual geotagging of photos on a map for Windows, modelled on the Map module of Adobe Lightroom.
+Manual geotagging of photos on a map for Windows, like the Map module of Adobe Lightroom.
 
-You open a folder from a trip, see the photos that already have coordinates (usually the ones from the phone) on the map, find where every other shot was taken and drag its thumbnail there. Then you save, and the coordinates are written into the files, or into XMP sidecars for RAW, so that Lightroom, Immich and other programs read them.
+> _Photos keep memories, and the brightest ones come back from the road: a hike in the mountains, a new country, a city where everything is a first. Later you want to look through them and remember not only **what** happened but **where**, and see it on a map._
+>
+> _A watch or a phone can record your way as a track: where you walked, how high you climbed, how fast you moved, what your heart rate was. Photos from a phone usually know their place on their own, sometimes not exactly — those are easy to fix, just by moving the marker. A camera doesn't know it, but you remember where you took the shot. GeoPhotos brings it all together: the track, the photos that already have a place, and the ones you drag to the right spot on the map. Scattered files add up to the whole picture of the trip. Or, with no track at all, simply see every photo from a folder on disk on the map._
+
+Lightroom can do this too, and as a photo manager it is excellent. But it is paid, big, and not always handy when all you need is to lay your photos out on a map. GeoPhotos does only that: quickly, clearly, and so that Lightroom, Immich and other programs read the coordinates afterwards.
+
+In short: you open a folder of photos from a trip, drag thumbnails onto the map and save. The coordinates are written into the files themselves, or into XMP sidecars next to RAW files.
 
 ## Installation
 
