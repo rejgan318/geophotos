@@ -21,6 +21,8 @@ GeoPhotos needs no installer: it is a folder you copy to your computer.
 
 **Uninstall:** delete the `GeoPhotos` folder; to remove the settings and logs too, delete `%APPDATA%\GeoPhotos`.
 
+**Checking the download** (optional). The SHA-256 on the release page tells that the zip came intact. From 0.29.0 the releases are built by GitHub Actions from this public repository, and GitHub attests each zip: with [GitHub CLI](https://cli.github.com/), `gh attestation verify GeoPhotos-<version>-win-x64.zip --repo rejgan318/geophotos` checks that the file was built from this repository's code and not changed afterwards. Or build the program yourself: [Building from source](#building-from-source).
+
 ## Features
 
 - **Folder and separate files:** *File → Open Folder…* (Ctrl+O) or dropping a folder shows the whole folder; *File → Add Files…* (Ctrl+Shift+O) or dropping files adds them to what is already in the strip, so photos from several folders (say, the camera's and the phone's) can be placed together. Del takes the selected photos or track off the strip (the files stay).
@@ -73,20 +75,21 @@ Live photos (iPhone Live Photo; Motion Photo of Google, Xiaomi, Samsung) are one
   The path of the settings is tried first; the usual places only when it does not run.
 - Internet access for map tiles, place search, addresses and altitudes.
 
-## Running from source
+## Building from source
 
-Requires [Node.js](https://nodejs.org/) 22 or newer.
-
-```bash
-npm install
-npm run dev
-```
-
-Build the program (output: `dist/win-unpacked/GeoPhotos.exe`):
+You do not have to trust the zip: the program can be built from this repository, on Windows 10/11. You need [Git](https://git-scm.com/) and [Node.js](https://nodejs.org/) 22 or newer (the releases are built with Node.js 26).
 
 ```bash
-npm run build
+git clone https://github.com/rejgan318/geophotos.git
+cd geophotos
+git checkout v0.29.0     # the version you want; skip it for the latest code
+npm ci                   # the exact versions of the components from package-lock.json
+npm test                 # optional: unit tests
+npm run build            # the program: dist\win-unpacked\GeoPhotos.exe
+npm run pack:zip         # optional: the same zip as in a release
 ```
+
+ExifTool is still needed, as for the released program (see [Requirements](#requirements)). Your build works the same as the release, but its files are not byte-for-byte equal to it (build times differ), so the SHA-256 will not match. To run while changing the code: `npm run dev`.
 
 Folders and files can be passed on the command line, as when they are dropped onto the window: `GeoPhotos.exe "D:\Photos\Trip"` opens the folder, `GeoPhotos.exe "D:\Phone\IMG_1.jpg" "D:\Phone\IMG_2.jpg"` adds the files.
 
@@ -141,10 +144,13 @@ The OpenStreetMap and Esri tiles are used under their usage policies. The Google
 | `npm test` | Unit tests |
 | `npm run test:integration` | Tests with the real ExifTool on copies of files |
 | `npm run build` | Build the program |
+| `npm run pack:zip` | Pack the built program into the release zip |
 
 Some integration tests use real photos that are not in the repository. Set `GEOPHOTOS_TEST_DIR` to a folder of test photos, or they are taken from `../data/geophotos-testdata/master`. Without them, those tests are skipped.
 
-**Stack:** Electron, TypeScript, electron-vite, Leaflet with Leaflet.markercluster, sharp, Vitest. ExifTool runs as a single `-stay_open` process.
+**GitHub Actions:** every push to `main` runs the type check, unit and integration tests on Windows and Ubuntu (`.github/workflows/test.yml`), with a pinned ExifTool checked against the SHA-256 of exiftool.org. A tag `vX.Y.Z` builds, tests and packs the program, attests the zip and creates a draft release with `release-notes/X.Y.Z.md` (`.github/workflows/release.yml`).
+
+**Stack:** Electron, TypeScript, electron-vite, Leaflet with Leaflet.markercluster, sharp, Vitest. ExifTool runs as a few `-stay_open` processes, about one per 30 files of the project.
 
 **Code layout:**
 - `src/main` — main process: files, ExifTool, menu, saving.

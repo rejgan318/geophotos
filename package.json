@@ -10,6 +10,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build && node scripts/third-party-notices.mjs && electron-builder --win --config electron-builder.yml",
     "build:code": "electron-vite build",
+    "pack:zip": "node scripts/pack-zip.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration --passWithNoTests"
