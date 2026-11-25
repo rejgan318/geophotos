@@ -826,9 +826,12 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   // recent folders, a hint about dropping.
   const start = byId('start')
   let recent = init.recent
+  // A folder is being opened (at start, from the last session or the launch parameters, or later):
+  // the start screen waits — it would only flash before the folder comes.
+  let opening = init.opening
   const showStart = (): void => {
-    start.hidden = !!folder
-    if (folder) return
+    start.hidden = !!folder || opening
+    if (start.hidden) return
     const open = document.createElement('button')
     open.type = 'button'
     open.className = 'start-open'
@@ -864,7 +867,18 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     recent = list
     showStart()
   })
-  window.geophotos.onFolderLoaded(() => showStart())
+  window.geophotos.onFolderLoading(() => {
+    opening = true
+    showStart()
+  })
+  window.geophotos.onFolderLoaded(() => {
+    opening = false
+    showStart()
+  })
+  window.geophotos.onIdle(() => {
+    opening = false
+    showStart()
+  })
   showStart()
 
   applyLayout()

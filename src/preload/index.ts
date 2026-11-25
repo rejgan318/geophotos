@@ -38,6 +38,9 @@ const api: GeoPhotosApi = {
   reportState: (state) => ipcRenderer.send(IPC.uiState, state),
   reportView: (view) => ipcRenderer.send(IPC.viewState, view),
   action: (a: WindowAction) => ipcRenderer.send(IPC.action, a),
+  onIdle: (cb) => {
+    ipcRenderer.on(IPC.idle, () => cb())
+  },
   onRecent: (cb) => {
     ipcRenderer.on(IPC.recent, (_e, list: string[]) => cb(list))
   },

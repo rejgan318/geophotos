@@ -457,7 +457,7 @@ function userAgent(): string {
   return `GeoPhotos/${app.getVersion()} (Electron; manual photo geotagging)`
 }
 
-function initData(): InitData {
+function initData(): Omit<InitData, 'opening'> {
   const { sources, skipped } = mapSources(settings)
   if (skipped.length) log.warn(t('error.tileSources', { keys: skipped.join(', ') }))
   // The tile source of the last run, if it is still in the settings (tz.md, п. 7.1).
@@ -699,8 +699,9 @@ async function loadProject(
       detail: String(e),
       buttons: [t('dialog.ok')]
     })
-    // Back to what was shown before.
+    // Back to what was shown before; nothing — the start screen (п. 4.18).
     if (current) win.webContents.send(IPC.folderLoaded, current.data)
+    else win.webContents.send(IPC.idle)
     return false
   }
 
@@ -1897,9 +1898,13 @@ void app.whenReady().then(async () => {
     // The window is ready: now the folder or photo from the launch parameter can be opened.
     const given = startupPaths
     startupPaths = []
-    // Folders and files given as parameters win over the last session (tz.md, п. 7.2).
-    if (given.length) setImmediate(() => void openPaths(given))
-    else if (!current && lastSession) setImmediate(() => void restoreSession())
+    // Folders and files given as parameters win over the last session (tz.md, п. 7.2). When it is
+    // over and nothing opened (the folder is gone, say), the start screen may show (п. 4.18).
+    const idleAfter = (p: Promise<void>): void => void p.finally(() => {
+      if (!current) win?.webContents.send(IPC.idle)
+    })
+    if (given.length) setImmediate(() => idleAfter(openPaths(given)))
+    else if (!current && lastSession) setImmediate(() => idleAfter(restoreSession()))
     // The window was reloaded (View → Reload in development): show the open folder again,
     // with its unsaved changes, which live in main.
     else if (current) {
@@ -1910,7 +1915,7 @@ void app.whenReady().then(async () => {
         refreshEditState()
       })
     }
-    return initData()
+    return { ...initData(), opening: given.length > 0 || !!current || !!lastSession }
   })
   // Folders and files dropped from Explorer (tz.md, п. 3.1).
   ipcMain.handle(IPC.openPaths, (_e, list: unknown) => {

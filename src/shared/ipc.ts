@@ -33,6 +33,8 @@ export const IPC = {
   action: 'ui:action',
   /** event, main → window: the recent folders changed (the start screen). */
   recent: 'ui:recent',
+  /** event, main → window: nothing is being opened and nothing is open — the start screen may show (п. 4.18). */
+  idle: 'ui:idle',
   /** event, main → window: how many points still wait for their address and altitude (пп. 5.5, 5.6). */
   queueState: 'queue:state',
   /** event, main → window: progress and result of saving. */
@@ -92,6 +94,11 @@ export interface InitData {
   gridThumb: number
   /** Recent folders, latest first (the start screen, п. 4.18). */
   recent: string[]
+  /**
+   * Something opens right after the start (launch parameters or the last session, п. 7.1): the
+   * start screen waits for it and does not flash; `idle` comes if nothing opened after all.
+   */
+  opening: boolean
 }
 
 /** What the window reports for the next run (tz.md, п. 7.1): the map and the strip scroll. */

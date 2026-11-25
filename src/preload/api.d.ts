@@ -45,6 +45,8 @@ export interface GeoPhotosApi {
   reportView(view: ViewState): void
   /** The context menu, the start screen, the grid size (tz.md, пп. 4.17–4.19). */
   action(a: WindowAction): void
+  /** Nothing is being opened and nothing is open: the start screen may show. */
+  onIdle(cb: () => void): void
   /** The recent folders changed (the start screen). */
   onRecent(cb: (list: string[]) => void): void
   /** Commands of the View menu. */
