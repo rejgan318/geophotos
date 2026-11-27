@@ -1,12 +1,26 @@
 /** Help → About: versions and links to the licenses. Settings and logs are in Tools (tz.md, п. 4.9). */
 import type { Translate } from '@shared/i18n'
 import type { AboutTarget } from '@shared/ipc'
+import { formatInstant } from '@shared/date-format'
+
+/** The easter eggs for About (tz.md, п. 9.3): how many there are and those found, in the order found. */
+export interface EggList {
+  readonly total: number
+  list(): { id: number; title: string; date: string }[]
+}
 
 export class AboutView {
   private readonly el: HTMLElement
   private readonly body: HTMLElement
+  /** The list of found eggs is open (until About closes). */
+  private eggsOpen = false
 
-  constructor(private readonly t: Translate) {
+  constructor(
+    private readonly t: Translate,
+    private readonly dateLocale: string,
+    private readonly eggs: EggList,
+    private readonly goToEgg: (id: number) => void
+  ) {
     this.el = document.createElement('div')
     this.el.className = 'overlay'
     this.el.hidden = true
@@ -41,6 +55,46 @@ export class AboutView {
 
   hide(): void {
     this.el.hidden = true
+    this.eggsOpen = false
+  }
+
+  /**
+   * "Found N of 14 ▸" after the first egg (tz.md, п. 9.3); a click opens the list of found places
+   * here, the date of each in its hint. A place: About closes, the map goes to the egg.
+   */
+  private eggsBlock(): HTMLElement[] {
+    const found = this.eggs.list()
+    if (!found.length) return []
+    const head = document.createElement('p')
+    const toggle = document.createElement('a')
+    toggle.href = '#'
+    toggle.className = 'about-eggs'
+    toggle.textContent = `${this.t('about.eggs', { n: String(found.length), total: String(this.eggs.total) })} ${this.eggsOpen ? '▾' : '▸'}`
+    const list = document.createElement('ol')
+    list.className = 'about-egg-list'
+    list.hidden = !this.eggsOpen
+    for (const f of found) {
+      const li = document.createElement('li')
+      const a = document.createElement('a')
+      a.href = '#'
+      a.textContent = f.title
+      a.title = formatInstant(Date.parse(f.date), null, this.dateLocale)
+      a.addEventListener('click', (e) => {
+        e.preventDefault()
+        this.hide()
+        this.goToEgg(f.id)
+      })
+      li.append(a)
+      list.append(li)
+    }
+    toggle.addEventListener('click', (e) => {
+      e.preventDefault()
+      this.eggsOpen = !this.eggsOpen
+      list.hidden = !this.eggsOpen
+      toggle.textContent = `${this.t('about.eggs', { n: String(found.length), total: String(this.eggs.total) })} ${this.eggsOpen ? '▾' : '▸'}`
+    })
+    head.append(toggle)
+    return [head, list]
   }
 
   /** Shows the window with fresh data from main. */
@@ -72,7 +126,8 @@ export class AboutView {
       line(`${t('about.license')} `, link('license', 'MIT'), ' · ', link('notices', t('about.notices'))),
       // Attribution asked by the elevation service (tz.md, п. 5.6).
       line(t('about.elevation')),
-      line(`Electron ${info.electron} · Node.js ${info.node}`)
+      line(`Electron ${info.electron} · Node.js ${info.node}`),
+      ...this.eggsBlock()
     )
     this.el.hidden = false
   }

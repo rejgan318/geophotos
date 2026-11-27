@@ -183,6 +183,22 @@ Some integration tests use real photos that are not in the repository. Set `GEOP
 - `make-project.md` — technical decisions and the working process.
 - `CHANGELOG.md` — the history of versions.
 
+## Easter eggs (spoiler)
+
+<details>
+<summary>Open only if you give up</summary>
+
+There are 14 easter eggs hidden on the map: photos of the Ukrainian meme "the ATB bag". Look closely at the right places — you will know when you find one. Found ones are listed in *Help → About*.
+
+**Spoiler: below is how to see them all at once — the fun is gone after that.** The photos and the list of places are in `eggs` (in the program — `resources\eggs` next to `GeoPhotos.exe`), every byte XOR-ed with the repeated key `ATB-GeoPhotos`. Run this in a copy of that folder: `.bin` become `.jpg` and `eggs.json`.
+
+```
+node -e "const f=require('fs'),k=Buffer.from('ATB-GeoPhotos');for(const n of f.readdirSync('.').filter(n=>n.endsWith('.bin')))f.writeFileSync(n.replace(/bin$/,n==='eggs.bin'?'json':'jpg'),f.readFileSync(n).map((b,i)=>b^k[i%k.length]))"
+```
+
+The files are made by `scripts/make-eggs.mjs` from a folder outside the repository.
+</details>
+
 ## License
 
 [MIT](LICENSE). The built program also carries THIRD-PARTY-NOTICES.txt with the licenses of the components it includes (made by `scripts/third-party-notices.mjs` during the build); *Help → About* links to both. Altitudes come from Open-Meteo (open-meteo.com), based on Copernicus DEM GLO-90; addresses and place search from Nominatim, © OpenStreetMap contributors.

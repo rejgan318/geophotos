@@ -4,6 +4,7 @@ import { applyEdits, modify, parse } from 'jsonc-parser'
 import { MAX_RECENT } from '@shared/recent'
 import { isStripPosition, type StripPosition } from '@shared/ipc'
 import { GRID_THUMB, validGridThumb, validStripThumb } from '@shared/context-menu'
+import { validFoundEggs, type FoundEgg } from '@shared/eggs'
 import { RECENT_PLACES, validFavorites, validPlace, type Place } from '@shared/search'
 
 /**
@@ -37,6 +38,8 @@ export interface AppState {
   places: Place[]
   /** Favourite places, in the order they were added (п. 5.3). */
   favorites: Place[]
+  /** The easter eggs found, in the order found, with the date (п. 9.3). */
+  eggs: FoundEgg[]
 }
 
 export interface Session {
@@ -71,7 +74,7 @@ export interface MapState {
   thumbnails: boolean
 }
 
-const EMPTY: AppState = { recentFolders: [], lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: null, stripPosition: 'bottom', gridThumb: GRID_THUMB.normal, stripThumb: GRID_THUMB.normal, places: [], favorites: [] }
+const EMPTY: AppState = { recentFolders: [], lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: null, stripPosition: 'bottom', gridThumb: GRID_THUMB.normal, stripThumb: GRID_THUMB.normal, places: [], favorites: [], eggs: [] }
 
 type Obj = Record<string, unknown>
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -135,7 +138,8 @@ export function readState(file: string): AppState {
       gridThumb: validGridThumb(v['gridThumb']),
       stripThumb: validStripThumb(v['stripThumb']),
       places: (Array.isArray(v['places']) ? v['places'] : []).map(validPlace).filter((p): p is Place => !!p).slice(0, RECENT_PLACES),
-      favorites: validFavorites(v['favorites'])
+      favorites: validFavorites(v['favorites']),
+      eggs: validFoundEggs(v['eggs'])
     }
   } catch {
     return { ...EMPTY }

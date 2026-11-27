@@ -11,6 +11,7 @@ import { MapView } from './map'
 import { PhotoView } from './viewer'
 import { HelpView } from './help'
 import { AboutView } from './about'
+import { EggView } from './eggs'
 import { effectiveFilter, matchesFilter, toggleFilter, visibleIds, type StripFilter } from './filter'
 import { PENCIL_SVG, PHOTO_SVG, PIN_OFF_SVG, PIN_SVG } from './icons'
 import { isNavKey, navigateShown } from './navigation'
@@ -394,6 +395,7 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   const toggleThumbnails = (): void => {
     mapMode = mapMode === 'pins' ? 'thumbs' : 'pins'
     map.setThumbnails(mapMode === 'thumbs')
+    eggs.setThumbnails(mapMode === 'thumbs')
     reportState()
   }
 
@@ -596,7 +598,16 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   const places = addSearchBox(map, t, init.places, init.favorites)
   const viewer = new PhotoView(byId('viewer'), t, (id) => void window.geophotos.openInPlayer(id))
   const help = new HelpView(t)
-  const about = new AboutView(t)
+  // The easter eggs (tz.md, п. 9.3): found only on the working map, never while a photo is dragged.
+  const eggs = new EggView(map.leaflet, init.eggs, t, init.map.thumbSize, mapMode === 'thumbs', {
+    busy: () => dragged !== null,
+    mapShown: () => view === 'map' && !grid && !summary.visible && !help.visible && !about.visible,
+    onFound: (id) => window.geophotos.action({ type: 'eggFound', id })
+  })
+  const about = new AboutView(t, init.dateLocale, eggs, (id) => {
+    toMap()
+    eggs.goTo(id)
+  })
   new ResizeObserver(() => map.invalidateSize()).observe(byId('map'))
 
   // Keys that work wherever the focus is, except text fields (tz.md, пп. 4.4, 4.4.1):
@@ -605,6 +616,13 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   window.addEventListener(
     'keydown',
     (e) => {
+      // The card of an easter egg is on top of everything (tz.md, п. 9.3): Esc or Enter closes it.
+      if (eggs.cardVisible) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (e.key === 'Escape' || e.key === 'Enter') eggs.closeCard()
+        return
+      }
       // Ctrl+F from anywhere (tz.md, п. 5.3): Help and About close, a text field is left; only the
       // search field itself keeps what is being typed there. By the physical key.
       if (e.code === 'KeyF' && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {

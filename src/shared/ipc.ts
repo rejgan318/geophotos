@@ -1,3 +1,4 @@
+import type { EggForMap, FoundEgg } from './eggs'
 import type { Strings } from './i18n'
 import type { Address, FolderData, LatLon, Photo } from './photo'
 import { validFavorites, validPlace, type Place, type SearchResult } from './search'
@@ -104,6 +105,8 @@ export interface InitData {
   places: Place[]
   /** Favourite places, in the order they were added (п. 5.3). */
   favorites: Place[]
+  /** The easter eggs (tz.md, п. 9.3) and those already found, in the order found. */
+  eggs: { list: EggForMap[]; found: FoundEgg[] }
   /**
    * Something opens right after the start (launch parameters or the last session, п. 7.1): the
    * start screen waits for it and does not flash; `idle` comes if nothing opened after all.
@@ -241,6 +244,8 @@ export type WindowAction =
   /** Ctrl+Z, Ctrl+Y (tz.md, п. 6.6). */
   | { type: 'undo' }
   | { type: 'redo' }
+  /** An easter egg was found (tz.md, п. 9.3): kept with the date. */
+  | { type: 'eggFound'; id: number }
 
 /** Checks an action coming from the window; null if it is not one. */
 export function validWindowAction(v: unknown): WindowAction | null {
@@ -256,6 +261,8 @@ export function validWindowAction(v: unknown): WindowAction | null {
       return { type: 'undo' }
     case 'redo':
       return { type: 'redo' }
+    case 'eggFound':
+      return Number.isInteger(r['id']) ? { type: 'eggFound', id: r['id'] as number } : null
     case 'openRecent':
       return typeof r['folder'] === 'string' && r['folder'] ? { type: 'openRecent', folder: r['folder'] } : null
     case 'rememberPlace':

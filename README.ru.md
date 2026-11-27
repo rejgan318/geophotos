@@ -139,6 +139,20 @@ GeoPhotos.exe --batch --overwrite "D:\Photos\Trip\IMG_0001.CR2" "D:\Photos\Trip\
 
 Сборка из исходников, тесты и устройство кода — в [английском README](README.md#building-from-source). Документы проекта на русском: `tz.md` (требования), `make-project.md` (технические решения и порядок работы), `CHANGELOG.md` (история версий).
 
+## Пасхалки (спойлер)
+
+<details>
+<summary>Открывайте, только если сдаётесь</summary>
+
+На карте спрятаны 14 пасхалок — снимки украинского мема «пакет АТБ». Рассматривайте карту в нужных местах — найдёте, не пропустите. Найденные — в *Справка → О программе*.
+
+**Спойлер: ниже — как посмотреть все сразу; интрига после этого пропадёт.** Снимки и список мест — в папке `eggs` (в программе — `resources\eggs` рядом с `GeoPhotos.exe`), каждый байт XOR с повторяющимся ключом `ATB-GeoPhotos`. Выполните в копии этой папки — `.bin` станут `.jpg` и `eggs.json`:
+
+```
+node -e "const f=require('fs'),k=Buffer.from('ATB-GeoPhotos');for(const n of f.readdirSync('.').filter(n=>n.endsWith('.bin')))f.writeFileSync(n.replace(/bin$/,n==='eggs.bin'?'json':'jpg'),f.readFileSync(n).map((b,i)=>b^k[i%k.length]))"
+```
+</details>
+
 ## Лицензия
 
 [MIT](LICENSE). В готовой программе есть THIRD-PARTY-NOTICES.txt с лицензиями входящих в неё компонентов; *Справка → О программе* ссылается на оба файла. Высоты — Open-Meteo (open-meteo.com), на основе Copernicus DEM GLO-90; адреса и поиск мест — Nominatim, © участники OpenStreetMap.

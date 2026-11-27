@@ -74,6 +74,8 @@ import { canWriteIn, installExiftool } from './exiftool-install'
 import { checkForUpdates, installAndRestart, isInstalled } from './updates'
 import { releasePageUrl, type UpdateState } from '@shared/updates'
 import sharp from 'sharp'
+import { Eggs, parseEggUrl } from './eggs'
+import type { FoundEgg } from '@shared/eggs'
 
 // Must happen before `ready`: thumbnails are served to the window by this scheme.
 protocol.registerSchemesAsPrivileged([
@@ -86,6 +88,7 @@ const paths = {
   defaults: join(resourcesDir, 'config', 'settings.json'),
   schema: join(resourcesDir, 'schemas', 'settings.schema.json'),
   locales: join(resourcesDir, 'locales'),
+  eggs: join(resourcesDir, 'eggs'),
   user: join(app.getPath('userData'), 'settings.json'),
   state: join(app.getPath('userData'), 'state.json'),
   logs: join(app.getPath('userData'), 'logs')
@@ -208,6 +211,9 @@ let stripPosition: StripPosition = 'bottom'
 let gridThumb: number = GRID_THUMB.normal
 /** Size of the thumbnails in the strip (tz.md, п. 4.1); kept in the state file. */
 let stripThumb: number = GRID_THUMB.normal
+/** The easter eggs (tz.md, п. 9.3) and those found, in the order found; kept in the state file. */
+let eggs: Eggs | null = null
+let foundEggs: FoundEgg[] = []
 /** Started with --batch (tz.md, п. 10): no main window, the batch and the exit code. */
 const batchArgs = isBatch(process.argv.slice(1)) ? parseBatchArgs(process.argv.slice(1), app.getAppPath()) : null
 /** The batch window is running: the program state of the main window is not touched. */
@@ -512,7 +518,8 @@ function initData(): Omit<InitData, 'opening'> {
     stripThumb,
     recent: recentFolders,
     places,
-    favorites
+    favorites,
+    eggs: eggs ? { list: eggs.forMap(settings.language), found: foundEggs.filter((f) => eggs?.has(f.id)) } : { list: [], found: [] }
   }
 }
 
@@ -530,7 +537,7 @@ function setRecent(update: (list: string[]) => string[]): void {
 
 function saveAppState(): void {
   try {
-    writeState(paths.state, { recentFolders, lastSession, window: windowState, map: mapState, tools, addFolder, stripPosition, gridThumb, stripThumb, places, favorites })
+    writeState(paths.state, { recentFolders, lastSession, window: windowState, map: mapState, tools, addFolder, stripPosition, gridThumb, stripThumb, places, favorites, eggs: foundEggs })
   } catch (e) {
     log.warn(`Cannot save state ${paths.state}: ${String(e)}`)
   }
@@ -1672,6 +1679,14 @@ async function windowAction(a: WindowAction): Promise<void> {
     refreshEditState()
     return
   }
+  if (a.type === 'eggFound') {
+    if (eggs?.has(a.id) && !foundEggs.some((f) => f.id === a.id)) {
+      foundEggs = [...foundEggs, { id: a.id, date: new Date().toISOString() }]
+      log.info(`Easter egg found: ${foundEggs.length} of ${eggs.count}`)
+      saveAppState()
+    }
+    return
+  }
   if (a.type === 'placeMenu') return showPlaceMenu(a.kind, a.x, a.y, { lat: a.lat, lon: a.lon })
   if (a.type === 'stripThumb') {
     stripThumb = validStripThumb(a.size)
@@ -1803,6 +1818,11 @@ function trackThumbnail(source: PhotoSource, color: string): Promise<Buffer> {
 
 function serveThumbnails(): void {
   protocol.handle(THUMB_SCHEME, async (req) => {
+    const egg = parseEggUrl(req.url)
+    if (egg !== null) {
+      const jpeg = eggs?.photo(egg)
+      return jpeg ? new Response(new Uint8Array(jpeg), { headers: { 'content-type': 'image/jpeg' } }) : new Response(null, { status: 404 })
+    }
     const ref = parseThumbUrl(req.url)
     const source = ref && current?.data.generation === ref.generation ? current.sources[ref.id] : undefined
     if (!ref || !source) return new Response(null, { status: 404 })
@@ -2125,6 +2145,8 @@ void app.whenReady().then(async () => {
   stripThumb = saved.stripThumb
   places = saved.places
   favorites = saved.favorites
+  foundEggs = saved.eggs
+  eggs = new Eggs(paths.eggs)
   updateJumpList()
   ui = { ...ui, mapMode: mapState?.thumbnails ? 'thumbs' : 'pins' }
   updateMenu(recentFolders)
