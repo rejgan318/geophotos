@@ -1,4 +1,4 @@
-import { ADDRESS_SVG, ALTITUDE_SVG, PENCIL_SVG, PHOTO_SVG, PIN_OFF_SVG, PIN_SVG, RING_SVG, TRACK_SVG } from './icons'
+import { ADDRESS_SVG, ALTITUDE_SVG, PENCIL_SVG, PHOTO_SVG, PIN_OFF_SVG, PIN_SVG, RING_SVG, STAR_SVG, TRACK_SVG } from './icons'
 
 /**
  * Help → Keyboard Shortcuts (F1): keys, mouse actions and marks of the program.
@@ -23,6 +23,9 @@ export const SECTIONS: Section[] = [
       { keys: ['←', '→'], text: 'help.prevNext' },
       { keys: ['↑', '↓'], text: 'help.upDown' },
       { keys: ['Home', 'End'], text: 'help.firstLast' },
+      { keys: ['Shift+←', 'Shift+→'], text: 'help.shiftArrows' },
+      { keys: ['Ctrl+←', 'Ctrl+↑'], text: 'help.panMap' },
+      { keys: ['help.key.plus', '−'], text: 'help.zoomMap' },
       { keys: ['PgUp', 'PgDn'], text: 'help.page' },
       { keys: ['help.key.space'], text: 'help.photoView' },
       { keys: ['C'], text: 'help.showOnMap' },
@@ -30,6 +33,8 @@ export const SECTIONS: Section[] = [
       { keys: ['G'], text: 'help.grid' },
       { keys: ['Ctrl+help.key.wheel', 'Ctrl+±'], text: 'help.gridZoom' },
       { keys: ['Ctrl+A'], text: 'help.selectAll' },
+      { keys: ['Ctrl+Z'], text: 'help.undo' },
+      { keys: ['Ctrl+Y'], text: 'help.redo' },
       { keys: ['Ctrl+C'], text: 'help.copy' },
       { keys: ['Ctrl+V'], text: 'help.paste' },
       { keys: ['Del'], text: 'help.delete' },
@@ -39,7 +44,9 @@ export const SECTIONS: Section[] = [
       { keys: ['Ctrl+Shift+O'], text: 'help.addFiles' },
       { keys: ['F5'], text: 'help.refresh' },
       { keys: ['F1'], text: 'help.help' },
-      { keys: ['Enter'], text: 'help.search' }
+      { keys: ['Ctrl+F'], text: 'help.findPlace' },
+      { keys: ['1…5'], text: 'help.recentKey' },
+      { keys: ['Ctrl+1…9'], text: 'help.favoriteKey' }
     ]
   },
   {
@@ -56,6 +63,7 @@ export const SECTIONS: Section[] = [
       { action: 'help.action.dropOnTrack', text: 'help.dropOnTrack' },
       { action: 'help.action.dragMarker', text: 'help.dragMarker' },
       { keys: ['Ctrl+help.key.drag'], text: 'help.boxSelect' },
+      { action: 'help.action.rightClickMap', text: 'help.rightClickMap' },
       { action: 'help.action.dropOnMark', text: 'help.dropOnMark' },
       { action: 'help.action.dropFromExplorer', text: 'help.dropFromExplorer' }
     ]
@@ -63,15 +71,17 @@ export const SECTIONS: Section[] = [
   {
     title: 'help.marks',
     rows: [
-      { icon: PIN_SVG, color: 'var(--marker-color)', text: 'help.markCoords' },
+      { icon: PIN_SVG, color: 'var(--badge)', text: 'help.markCoords' },
       { icon: PIN_SVG, color: 'var(--marker-selected)', text: 'help.markSelected' },
       { icon: PENCIL_SVG, color: 'var(--modified)', text: 'help.markModified' },
-      { icon: ADDRESS_SVG, color: 'var(--address)', text: 'help.markAddress' },
-      { icon: ALTITUDE_SVG, color: 'var(--altitude)', text: 'help.markAltitude' },
+      { icon: ADDRESS_SVG, color: 'var(--badge)', text: 'help.markAddress' },
+      { icon: ALTITUDE_SVG, color: 'var(--badge)', text: 'help.markAltitude' },
       { icon: PHOTO_SVG, color: 'var(--selected)', text: 'help.markFilters' },
       { icon: PIN_OFF_SVG, color: 'var(--no-coords)', text: 'help.markNoCoords' },
       { icon: TRACK_SVG, color: 'var(--selected)', text: 'help.markTrack' },
-      { icon: RING_SVG, color: 'var(--marker-selected)', text: 'help.markTrackHint' }
+      { icon: RING_SVG, color: 'var(--marker-selected)', text: 'help.markTrackHint' },
+      { icon: RING_SVG, color: '#ea4335', text: 'help.markPlace' },
+      { icon: STAR_SVG, color: '#f9ab00', text: 'help.markFavorite' }
     ]
   }
 ]

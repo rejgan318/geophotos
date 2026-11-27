@@ -1,6 +1,6 @@
 import { Menu, type MenuItemConstructorOptions } from 'electron'
 import type { Translate } from '@shared/i18n'
-import type { StripFilter, StripPosition } from '@shared/ipc'
+import { placeMenuItems, type PlaceMenuItem, type PlaceMenuKind, type StripFilter, type StripPosition } from '@shared/ipc'
 import type { ContextItem, ContextItemState } from '@shared/context-menu'
 
 export interface MenuHandlers {
@@ -22,6 +22,9 @@ export interface MenuHandlers {
   toggleView(): void
   showOnMap(): void
   toggleThumbnails(): void
+  undo(): void
+  redo(): void
+  findPlace(): void
   toggleGrid(): void
   setStripPosition(position: StripPosition): void
   setFilter(filter: StripFilter): void
@@ -37,6 +40,8 @@ export const MENU_ID = {
   refresh: 'file.refresh',
   save: 'file.save',
   saveSelected: 'file.saveSelected',
+  undo: 'edit.undo',
+  redo: 'edit.redo',
   copyCoords: 'edit.copyCoords',
   pasteCoords: 'edit.pasteCoords',
   clearCoords: 'edit.clearCoords',
@@ -104,13 +109,21 @@ export function buildMenu(
   template.push({
     label: t('menu.edit'),
     submenu: [
+      // Undo / Redo of coordinate changes until Save (tz.md, п. 6.6): plain items — what was undone
+      // the status bar says afterwards.
+      editItem(MENU_ID.undo, 'menu.undo', 'CmdOrCtrl+Z', h.undo),
+      editItem(MENU_ID.redo, 'menu.redo', 'CmdOrCtrl+Y', h.redo),
+      { type: 'separator' },
       editItem(MENU_ID.copyCoords, 'menu.copyCoords', 'CmdOrCtrl+C', h.copyCoords),
       editItem(MENU_ID.pasteCoords, 'menu.pasteCoords', 'CmdOrCtrl+V', h.pasteCoords),
       editItem(MENU_ID.clearCoords, 'menu.clearCoords', 'CmdOrCtrl+Delete', h.clearCoords),
       { type: 'separator' },
       editItem(MENU_ID.removeFromStrip, 'menu.removeFromStrip', 'Delete', h.removeFromStrip),
       { type: 'separator' },
-      editItem(MENU_ID.selectAll, 'menu.selectAll', 'CmdOrCtrl+A', h.selectAll)
+      editItem(MENU_ID.selectAll, 'menu.selectAll', 'CmdOrCtrl+A', h.selectAll),
+      { type: 'separator' },
+      // The search field with the history and the favourite places (tz.md, п. 5.3); the window handles the key.
+      { label: t('menu.findPlace'), accelerator: 'CmdOrCtrl+F', registerAccelerator: false, click: h.findPlace }
     ]
   })
   // View: map / photo (Space; the window handles the key, so Space still types in text fields)
@@ -245,5 +258,24 @@ export function buildContextMenu(t: Translate, items: ContextItemState[], run: (
       click: () => run(item)
     })
   })
+  return Menu.buildFromTemplate(template)
+}
+
+const PLACE_LABEL: Record<PlaceMenuItem, string> = {
+  copyCoords: 'menu.copyCoords',
+  openGoogleMaps: 'menu.openGoogleMaps',
+  addFavorite: 'menu.addFavorite',
+  removeMark: 'menu.removeMark',
+  rename: 'menu.renameFavorite',
+  removeFavorite: 'menu.removeFavorite'
+}
+
+/** The menu of the mark or of a favourite place (tz.md, п. 5.3): the map items, then the place ones. */
+export function buildPlaceMenu(t: Translate, kind: PlaceMenuKind, run: (item: PlaceMenuItem) => void): Menu {
+  const template: MenuItemConstructorOptions[] = []
+  for (const item of placeMenuItems(kind)) {
+    if (item === 'addFavorite' || item === 'rename') template.push({ type: 'separator' })
+    template.push({ label: t(PLACE_LABEL[item]), click: () => run(item) })
+  }
   return Menu.buildFromTemplate(template)
 }

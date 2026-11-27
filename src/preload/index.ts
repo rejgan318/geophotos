@@ -54,6 +54,7 @@ const api: GeoPhotosApi = {
     ipcRenderer.on(IPC.queueState, (_e, state: QueueState) => cb(state))
   },
   searchPlaces: (query) => ipcRenderer.invoke(IPC.search, query) as Promise<SearchResult>,
+  placeName: (lat, lon) => ipcRenderer.invoke(IPC.placeName, lat, lon) as Promise<string | null>,
   openInPlayer: (id) => ipcRenderer.invoke(IPC.openInPlayer, id) as Promise<void>,
   onUpdateState: (cb) => {
     ipcRenderer.on(IPC.updateState, (_e, s: UpdateState) => cb(s))

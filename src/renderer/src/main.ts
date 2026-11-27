@@ -25,7 +25,7 @@ import {
   type Selection
 } from './selection'
 import { PHOTO_DRAG_TYPE, Strip } from './strip'
-import { nextGridThumb } from '@shared/context-menu'
+import { GRID_THUMB, nextGridThumb, STRIP_THUMB_MAX, STRIP_THUMB_MIN } from '@shared/context-menu'
 import type L from './leaflet-global'
 import { TrackLayer } from './track-layer'
 import { TrackSummaryView } from './track-view'
@@ -71,6 +71,8 @@ async function start(): Promise<void> {
   let sel: Selection = EMPTY_SELECTION
   /** Photos being dragged from the strip (drag data cannot be read before the drop). */
   let dragged: number[] | null = null
+  /** The selection before a drag from the strip began: a drag that was a shaken click goes back to it (п. 4.5). */
+  let beforeDrag: Selection | null = null
   let saving = false
   /** Strip filter by the status bar counter (tz.md, п. 4.13) and the photos it shows, in strip order. */
   let filter: StripFilter = 'all'
@@ -88,6 +90,13 @@ async function start(): Promise<void> {
   /** Size of the thumbnails in the grid (п. 4.17); kept by main. */
   let gridThumb = init.gridThumb
   document.documentElement.style.setProperty('--grid-thumb', `${gridThumb}px`)
+  /** Size of the thumbnails in the strip (tz.md, п. 4.1); the strip is as high (or wide) as they need. */
+  let stripThumb = init.stripThumb
+  const showStripThumb = (): void => {
+    document.documentElement.style.setProperty('--thumb-size', `${stripThumb}px`)
+    document.documentElement.style.setProperty('--strip-height', `${stripThumb + 28}px`)
+  }
+  showStripThumb()
 
   const showStatus = (): void => {
     const p = sel.current === null ? undefined : folder?.photos[sel.current]
@@ -242,16 +251,17 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   }
 
   /** The one place where the selection changes: strip, map, status and main follow it. */
-  const select = (next: Selection): void => {
+  /** `pan` false: the map stays where it is (a photo picked up to be dragged, tz.md, п. 4.5). */
+  const select = (next: Selection, pan = true): void => {
     sel = next
     strip.setSelection(sel)
-    map.setSelection(sel.ids, sel.current)
+    map.setSelection(sel.ids, sel.current, pan)
     showHint()
-    if (view === 'map') tracks.revealHint()
+    if (view === 'map' && pan) tracks.revealHint()
     // The selected track is wider; if it is wholly off the map, the map shows it (tz.md, п. 3.9.4).
     const track = sel.current !== null && isTrackId(sel.current) ? sel.current : null
     tracks.setCurrent(track)
-    if (track !== null && view === 'map') tracks.reveal(track)
+    if (track !== null && view === 'map' && pan) tracks.reveal(track)
     showStatus()
     showPhoto()
     reportState()
@@ -333,6 +343,21 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   }
 
   /** Double click, C, View → Show on Map: the current photo on the map (tz.md, п. 4.4.2). */
+  /** Ctrl+F, Edit → Find Place (tz.md, п. 5.3): the map with the search field and the list of places. */
+  const findPlace = (): void => {
+    toMap()
+    // A favourite's name being edited over the map is left as it was.
+    map.leaflet.closePopup()
+    places.focus()
+  }
+
+  /** The map on screen: out of the grid, the photo view and the track view. */
+  const toMap = (): void => {
+    if (grid) leaveGrid()
+    if (view === 'photo') toggleView()
+    leaveTrackView()
+  }
+
   const showOnMap = (): void => {
     // From the grid: back to the map first (tz.md, п. 4.17).
     if (grid) leaveGrid()
@@ -417,14 +442,31 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     reportState()
   }
 
-  /** Ctrl+wheel, Ctrl + «+» / «−», Ctrl+0 in the grid (tz.md, п. 4.17); the current photo stays in view. */
+  /** The strip thumbnails at this size (the dragged edge, Ctrl+wheel; tz.md, п. 4.1), kept when `save`. */
+  const setStripThumb = (size: number, save: boolean): void => {
+    // Up to half the window (height at the bottom, width on the left), and the pictures' own size.
+    const work = byId('work').getBoundingClientRect()
+    const half = (stripPosition === 'left' ? work.width : work.height) / 2 - 28
+    const max = Math.max(STRIP_THUMB_MIN, Math.min(STRIP_THUMB_MAX, half))
+    const next = Math.round(Math.min(max, Math.max(STRIP_THUMB_MIN, size)))
+    if (next !== stripThumb) {
+      stripThumb = next
+      strip.keepCurrent(showStripThumb)
+    }
+    if (save) window.geophotos.action({ type: 'stripThumb', size: stripThumb })
+  }
+
+  /**
+   * Ctrl+wheel, Ctrl + «+» / «−», Ctrl+0 (tz.md, пп. 4.17, 4.1): the thumbnails of the grid, or of the
+   * strip outside it; the current photo stays in view.
+   */
   const zoomGrid = (dir: 1 | -1 | 0): void => {
-    if (!grid || view !== 'map') return
+    if (!grid) return setStripThumb(dir === 0 ? GRID_THUMB.normal : stripThumb + dir * GRID_THUMB.step, true)
+    if (view !== 'map') return
     const next = nextGridThumb(gridThumb, dir)
     if (next === gridThumb) return
     gridThumb = next
-    document.documentElement.style.setProperty('--grid-thumb', `${gridThumb}px`)
-    strip.revealCurrent()
+    strip.keepCurrent(() => document.documentElement.style.setProperty('--grid-thumb', `${gridThumb}px`))
     window.geophotos.action({ type: 'gridThumb', size: gridThumb })
   }
 
@@ -456,11 +498,12 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   const setCoords = async (
     ids: number[],
     coords: LatLon | null,
-    copiedData?: { address: Address | null; altitude: number | null }
+    copiedData?: { address: Address | null; altitude: number | null },
+    group?: number
   ): Promise<void> => {
     if (!folder || saving || !ids.length) return
     note('')
-    await window.geophotos.setCoords({ ids, coords, ...(copiedData ? { copied: copiedData } : {}) })
+    await window.geophotos.setCoords({ ids, coords, ...(copiedData ? { copied: copiedData } : {}), ...(group !== undefined ? { group } : {}) })
   }
 
   // Photo ids are their positions in the strip, so they double as indexes.
@@ -504,7 +547,10 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     snapPoint: (ids) => {
       const alone = ids === null || (ids.length === 1 && ids[0] === sel.current)
       return alone ? tracks.hint : null
-    }
+    },
+    // The mark and the favourite places (tz.md, п. 5.3): the search box keeps them.
+    onPlaceMenu: (kind, x, y, at, index) => places.menu(kind, x, y, at, index),
+    onFavoriteMoved: (index, to) => places.favoriteMoved(index, to)
   })
   const strip = new Strip(byId('strip'), t, {
     onClick: (id, mods) => select(clickSelect(sel, id, mods, order, isTrackId)),
@@ -516,12 +562,15 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     onContextMenu: (id, x, y) => openContextMenu(id, x, y),
     onZoom: (dir) => zoomGrid(dir),
     onDragStart: (id) => {
+      beforeDrag = sel
       const next = dragSelection(sel, id)
-      if (next.ids !== sel.ids || next.current !== sel.current) select(next)
+      if (next.ids !== sel.ids || next.current !== sel.current) select(next, false)
       dragged = [...next.ids].sort((a, b) => a - b)
       return dragged
     },
     onDragEnd: () => (dragged = null),
+    // The hand shook on a click (tz.md, п. 4.5): the click it was, with the selection before it.
+    onDragClick: (id, mods) => select(clickSelect(beforeDrag ?? sel, id, mods, order, isTrackId)),
     onDropOnPhoto: (ids, coords) => void setCoords(ids, coords),
     dragged: () => dragged,
     canDropOnTrack: (ids, track) => ids.some((id) => placeOn(id, track) !== null),
@@ -529,9 +578,11 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     // replaced; photos with no place there do not change, silently.
     onDropOnTrack: (ids, track) => {
       void (async () => {
+        // One drop is one Undo step (tz.md, п. 6.6).
+        const group = Date.now()
         for (const id of ids) {
           const at = placeOn(id, track)
-          if (at) await setCoords([id], at)
+          if (at) await setCoords([id], at, undefined, group)
         }
       })()
     }
@@ -542,7 +593,7 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     }
   })
   const summary = new TrackSummaryView(byId('map'), t, (p, color) => tracks.showProbe(p, color))
-  addSearchBox(map, t)
+  const places = addSearchBox(map, t, init.places, init.favorites)
   const viewer = new PhotoView(byId('viewer'), t, (id) => void window.geophotos.openInPlayer(id))
   const help = new HelpView(t)
   const about = new AboutView(t)
@@ -554,6 +605,16 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   window.addEventListener(
     'keydown',
     (e) => {
+      // Ctrl+F from anywhere (tz.md, п. 5.3): Help and About close, a text field is left; only the
+      // search field itself keeps what is being typed there. By the physical key.
+      if (e.code === 'KeyF' && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        help.hide()
+        about.hide()
+        findPlace()
+        return
+      }
       // Help and About are on top: Esc closes them, other keys do nothing behind them.
       if (help.visible || about.visible) {
         if (e.key === 'Escape') {
@@ -563,6 +624,17 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
         if (e.key !== 'F1') {
           e.preventDefault()
           e.stopPropagation()
+        }
+        return
+      }
+      // Ctrl+1…9: the favourite place with this number (tz.md, п. 5.3), also from a text field.
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
+        e.preventDefault()
+        e.stopPropagation()
+        const n = Number(e.code.slice(5))
+        if (!e.repeat && places.hasFavorite(n)) {
+          toMap()
+          places.goFavorite(n)
         }
         return
       }
@@ -581,8 +653,9 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
         if (!e.repeat) contextMenuFromKeyboard()
         return
       }
-      // Ctrl + «+» / «−» / 0: the size of the thumbnails in the grid (п. 4.17); by the physical keys.
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && grid) {
+      // Ctrl + «+» / «−» / 0: the size of the thumbnails in the grid or the strip (пп. 4.17, 4.1);
+      // by the physical keys.
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && folder) {
         const dir = e.code === 'Equal' || e.code === 'NumpadAdd' ? 1 : e.code === 'Minus' || e.code === 'NumpadSubtract' ? -1 : e.code === 'Digit0' || e.code === 'Numpad0' ? 0 : null
         if (dir !== null) {
           e.preventDefault()
@@ -631,6 +704,14 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
         else removeFromStrip()
         return
       }
+      // Ctrl+Z — undo, Ctrl+Y and Ctrl+Shift+Z — redo the last change of coordinates (tz.md, п. 6.6);
+      // by the physical keys (any layout). Text fields keep their own: they returned above.
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.code === 'KeyZ' || e.code === 'KeyY')) {
+        e.preventDefault()
+        e.stopPropagation()
+        window.geophotos.action({ type: e.code === 'KeyZ' && !e.shiftKey ? 'undo' : 'redo' })
+        return
+      }
       // Ctrl+C / Ctrl+V of coordinates, by the physical key (any layout). Text fields keep
       // their own copy and paste: they returned above.
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.code === 'KeyC' || e.code === 'KeyV')) {
@@ -647,6 +728,28 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
         selectAllShown()
         return
       }
+      // «+» / «−» (also of the number pad): the map zooms whatever has the focus, not only the map
+      // itself (tz.md, п. 4.4.1); in the photo view and the grid — nothing.
+      if (!e.ctrlKey && !e.altKey && !e.metaKey && ['Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract'].includes(e.code)) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!grid && view === 'map') {
+          if (e.code === 'Equal' || e.code === 'NumpadAdd') map.leaflet.zoomIn()
+          else map.leaflet.zoomOut()
+        }
+        return
+      }
+      // Ctrl + arrows: the map moves (tz.md, п. 4.4.1); in the photo view and the grid — nothing.
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.startsWith('Arrow')) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!grid && view === 'map') {
+          const dx = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0
+          const dy = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0
+          map.panStep(dx, dy)
+        }
+        return
+      }
       if (e.ctrlKey || e.altKey || e.metaKey) return
       if (!isNavKey(e.key)) return
       // Taken also when they do nothing: the map must not pan on arrows, the strip must not scroll
@@ -657,7 +760,10 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
       // at the bottom and in the photo view of the grid (no strip on screen) they do nothing.
       const row = grid ? (view === 'photo' ? 0 : strip.columns()) : stripPosition === 'left' ? 1 : 0
       const next = navigateShown(e.key, sel.current, order, row, strip.pageSize())
-      if (next !== null && (next !== sel.current || sel.ids.size !== 1)) select(single(next))
+      if (next === null) return
+      // Shift: from the anchor to the new current one, as Shift+click (tz.md, п. 4.4.1).
+      if (e.shiftKey) select(clickSelect(sel.anchor === null ? { ...sel, anchor: sel.current } : sel, next, { ctrl: false, shift: true }, order, isTrackId))
+      else if (next !== sel.current || sel.ids.size !== 1) select(single(next))
     },
     true
   )
@@ -688,6 +794,11 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
       showOnMap()
     } else if (cmd.type === 'toggleThumbnails') {
       toggleThumbnails()
+    } else if (cmd.type === 'showPhotos') {
+      // After Undo / Redo: the photos of the step are selected (shown ones), the note says what.
+      const ids = order.filter((id) => cmd.ids.includes(id))
+      if (ids.length) select({ ids: new Set(ids), current: ids[0]!, anchor: ids[0]! })
+      shortNote(cmd.note)
     } else if (cmd.type === 'toggleGrid') {
       toggleGrid()
     } else if (cmd.type === 'setStripPosition') {
@@ -700,6 +811,13 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     } else if (cmd.type === 'showAbout') {
       help.hide()
       void about.show()
+    } else if (cmd.type === 'findPlace') {
+      findPlace()
+    } else if (cmd.type === 'placeCommand') {
+      places.command(cmd.item)
+    } else if (cmd.type === 'setFavorites') {
+      places.setFavorites(cmd.favorites)
+      shortNote(cmd.note)
     }
   })
 
@@ -727,6 +845,8 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     // added files: the map shows them (п. 3.1). The tracks count too (п. 3.9.5): they come from
     // main a moment later, so the map is fitted then.
     leaveTrackView()
+    // Another folder opened: the mark goes (tz.md, п. 5.3); Refresh and added files keep it.
+    if (!data.keep && !data.show) map.clearPlace()
     map.setPhotos(data.photos, data.generation, false)
     applyFilter()
     const fitAll = !data.restored && !data.show
@@ -880,6 +1000,29 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     showStart()
   })
   showStart()
+
+  // The edge between the map and the strip (tz.md, п. 4.1): dragged, it makes the strip — and its
+  // thumbnails — larger or smaller; the size is kept when the mouse is let go.
+  const edge = byId('strip-edge')
+  edge.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    edge.setPointerCapture(e.pointerId)
+    const work = byId('work').getBoundingClientRect()
+    const move = (ev: PointerEvent): void => {
+      const room = stripPosition === 'left' ? ev.clientX - work.left : work.bottom - ev.clientY
+      setStripThumb(room - 28, false)
+    }
+    const up = (): void => {
+      edge.removeEventListener('pointermove', move)
+      edge.removeEventListener('pointerup', up)
+      edge.removeEventListener('pointercancel', up)
+      setStripThumb(stripThumb, true)
+    }
+    edge.addEventListener('pointermove', move)
+    edge.addEventListener('pointerup', up)
+    edge.addEventListener('pointercancel', up)
+  })
 
   applyLayout()
   showStatus()

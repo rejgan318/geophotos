@@ -9,21 +9,35 @@ import type { MarkerStyle } from '@shared/settings'
 import { FILE_SVG } from './icons'
 
 /** Pin with a white dot; the tip is at the bottom centre (viewBox 24×34). */
-function pinSvg(fill: string, stroke: string): string {
+/** A colour made darker (0–1 of its brightness kept): the outline and the dot of a pin. */
+function darker(hex: string, keep = 0.62): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!m) return hex
+  const n = parseInt(m[1]!, 16)
+  const c = (shift: number): string => Math.round(((n >> shift) & 255) * keep).toString(16).padStart(2, '0')
+  return `#${c(16)}${c(8)}${c(0)}`
+}
+
+/**
+ * A pin as in Google Maps (tz.md, п. 4.8.1): the colour with a thin darker outline and a darker
+ * dot in its head.
+ */
+function pinSvg(fill: string): string {
+  const dark = darker(fill)
   return (
     '<svg viewBox="0 0 24 34" width="100%" height="100%" aria-hidden="true">' +
-    `<path d="M12 1.5C6.2 1.5 1.8 5.9 1.8 11.5c0 7.6 10.2 20.8 10.2 20.8s10.2-13.2 10.2-20.8C22.2 5.9 17.8 1.5 12 1.5z" fill="${fill}" stroke="${stroke}" stroke-width="2.2"/>` +
-    '<circle cx="12" cy="11.5" r="3.8" fill="#fff"/></svg>'
+    `<path d="M12 1.5C6.2 1.5 1.8 5.9 1.8 11.5c0 7.6 10.2 20.8 10.2 20.8s10.2-13.2 10.2-20.8C22.2 5.9 17.8 1.5 12 1.5z" fill="${fill}" stroke="${dark}" stroke-width="1.3"/>` +
+    `<circle cx="12" cy="11.5" r="3.9" fill="${dark}"/></svg>`
   )
 }
 
 /** The selected pin differs only by color, not by size (tz.md, п. 4.8.1). */
-function pinIcon(style: MarkerStyle, selected: boolean): L.DivIcon {
-  const h = Math.round(style.size)
+function pinIcon(style: MarkerStyle, selected: boolean, scale = 1): L.DivIcon {
+  const h = Math.round(style.size * scale)
   const w = Math.round((h * 24) / 34)
   return L.divIcon({
     className: selected ? 'photo-pin selected' : 'photo-pin',
-    html: pinSvg(selected ? style.selectedColor : style.color, '#fff'),
+    html: pinSvg(selected ? style.selectedColor : style.color),
     iconSize: [w, h],
     iconAnchor: [w / 2, h],
     // The thumbnail on hover sits right above the pin (tz.md, п. 4.8.2).
@@ -49,12 +63,37 @@ function thumbIcon(src: string, size: number, selected: boolean, count?: number)
 }
 
 /** Mark of a found place (tz.md, п. 5.3): a ring, unlike the photo pins. */
-function placeIcon(): L.DivIcon {
-  return L.divIcon({ className: 'place-mark', html: '<div></div>', iconSize: [26, 26], iconAnchor: [13, 13] })
+function placeIcon(color: string): L.DivIcon {
+  return L.divIcon({ className: 'place-mark', html: `<div style="--mark:${color}"></div>`, iconSize: [26, 26], iconAnchor: [13, 13] })
+}
+
+/** A favourite place (tz.md, п. 5.3): a yellow disc with a white star, unlike the photo pins. */
+const FAVORITE_ICON = L.divIcon({
+  className: 'favorite-mark',
+  html:
+    '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#F9AB00" stroke="#fff" stroke-width="1.6"/>' +
+    '<path d="M12 5.6l1.9 3.9 4.3.6-3.1 3 .7 4.3L12 15.4l-3.8 2 .7-4.3-3.1-3 4.3-.6z" fill="#fff"/></svg>',
+  iconSize: [22, 22],
+  iconAnchor: [11, 11]
+})
+
+/** The name of a mark on hover: the place's name, or its coordinates when it has none. */
+function markLabel(p: Place): HTMLElement {
+  // As text: a string given to Leaflet is HTML, and the name comes from the search service.
+  const label = document.createElement('span')
+  label.textContent = p.name || `${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}`
+  return label
 }
 
 /** A drop this close to the place mark (px) lands exactly on it. */
 const SNAP_PX = 24
+
+/**
+ * The mark and the favourite places stand above the photo markers and thumbnails (tz.md, п. 5.3):
+ * Leaflet orders markers by their screen height plus the offset; the current photo has 20000.
+ */
+const MARK_Z = 60000
+const FAVORITE_Z = 50000
 
 /** Internal parts of Leaflet.markercluster used to find the group a marker is hidden in. */
 interface ClusterNode {
@@ -88,6 +127,13 @@ export interface MapHandlers {
    * dropped photos (null — a double click for the current photo); null — none.
    */
   snapPoint(ids: number[] | null): LatLon | null
+  /**
+   * A right click on the mark or on a favourite place (`index` in the favourites), or on the empty
+   * map, which puts the mark there first (tz.md, п. 5.3): its menu at this point of the window.
+   */
+  onPlaceMenu(kind: 'mark' | 'favorite', x: number, y: number, at: LatLon, index: number): void
+  /** A favourite place was dragged to a new point (п. 5.3). */
+  onFavoriteMoved(index: number, to: LatLon): void
 }
 
 /**
@@ -103,6 +149,8 @@ export class MapView {
   private readonly style: MarkerStyle
   private readonly icon: L.DivIcon
   private readonly selectedIcon: L.DivIcon
+  /** The current photo: blue and a quarter larger, so it stands out among the selected. */
+  private readonly currentIcon: L.DivIcon
   private photos: Photo[] = []
   /** Generation of the open folder, part of thumbnail URLs. */
   private generation = 0
@@ -117,6 +165,13 @@ export class MapView {
   private current: number | null = null
   private highlighted: HTMLElement[] = []
   private place: L.Marker | null = null
+  /** The place the mark stands for (п. 5.3): found, or a point with no name (a right click). */
+  private markPlace: Place | null = null
+  /** The found place the mark was put for (kept when the mark is dragged); null — a right click put it, or none. */
+  private markFound: Place | null = null
+  /** Favourite places (п. 5.3), always on the map above the photo markers. */
+  private readonly favoriteLayer = L.layerGroup()
+  private favorites: Place[] = []
   /** Photos that pass the strip filter (tz.md, п. 4.13); null — all. Others have no marker. */
   private shown: ReadonlySet<number> | null = null
   /** The track view (tz.md, п. 3.9.6): the map is dimmed and still, without photo markers. */
@@ -135,6 +190,7 @@ export class MapView {
     this.thumbs = config.thumbnails
     this.icon = pinIcon(this.style, false)
     this.selectedIcon = pinIcon(this.style, true)
+    this.currentIcon = pinIcon(this.style, true, 1.25)
 
     // Arrow keys belong to the strip (п. 4.4.1); +/- still zoom. Double click is handled below:
     // it can give the current photo its coordinates instead of zooming (п. 4.4.2).
@@ -191,10 +247,12 @@ export class MapView {
           const ids = c.getAllChildMarkers().map((m) => this.photoOf.get(m) ?? Infinity)
           return thumbIcon(thumbUrl(this.generation, Math.min(...ids)), this.thumbSize, false, n)
         }
-        const d = Math.round(base * 0.8 + Math.log2(n) * 6)
+        // One size for all groups (the number tells how many); it grows only for the digits to fit.
+        const digits = String(n).length
+        const d = Math.round(base * 0.93) + Math.max(0, digits - 2) * 4
         return L.divIcon({
           className: 'photo-cluster',
-          html: `<div style="width:${d}px;height:${d}px;line-height:${d}px">${n}</div>`,
+          html: `<div style="width:${d}px;height:${d}px">${n}</div>`,
           iconSize: [d, d]
         })
       }
@@ -214,6 +272,17 @@ export class MapView {
 
     this.acceptDrops()
     this.boxSelect()
+    this.favoriteLayer.addTo(this.map)
+    // A right click on the empty map puts the mark there with its menu (tz.md, п. 5.3). Markers
+    // do not pass their clicks on to the map; a track line does — the mark goes there too.
+    this.map.on('contextmenu', (e: L.LeafletMouseEvent) => {
+      e.originalEvent.preventDefault()
+      if (this.still) return
+      const ll = e.latlng.wrap()
+      this.setMark({ name: '', lat: ll.lat, lon: ll.lng })
+      this.markFound = null
+      this.h.onPlaceMenu('mark', e.originalEvent.clientX, e.originalEvent.clientY, { lat: ll.lat, lon: ll.lng }, -1)
+    })
     // Where the map was at the end of the last run; the first time, the settings' view (п. 7.1).
     const v = config.saved ?? config.initialView
     this.map.setView([v.lat, v.lon], v.zoom)
@@ -261,8 +330,10 @@ export class MapView {
 
   /** The look of a photo on the map: a pin, or its thumbnail in the thumbnail mode. */
   private iconFor(id: number, selected: boolean): L.DivIcon {
-    if (!this.thumbs) return selected ? this.selectedIcon : this.icon
-    return thumbIcon(thumbUrl(this.generation, id), this.thumbSize, selected)
+    if (!this.thumbs) return id === this.current ? this.currentIcon : selected ? this.selectedIcon : this.icon
+    // The current photo a quarter larger, as its pin (tz.md, п. 4.8.3).
+    const size = id === this.current ? Math.round(this.thumbSize * 1.25) : this.thumbSize
+    return thumbIcon(thumbUrl(this.generation, id), size, selected)
   }
 
   /** Selected photos are drawn over the others, the current one over all (п. 4.4.2). */
@@ -331,6 +402,8 @@ export class MapView {
     }
     if (on) m.removeLayer(this.cluster)
     else m.addLayer(this.cluster)
+    if (on) m.removeLayer(this.favoriteLayer)
+    else m.addLayer(this.favoriteLayer)
     // The track fills the free room exactly, not only by whole zoom steps; back to whole steps after.
     m.options.zoomSnap = on ? 0.1 : 1
     if (!on) this.highlightGroups()
@@ -426,7 +499,10 @@ export class MapView {
       this.h.onMarkerContextMenu(p.id, e.originalEvent.clientX, e.originalEvent.clientY)
     })
     m.on('dragend', () => {
-      const to = m.getLatLng().wrap()
+      // Let go next to the mark or a favourite place: exactly onto it (tz.md, п. 4.7).
+      const snapped = this.snapToPlaces(this.map.latLngToContainerPoint(m.getLatLng()))
+      const ll = m.getLatLng().wrap()
+      const to = snapped ? L.latLng(snapped.lat, snapped.lon) : ll
       // Whatever main decides, the marker then shows the photo's actual coordinates.
       void this.h.onMarkerMoved(p.id, { lat: to.lat, lon: to.lng }).finally(() => {
         if (this.markers.get(p.id) === m) this.refreshMarker(p.id)
@@ -546,15 +622,17 @@ export class MapView {
     const near = (at: LatLon | null): boolean => !!at && this.map.latLngToContainerPoint([at.lat, at.lon]).distanceTo(pt) <= SNAP_PX
     const hint = this.h.snapPoint(ids)
     if (near(hint)) return hint!
-    if (this.place) {
-      const mark = this.map.latLngToContainerPoint(this.place.getLatLng())
-      if (mark.distanceTo(pt) <= SNAP_PX) {
-        const ll = this.place.getLatLng()
-        return { lat: ll.lat, lon: ll.lng }
-      }
-    }
+    const mark = this.snapToPlaces(pt)
+    if (mark) return mark
     const ll = this.map.containerPointToLatLng(pt).wrap()
     return { lat: ll.lat, lon: ll.lng }
+  }
+
+  /** The mark or a favourite place next to this point of the map (п. 5.3); null — none near. */
+  private snapToPlaces(pt: L.Point): LatLon | null {
+    const marks = [...(this.markPlace ? [this.markPlace] : []), ...(this.map.hasLayer(this.favoriteLayer) ? this.favorites : [])]
+    for (const m of marks) if (this.map.latLngToContainerPoint([m.lat, m.lon]).distanceTo(pt) <= SNAP_PX) return { lat: m.lat, lon: m.lon }
+    return null
   }
 
   /**
@@ -569,7 +647,8 @@ export class MapView {
     if (!this.map.getBounds().pad(-0.08).contains(target)) this.map.panTo(target, { animate: false })
   }
 
-  setSelection(ids: ReadonlySet<number>, current: number | null): void {
+  /** `pan` false: the map stays where it is (the photo was picked up to be dragged, п. 4.5). */
+  setSelection(ids: ReadonlySet<number>, current: number | null, pan = true): void {
     const before = this.selected
     const moved = current !== this.current
     const previous = this.current
@@ -584,8 +663,12 @@ export class MapView {
     for (const id of new Set([...before, ...ids, previous, current])) {
       if (id !== null) this.markers.get(id)?.setZIndexOffset(this.zFor(id))
     }
+    // The current pin is larger: the old current one shrinks back, the new one grows.
+    for (const id of new Set([previous, current])) {
+      if (id !== null) this.markers.get(id)?.setIcon(this.iconFor(id, ids.has(id)))
+    }
     const marker = current === null ? undefined : this.markers.get(current)
-    if (marker && moved) {
+    if (marker && moved && pan) {
       const target = this.shownAt(marker)
       if (!this.map.getBounds().pad(-0.08).contains(target)) this.map.panTo(target)
     }
@@ -676,25 +759,16 @@ export class MapView {
     }
   }
 
-  /** Moves the map to a found place and puts a temporary mark there (п. 5.3). */
+  /** Moves the map to a found place and puts the mark there (п. 5.3). */
   showPlace(place: Place): void {
+    this.setMark(place)
+    this.markFound = { ...place }
+    this.goTo(place)
+  }
+
+  /** Moves the map to a place (a favourite: no mark, it has its own star). */
+  goTo(place: Place): void {
     const ll = L.latLng(place.lat, place.lon)
-    if (!this.place) {
-      // Under the photo pins: a photo dropped onto the mark stays easy to grab.
-      this.place = L.marker(ll, { icon: placeIcon(), keyboard: false, zIndexOffset: -10000 })
-      // A double click on the mark itself gives the current photo exactly its point (п. 4.4.2).
-      this.place.on('dblclick', () => {
-        const at = this.place?.getLatLng()
-        if (at) this.h.onMapDoubleClick({ lat: at.lat, lon: at.lng })
-      })
-      this.place.addTo(this.map)
-    } else {
-      this.place.setLatLng(ll)
-    }
-    // As text: a string given to Leaflet is HTML, and the name comes from the search service.
-    const label = document.createElement('span')
-    label.textContent = place.name
-    this.place.unbindTooltip().bindTooltip(label, { direction: 'top', offset: [0, -14] })
     if (place.bounds) {
       const [s, w, n, e] = place.bounds
       this.map.fitBounds(L.latLngBounds([s, w], [n, e]), { maxZoom: 17 })
@@ -703,9 +777,127 @@ export class MapView {
     }
   }
 
+  /**
+   * The mark (п. 5.3): one on the map — a new one takes the old one's place. It is dragged by
+   * itself (photos stay), keeps its name; a right click gives its menu.
+   */
+  private setMark(place: Place): void {
+    this.markPlace = { ...place }
+    const ll = L.latLng(place.lat, place.lon)
+    if (!this.place) {
+      const mark = L.marker(ll, { icon: placeIcon(this.style.color), keyboard: false, zIndexOffset: MARK_Z, draggable: true })
+      // A double click on the mark itself gives the current photo exactly its point (п. 4.4.2).
+      mark.on('dblclick', () => {
+        if (this.markPlace) this.h.onMapDoubleClick({ lat: this.markPlace.lat, lon: this.markPlace.lon })
+      })
+      mark.on('dragstart', () => mark.closeTooltip())
+      mark.on('dragend', () => {
+        const to = mark.getLatLng().wrap()
+        if (!this.markPlace) return
+        // Moved: the found place's outline no longer fits it; the name stays.
+        const { name } = this.markPlace
+        this.markPlace = { name, lat: to.lat, lon: to.lng }
+        mark.unbindTooltip().bindTooltip(markLabel(this.markPlace), { direction: 'top', offset: [0, -14] })
+      })
+      mark.on('contextmenu', (e: L.LeafletMouseEvent) => {
+        e.originalEvent.preventDefault()
+        if (this.still || !this.markPlace) return
+        this.h.onPlaceMenu('mark', e.originalEvent.clientX, e.originalEvent.clientY, { lat: this.markPlace.lat, lon: this.markPlace.lon }, -1)
+      })
+      this.place = mark.addTo(this.map)
+    } else {
+      this.place.setLatLng(ll)
+    }
+    this.place.unbindTooltip().bindTooltip(markLabel(this.markPlace), { direction: 'top', offset: [0, -14] })
+  }
+
+  /** The place of the mark, as it stands now; null — no mark. */
+  mark(): Place | null {
+    return this.markPlace ? { ...this.markPlace } : null
+  }
+
   clearPlace(): void {
     this.place?.remove()
     this.place = null
+    this.markPlace = null
+    this.markFound = null
+  }
+
+  /** The found place the mark stands for — the current place of the search (п. 5.3); null — none. */
+  currentPlace(): Place | null {
+    return this.markFound ? { ...this.markFound } : null
+  }
+
+  /** The keys go to the map (its «+» / «−»), e.g. after a place is chosen in the search (п. 5.3). */
+  focus(): void {
+    this.map.getContainer().focus({ preventScroll: true })
+  }
+
+  /** Ctrl + arrows (tz.md, п. 4.4.1): the map moves by a quarter of its size. */
+  panStep(dx: -1 | 0 | 1, dy: -1 | 0 | 1): void {
+    const size = this.map.getSize()
+    this.map.panBy([dx * size.x * 0.25, dy * size.y * 0.25])
+  }
+
+  /** The favourite places (п. 5.3), in the order of the list: drawn anew. */
+  setFavorites(list: readonly Place[]): void {
+    this.favorites = [...list]
+    this.map.closePopup()
+    this.favoriteLayer.clearLayers()
+    list.forEach((p, i) => {
+      const m = L.marker([p.lat, p.lon], { icon: FAVORITE_ICON, keyboard: false, zIndexOffset: FAVORITE_Z, draggable: true })
+      m.bindTooltip(markLabel(p), { direction: 'top', offset: [0, -11] })
+      m.on('dragstart', () => m.closeTooltip())
+      m.on('dragend', () => {
+        const to = m.getLatLng().wrap()
+        this.h.onFavoriteMoved(i, { lat: to.lat, lon: to.lng })
+      })
+      m.on('dblclick', () => this.h.onMapDoubleClick({ lat: p.lat, lon: p.lon }))
+      m.on('contextmenu', (e: L.LeafletMouseEvent) => {
+        e.originalEvent.preventDefault()
+        if (this.still) return
+        this.h.onPlaceMenu('favorite', e.originalEvent.clientX, e.originalEvent.clientY, { lat: p.lat, lon: p.lon }, i)
+      })
+      m.addTo(this.favoriteLayer)
+    })
+  }
+
+  /**
+   * The name of a favourite place edited right above its star (п. 5.3): the text is selected, so
+   * typing replaces it; Enter keeps it, Esc or a click elsewhere leaves the name as it was.
+   */
+  editFavoriteName(index: number, done: (name: string) => void): void {
+    const p = this.favorites[index]
+    if (!p) return
+    const ll = L.latLng(p.lat, p.lon)
+    if (!this.map.getBounds().contains(ll)) this.map.panTo(ll, { animate: false })
+    const input = document.createElement('input')
+    input.type = 'text'
+    input.className = 'favorite-name'
+    input.value = p.name
+    input.spellcheck = false
+    let finished = false
+    const popup = L.popup({ closeButton: false, autoPan: true, className: 'favorite-popup', offset: [0, -8], minWidth: 280 })
+    const finish = (keep: boolean): void => {
+      if (finished) return
+      finished = true
+      const name = input.value.trim()
+      this.map.closePopup(popup)
+      if (keep && name && name !== p.name) done(name)
+    }
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation()
+      if (e.key === 'Enter') finish(true)
+      else if (e.key === 'Escape') finish(false)
+    })
+    // The hover name of the star would stand behind the field.
+    this.favoriteLayer.eachLayer((l) => (l as L.Marker).closeTooltip())
+    popup.setLatLng(ll).setContent(input)
+    popup.on('remove', () => finish(false))
+    popup.openOn(this.map)
+    L.DomEvent.disableClickPropagation(input)
+    input.focus()
+    input.select()
   }
 
   /** Leaflet must recompute its size after the layout changes. */

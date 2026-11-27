@@ -8,7 +8,7 @@
   "map": {
     "initialView": { "lat": 49.8419, "lon": 24.0315, "zoom": 5 },
     "defaultSource": "osm",
-    "markers": { "color": "#00E676", "selectedColor": "#FF1744", "size": 40 },
+    "markers": { "color": "#EA4335", "selectedColor": "#1A73E8", "size": 28 },
     "hoverThumbSize": 80,
     "thumbnails": { "size": 64 },
     "tileSources": {

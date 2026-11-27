@@ -19,11 +19,16 @@ export interface StripHandlers {
   onDoubleClick(id: number): void
   /** A right click on a photo: its context menu at this point (tz.md, п. 4.19). */
   onContextMenu(id: number, x: number, y: number): void
-  /** Ctrl+wheel: larger (1) or smaller (-1) thumbnails in the grid (п. 4.17). */
+  /** Ctrl+wheel: larger (1) or smaller (-1) thumbnails — of the grid or of the strip (пп. 4.17, 4.1). */
   onZoom(dir: 1 | -1): void
   /** A drag starts on a photo: returns the photos it carries (п. 4.5). */
   onDragStart(id: number): number[]
   onDragEnd(): void
+  /**
+   * A drag that ended on its own thumbnail without a drop: the hand shook on a click (tz.md, п. 4.5);
+   * it is that click, with the same Ctrl and Shift.
+   */
+  onDragClick(id: number, mods: { ctrl: boolean; shift: boolean }): void
   /** A drop onto a photo (п. 4.5): these photos get these coordinates. */
   onDropOnPhoto(ids: number[], coords: LatLon): void
   /** The photos being dragged right now (drag data cannot be read before the drop). */
@@ -46,6 +51,10 @@ export class Strip {
   private selected: ReadonlySet<number> = new Set()
   private current: number | null = null
   private ghost: HTMLElement
+  /** A drag from the strip is on (the dimming of thumbnails belongs to it). */
+  private dragging = false
+  /** The thumbnail the drag began on, with the keys held, and whether the mouse is still over it. */
+  private dragFrom: { id: number; ctrl: boolean; shift: boolean; over: boolean } | null = null
   private layout: StripLayout = 'bottom'
 
   constructor(
@@ -60,7 +69,7 @@ export class Strip {
       (e) => {
         if (e.ctrlKey) {
           e.preventDefault()
-          if (this.layout === 'grid' && e.deltaY) this.h.onZoom(e.deltaY < 0 ? 1 : -1)
+          if (e.deltaY) this.h.onZoom(e.deltaY < 0 ? 1 : -1)
           return
         }
         if (this.layout === 'bottom' && e.deltaY && !e.shiftKey) {
@@ -74,6 +83,19 @@ export class Strip {
     this.ghost = document.createElement('div')
     this.ghost.id = 'drag-ghost'
     document.body.append(this.ghost)
+    // The end of a drag reaches the window even when the thumbnail it started on misses it.
+    window.addEventListener('dragend', (e) => this.endDrag(e), true)
+    // Is the drag still over the thumbnail it began on (a shaken click, п. 4.5)?
+    window.addEventListener(
+      'dragover',
+      (e) => {
+        if (!this.dragFrom) return
+        const item = this.items.get(this.dragFrom.id)
+        this.dragFrom.over = !!item && e.target instanceof Node && item.contains(e.target)
+      },
+      true
+    )
+    window.addEventListener('drop', () => setTimeout(() => this.endDrag(), 0), true)
   }
 
   clear(): void {
@@ -157,6 +179,25 @@ export class Strip {
   }
 
   /** Scrolls so that the current photo is visible. */
+  /**
+   * The thumbnails change size (`change`): the current one stays where it is on screen, the strip grows
+   * or shrinks around it (tz.md, пп. 4.1, 4.17); one that was out of sight is brought in.
+   */
+  keepCurrent(change: () => void): void {
+    const item = this.current === null ? undefined : this.items.get(this.current)
+    const view = this.el.getBoundingClientRect()
+    const r = item?.getBoundingClientRect()
+    const across = this.layout === 'bottom'
+    const seen = !!r && (across ? r.right > view.left && r.left < view.right : r.bottom > view.top && r.top < view.bottom)
+    const before = r ? (across ? (r.left + r.right) / 2 - view.left : (r.top + r.bottom) / 2 - view.top) : 0
+    change()
+    if (!item || !seen) return this.revealCurrent()
+    const n = item.getBoundingClientRect()
+    const after = across ? (n.left + n.right) / 2 - view.left : (n.top + n.bottom) / 2 - view.top
+    if (across) this.el.scrollLeft += after - before
+    else this.el.scrollTop += after - before
+  }
+
   revealCurrent(): void {
     const item = this.current === null ? undefined : this.items.get(this.current)
     item?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
@@ -224,11 +265,7 @@ export class Strip {
       this.h.onContextMenu(p.id, e.clientX, e.clientY)
     })
     item.addEventListener('dragstart', (e) => this.dragStart(e, p.id))
-    item.addEventListener('dragend', () => {
-      this.clearDropTarget()
-      this.markTargets(false)
-      this.h.onDragEnd()
-    })
+    item.addEventListener('dragend', (e) => this.endDrag(e))
     // Dropping onto a photo with coordinates gives them to the dragged photos; onto one without,
     // it gets the common coordinates of the dragged photos (п. 4.5).
     item.addEventListener('dragover', (e) => {
@@ -279,10 +316,30 @@ export class Strip {
     for (const [id, item] of this.items) item.classList.toggle('no-drop', on && !dragged.has(id) && !this.canDropOn(id))
   }
 
+  /**
+   * The drag is over (on the thumbnail, or caught by the window if the thumbnail did not get it):
+   * the dimming and the drop target go. Safe to call twice.
+   */
+  private endDrag(e?: DragEvent): void {
+    if (!this.dragging) return
+    this.dragging = false
+    const from = this.dragFrom
+    this.dragFrom = null
+    this.clearDropTarget()
+    this.markTargets(false)
+    this.h.onDragEnd()
+    if (from?.over && e?.dataTransfer?.dropEffect === 'none') this.h.onDragClick(from.id, { ctrl: from.ctrl, shift: from.shift })
+  }
+
   private dragStart(e: DragEvent, id: number): void {
     const ids = this.h.onDragStart(id)
-    // After the drag image is taken (dimming now would dim it too).
-    requestAnimationFrame(() => this.markTargets(true))
+    this.dragging = true
+    this.dragFrom = { id, ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey, over: true }
+    // After the drag image is taken (dimming now would dim it too) — and only if the drag is still
+    // on: a quick drag may be over before that frame, and the dimming would then stay.
+    requestAnimationFrame(() => {
+      if (this.dragging) this.markTargets(true)
+    })
     if (!e.dataTransfer) return
     e.dataTransfer.effectAllowed = 'copy'
     e.dataTransfer.setData(PHOTO_DRAG_TYPE, JSON.stringify(ids))

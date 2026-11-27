@@ -3,7 +3,8 @@ import { dirname } from 'node:path'
 import { applyEdits, modify, parse } from 'jsonc-parser'
 import { MAX_RECENT } from '@shared/recent'
 import { isStripPosition, type StripPosition } from '@shared/ipc'
-import { GRID_THUMB, validGridThumb } from '@shared/context-menu'
+import { GRID_THUMB, validGridThumb, validStripThumb } from '@shared/context-menu'
+import { RECENT_PLACES, validFavorites, validPlace, type Place } from '@shared/search'
 
 /**
  * Program state between runs (tz.md, п. 7.5): a service file in userData, separate from the
@@ -30,6 +31,12 @@ export interface AppState {
   stripPosition: StripPosition
   /** Size of the thumbnails in the grid, px (п. 4.17). */
   gridThumb: number
+  /** Size of the thumbnails in the strip, px (п. 4.1). */
+  stripThumb: number
+  /** The search history: places found and gone to, latest first (п. 5.3). */
+  places: Place[]
+  /** Favourite places, in the order they were added (п. 5.3). */
+  favorites: Place[]
 }
 
 export interface Session {
@@ -64,7 +71,7 @@ export interface MapState {
   thumbnails: boolean
 }
 
-const EMPTY: AppState = { recentFolders: [], lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: null, stripPosition: 'bottom', gridThumb: GRID_THUMB.normal }
+const EMPTY: AppState = { recentFolders: [], lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: null, stripPosition: 'bottom', gridThumb: GRID_THUMB.normal, stripThumb: GRID_THUMB.normal, places: [], favorites: [] }
 
 type Obj = Record<string, unknown>
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -125,7 +132,10 @@ export function readState(file: string): AppState {
       },
       addFolder: typeof v['addFolder'] === 'string' && v['addFolder'] ? v['addFolder'] : null,
       stripPosition: isStripPosition(v['stripPosition']) ? v['stripPosition'] : 'bottom',
-      gridThumb: validGridThumb(v['gridThumb'])
+      gridThumb: validGridThumb(v['gridThumb']),
+      stripThumb: validStripThumb(v['stripThumb']),
+      places: (Array.isArray(v['places']) ? v['places'] : []).map(validPlace).filter((p): p is Place => !!p).slice(0, RECENT_PLACES),
+      favorites: validFavorites(v['favorites'])
     }
   } catch {
     return { ...EMPTY }

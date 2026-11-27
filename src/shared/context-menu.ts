@@ -51,3 +51,16 @@ export function validGridThumb(v: unknown): number {
     ? v
     : GRID_THUMB.normal
 }
+
+/**
+ * The strip thumbnails (tz.md, п. 4.1): from STRIP_THUMB_MIN; up to half the window (the window limits it as it
+ * is) and at most STRIP_THUMB_MAX — the thumbnail pictures are made 320 px.
+ */
+export const STRIP_THUMB_MAX = 320
+
+export const STRIP_THUMB_MIN = 60
+
+/** A size of the strip thumbnails from the state file: a whole number within the limits, otherwise the normal size. */
+export function validStripThumb(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= STRIP_THUMB_MIN && v <= STRIP_THUMB_MAX ? Math.round(v) : GRID_THUMB.normal
+}

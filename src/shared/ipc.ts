@@ -1,6 +1,6 @@
 import type { Strings } from './i18n'
 import type { Address, FolderData, LatLon, Photo } from './photo'
-import type { SearchResult } from './search'
+import { validFavorites, validPlace, type Place, type SearchResult } from './search'
 import type { MapSource, MarkerStyle } from './settings'
 import type { TrackData } from './track'
 import type { UpdateState } from './updates'
@@ -41,6 +41,8 @@ export const IPC = {
   saveState: 'save:state',
   /** invoke, window → main: find a place by name. */
   search: 'search:places',
+  /** invoke, window → main: the name of a point from its address (a favourite made from a mark, tz.md, п. 5.3). */
+  placeName: 'search:placeName',
   /** invoke, window → main: open a video in the default program (photo view, tz.md, п. 4.14). */
   openInPlayer: 'video:openInPlayer',
   /** invoke, window → main: data of Help → About. */
@@ -94,8 +96,14 @@ export interface InitData {
   stripPosition: StripPosition
   /** Size of the thumbnails in the grid, px (п. 4.17). */
   gridThumb: number
+  /** Size of the thumbnails in the strip, px (п. 4.1). */
+  stripThumb: number
   /** Recent folders, latest first (the start screen, п. 4.18). */
   recent: string[]
+  /** Places found and gone to, latest first (the search history, п. 5.3). */
+  places: Place[]
+  /** Favourite places, in the order they were added (п. 5.3). */
+  favorites: Place[]
   /**
    * Something opens right after the start (launch parameters or the last session, п. 7.1): the
    * start screen waits for it and does not flash; `idle` comes if nothing opened after all.
@@ -163,6 +171,8 @@ export interface SetCoordsRequest {
   coords: LatLon | null
   /** Ctrl+V of what Ctrl+C took from a photo (п. 4.10): its address and altitude go along. */
   copied?: { address: Address | null; altitude: number | null }
+  /** Photos dropped onto a track come one by one: the same group is one Undo step (п. 6.6). */
+  group?: number
 }
 
 const ADDRESS_KEYS = ['country', 'countryCode', 'state', 'city', 'location'] as const
@@ -220,6 +230,17 @@ export type WindowAction =
   | { type: 'openFolder' }
   | { type: 'openRecent'; folder: string }
   | { type: 'gridThumb'; size: number }
+  | { type: 'stripThumb'; size: number }
+  /** A found place was gone to, or taken out of the search history (tz.md, п. 5.3). */
+  | { type: 'rememberPlace'; place: Place }
+  | { type: 'forgetPlace'; place: Place }
+  /** The favourite places changed in the window (п. 5.3): kept, and one Undo step (п. 6.6). */
+  | { type: 'setFavorites'; favorites: Place[] }
+  /** The menu of the mark or of a favourite place at this point of the window (п. 5.3). */
+  | { type: 'placeMenu'; kind: PlaceMenuKind; x: number; y: number; lat: number; lon: number }
+  /** Ctrl+Z, Ctrl+Y (tz.md, п. 6.6). */
+  | { type: 'undo' }
+  | { type: 'redo' }
 
 /** Checks an action coming from the window; null if it is not one. */
 export function validWindowAction(v: unknown): WindowAction | null {
@@ -231,10 +252,27 @@ export function validWindowAction(v: unknown): WindowAction | null {
       return num(r['x']) && num(r['y']) ? { type: 'contextMenu', x: r['x'], y: r['y'] } : null
     case 'openFolder':
       return { type: 'openFolder' }
+    case 'undo':
+      return { type: 'undo' }
+    case 'redo':
+      return { type: 'redo' }
     case 'openRecent':
       return typeof r['folder'] === 'string' && r['folder'] ? { type: 'openRecent', folder: r['folder'] } : null
+    case 'rememberPlace':
+    case 'forgetPlace': {
+      const place = validPlace(r['place'])
+      return place ? { type: r['type'], place } : null
+    }
+    case 'setFavorites':
+      return Array.isArray(r['favorites']) ? { type: 'setFavorites', favorites: validFavorites(r['favorites']) } : null
+    case 'placeMenu':
+      return (r['kind'] === 'mark' || r['kind'] === 'favorite') && num(r['x']) && num(r['y']) && num(r['lat']) && num(r['lon']) && Math.abs(r['lat']) <= 90
+        ? { type: 'placeMenu', kind: r['kind'], x: r['x'], y: r['y'], lat: r['lat'], lon: r['lon'] }
+        : null
     case 'gridThumb':
       return num(r['size']) ? { type: 'gridThumb', size: r['size'] } : null
+    case 'stripThumb':
+      return num(r['size']) ? { type: 'stripThumb', size: r['size'] } : null
     default:
       return null
   }
@@ -245,6 +283,8 @@ export type WindowCommand =
   | { type: 'showOnMap' }
   | { type: 'toggleThumbnails' }
   | { type: 'toggleGrid' }
+  /** After Undo or Redo (п. 6.6): these photos become selected; the note says what was done. */
+  | { type: 'showPhotos'; ids: number[]; note: string }
   | { type: 'setStripPosition'; position: StripPosition }
   | { type: 'setFilter'; filter: StripFilter }
   | { type: 'copyCoords' }
@@ -254,6 +294,22 @@ export type WindowCommand =
   | { type: 'selectAll' }
   | { type: 'toggleHelp' }
   | { type: 'showAbout' }
+  /** Ctrl+F, Edit → Find Place (п. 5.3): the search field with the list of places. */
+  | { type: 'findPlace' }
+  /** An item of the mark's or a favourite's menu was chosen (п. 5.3); the window does it. */
+  | { type: 'placeCommand'; item: PlaceMenuItem }
+  /** The favourite places after Undo or Redo (п. 6.6); the note says what was done. */
+  | { type: 'setFavorites'; favorites: Place[]; note: string }
+
+/** Whose menu (tz.md, п. 5.3): the mark on the map or a favourite place. */
+export type PlaceMenuKind = 'mark' | 'favorite'
+
+export type PlaceMenuItem = 'copyCoords' | 'openGoogleMaps' | 'addFavorite' | 'removeMark' | 'rename' | 'removeFavorite'
+
+/** The items of the menu (п. 5.3). */
+export function placeMenuItems(kind: PlaceMenuKind): PlaceMenuItem[] {
+  return kind === 'mark' ? ['copyCoords', 'openGoogleMaps', 'addFavorite', 'removeMark'] : ['copyCoords', 'openGoogleMaps', 'rename', 'removeFavorite']
+}
 
 /** Help → About (tz.md, п. 4.9). */
 export interface AboutInfo {
@@ -328,6 +384,7 @@ export function validSetCoords(v: unknown): v is SetCoordsRequest {
   const ids = r['ids']
   if (!Array.isArray(ids) || !ids.every((id) => Number.isInteger(id) && (id as number) >= 0)) return false
   if (r['copied'] !== undefined && (c === null || !validCopied(r['copied']))) return false
+  if (r['group'] !== undefined && !(typeof r['group'] === 'number' && Number.isFinite(r['group']))) return false
   if (c === null) return true
   return (
     !!c &&

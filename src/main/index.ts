@@ -8,7 +8,7 @@ import { isBatch, parseBatchArgs } from '@shared/batch-args'
 import { isSupported, SUPPORTED_EXTENSIONS } from '@shared/formats'
 import { isTrackFile, TRACK_EXTENSIONS, trackPreviewSvg, withTrackColors } from '@shared/track'
 import { EXIFTOOL_DOWNLOAD_URL, exiftoolCandidates } from '@shared/exiftool-places'
-import { assignAddress, assignAltitude, assignCoords, pastePhotoData, photoCounts, photosAt, photosToSave } from '@shared/edits'
+import { assignAddress, assignAltitude, assignCoords, pastePhotoData, photoCounts, photosAt, photosToSave, isModified } from '@shared/edits'
 import { checkedAltitude, ELEVATION_BATCH, needsAltitude, pointsWithoutAltitude } from '@shared/elevation'
 import { formatDuration } from '@shared/duration'
 import { pointKey, pointsWithoutAddress } from '@shared/geocode'
@@ -34,10 +34,13 @@ import {
   type AboutInfo,
   type BatchState,
   type ViewState,
-  type TrackForMap
+  type TrackForMap,
+  type PlaceMenuKind
 } from '@shared/ipc'
-import { addressText, formatCoords, type FileMeta, type Photo } from '@shared/photo'
-import { contextItems, GRID_THUMB, validGridThumb } from '@shared/context-menu'
+import { addressText, formatCoords, type FileMeta, type LatLon, type Photo } from '@shared/photo'
+import { contextItems, GRID_THUMB, validGridThumb, validStripThumb } from '@shared/context-menu'
+import { UndoHistory, type UndoKind } from '@shared/undo'
+import { addRecentPlace, addressName, removeRecentPlace, type Place } from '@shared/search'
 import { addRecent, idsByPath, removeRecent, samePath } from '@shared/recent'
 import {
   afterRemoval,
@@ -58,7 +61,7 @@ import { hasSubfolders, scanFiles, scanFolder, type PhotoSource, type ScannedFol
 import { listLanguages, loadStrings } from './locales'
 import { AUTO_LANGUAGE, resolveLanguage } from '@shared/language'
 import { log, setupLog } from './logger'
-import { buildContextMenu, buildMenu, MENU_ID } from './menu'
+import { buildContextMenu, buildMenu, buildPlaceMenu, MENU_ID } from './menu'
 import { savePhotos, type SaveFailure } from './save'
 import { PlaceSearch } from './search'
 import { DefaultSettingsError, ensureUserSettingsFile, formatProblem, loadSettings, setUserSetting } from './settings'
@@ -193,10 +196,18 @@ let mapState: AppState['map'] = null
 let viewState: ViewState | null = null
 /** What the window reports: selection, filter, view mode. */
 let ui: UiState = { ids: [], current: null, filter: 'all', view: 'map', mapMode: 'pins', grid: false }
+/** The search history (tz.md, п. 5.3): places found and gone to, latest first. */
+let places: Place[] = []
+/** Favourite places (tz.md, п. 5.3), in the order they were added; kept in the state file. */
+let favorites: Place[] = []
+/** Undo and Redo of coordinate changes until Save (tz.md, п. 6.6). */
+const history = new UndoHistory()
 /** Where the strip is (tz.md, п. 4.1); kept in the state file. */
 let stripPosition: StripPosition = 'bottom'
 /** Size of the thumbnails in the grid (tz.md, п. 4.17); kept in the state file. */
 let gridThumb: number = GRID_THUMB.normal
+/** Size of the thumbnails in the strip (tz.md, п. 4.1); kept in the state file. */
+let stripThumb: number = GRID_THUMB.normal
 /** Started with --batch (tz.md, п. 10): no main window, the batch and the exit code. */
 const batchArgs = isBatch(process.argv.slice(1)) ? parseBatchArgs(process.argv.slice(1), app.getAppPath()) : null
 /** The batch window is running: the program state of the main window is not touched. */
@@ -277,6 +288,23 @@ async function startup(): Promise<boolean> {
     const detail = e instanceof DefaultSettingsError ? e.message : String(e)
     dialog.showErrorBox('GeoPhotos', `The default settings of the program are broken.\n\n${detail}`)
     return false
+  }
+
+  // The marker look of before 0.37.0, copied into the user file as it was then the default
+  // (Open Settings File writes all fields): the new default replaces it, once; own values stay.
+  for (const [field, was, now] of [
+    ['color', '#00E676', '#EA4335'],
+    ['selectedColor', '#FF1744', '#1A73E8'],
+    ['size', 40, 28]
+  ] as const) {
+    const cur = settings.map.markers[field]
+    if (typeof cur === 'string' ? cur.toUpperCase() !== was : cur !== was) continue
+    try {
+      setUserSetting(paths.user, paths.schema, paths.defaults, ['map', 'markers', field], now)
+    } catch {
+      // Not written now: it is replaced in memory, and tried again at the next start.
+    }
+    settings = { ...settings, map: { ...settings.map, markers: { ...settings.map.markers, [field]: now } } }
   }
 
   // Nothing chosen yet ("auto"): the language of Windows, if the program has it (tz.md, п. 2.3).
@@ -481,7 +509,10 @@ function initData(): Omit<InitData, 'opening'> {
     update: updateState,
     stripPosition,
     gridThumb,
-    recent: recentFolders
+    stripThumb,
+    recent: recentFolders,
+    places,
+    favorites
   }
 }
 
@@ -499,7 +530,7 @@ function setRecent(update: (list: string[]) => string[]): void {
 
 function saveAppState(): void {
   try {
-    writeState(paths.state, { recentFolders, lastSession, window: windowState, map: mapState, tools, addFolder, stripPosition, gridThumb })
+    writeState(paths.state, { recentFolders, lastSession, window: windowState, map: mapState, tools, addFolder, stripPosition, gridThumb, stripThumb, places, favorites })
   } catch (e) {
     log.warn(`Cannot save state ${paths.state}: ${String(e)}`)
   }
@@ -716,6 +747,7 @@ async function loadProject(
   addressRetry.clear()
   altitudeRetry.clear()
   selection = new Set(chosen ? [chosen.id] : [])
+  clearHistory()
   win.webContents.send(IPC.folderLoaded, {
     ...current.data,
     ...(restored ? { restored: { scroll: restored.scroll } } : {}),
@@ -837,6 +869,7 @@ async function addFilesNow(list: readonly string[]): Promise<void> {
   const chosen = photoIds.length ? photoIds : ids.slice(0, 1)
   current = projectOf(entries, next, chosen[0] ?? null)
   selection = new Set(chosen)
+  clearHistory()
   win.webContents.send(IPC.folderLoaded, { ...current.data, keep: { ids: chosen, filter: ui.filter }, show: ids })
   refreshEditState()
   kickQueues()
@@ -904,6 +937,7 @@ async function removePhotos(req: unknown): Promise<void> {
   const data: FolderData = current
     ? { ...current.data, restored: { scroll: viewState?.scroll ?? 0 }, keep: { ids: [...selection], filter: ui.filter } }
     : { folder: '', photos: [], generation, selected: null }
+  clearHistory()
   win.webContents.send(IPC.folderLoaded, data)
   refreshEditState()
   kickQueues()
@@ -975,6 +1009,9 @@ function updateMenu(recent: string[]): void {
         setLanguage: (code) => void setLanguage(code),
         toggleThumbnails: () => win?.webContents.send(IPC.command, { type: 'toggleThumbnails' }),
         toggleGrid: () => win?.webContents.send(IPC.command, { type: 'toggleGrid' }),
+        undo: () => undoRedo('undo'),
+        redo: () => undoRedo('redo'),
+        findPlace: () => win?.webContents.send(IPC.command, { type: 'findPlace' }),
         setStripPosition: (position) => setStripPosition(position),
         setFilter: (filter: StripFilter) => win?.webContents.send(IPC.command, { type: 'setFilter', filter }),
         shortcuts: () => win?.webContents.send(IPC.command, { type: 'toggleHelp' }),
@@ -985,6 +1022,48 @@ function updateMenu(recent: string[]): void {
       { list: languages, current: settings.language }
     )
   )
+  refreshEditState()
+}
+
+/** "Undo: coordinates of 12 photos" (tz.md, п. 6.6). */
+function undoWhat(kind: UndoKind, count: number): string {
+  return t(`undo.${kind}`, { count })
+}
+
+/** The history starts again (Save, Refresh, the strip read anew): ids may change, the files did. */
+function clearHistory(): void {
+  history.clear()
+  refreshEditState()
+}
+
+/**
+ * Ctrl+Z / Ctrl+Y (tz.md, п. 6.6): the photos of the step get back their coordinates with the
+ * address and altitude; they become selected in the window, and the status bar says what was done.
+ */
+function undoRedo(dir: 'undo' | 'redo'): void {
+  if (saving) return
+  const photos = current?.data.photos ?? []
+  const step = dir === 'undo' ? history.undo(photos, favorites) : history.redo(photos, favorites)
+  if (!step) return
+  // The favourite places (п. 5.3): the list as it was; the window shows it.
+  if (step.favorites) {
+    favorites = step.favorites
+    saveAppState()
+    log.verbose(`${dir === 'undo' ? 'Undo' : 'Redo'}: favourite places (${favorites.length})`)
+    const note = t(dir === 'undo' ? 'undo.done' : 'undo.redone', { what: t('undo.favorites') })
+    win?.webContents.send(IPC.command, { type: 'setFavorites', favorites, note })
+    refreshEditState()
+    return
+  }
+  if (!current) return
+  const restored = step.states.flatMap((s) => {
+    const p = photos[s.id]
+    return p ? [{ ...p, ...s, modified: isModified(s, current!.fileMeta[s.id]) }] : []
+  })
+  const what = undoWhat(step.kind, restored.length)
+  log.verbose(`${dir === 'undo' ? 'Undo' : 'Redo'}: ${step.kind}, ${restored.length} photo(s): ${restored.map((p) => p.name).join(', ')}`)
+  applyPhotos(restored)
+  win?.webContents.send(IPC.command, { type: 'showPhotos', ids: restored.map((p) => p.id), note: t(dir === 'undo' ? 'undo.done' : 'undo.redone', { what }) })
   refreshEditState()
 }
 
@@ -1023,6 +1102,10 @@ function refreshEditState(): void {
   }
   const currentPhoto = ui.current === null ? undefined : photos[ui.current]
   enable(MENU_ID.copyCoords, !!currentPhoto?.coords && !currentPhoto.track)
+  // Undo / Redo wait while saving (п. 6.6).
+  const next = history.next()
+  enable(MENU_ID.undo, !saving && !!next.undo)
+  enable(MENU_ID.redo, !saving && !!next.redo)
   enable(MENU_ID.pasteCoords, !saving && pickedPhotos.length > 0)
   enable(MENU_ID.clearCoords, !saving && pickedPhotos.some((p) => p.coords))
   enable(MENU_ID.removeFromStrip, !saving && picked.length > 0)
@@ -1433,6 +1516,8 @@ async function save(only?: ReadonlySet<number>, opts: { askPending?: boolean } =
     }
     saving = false
     if (current === folder) applyPhotos(outcome.saved.map((s) => s.photo))
+    // Saved: what is written is not undone (п. 6.6).
+    clearHistory()
     sendSaveState({ phase: 'done', saved: outcome.saved.length, failed: failed.length })
     log.info(`Saved: ${outcome.saved.length}, failed: ${failed.length}`)
   } catch (e) {
@@ -1497,6 +1582,10 @@ function setCoords(req: unknown): void {
       ? pastePhotoData(current.data.photos, current.fileMeta, req.ids, req.coords, req.copied.address, req.copied.altitude)
       : assignCoords(current.data.photos, current.fileMeta, req.ids, req.coords)
   if (!changed.length) return
+  // How they were: one Undo step (п. 6.6); the photos of one drop onto a track join one step.
+  const kind: UndoKind = req.group !== undefined ? 'track' : req.coords === null ? 'clear' : req.copied ? 'paste' : 'place'
+  history.record(kind, changed.map((p) => current!.data.photos[p.id]!), req.group)
+  refreshEditState()
   const to = req.coords ? formatCoords(changed[0]!.coords!) : 'none'
   log.verbose(
     `Coordinates set (not saved): ${changed.length} photo(s) → ${to}: ` +
@@ -1569,6 +1658,26 @@ async function systemThumbnail(path: string, size: number): Promise<Buffer> {
 async function windowAction(a: WindowAction): Promise<void> {
   if (a.type === 'openFolder') return chooseFolder()
   if (a.type === 'openRecent') return openRecent(a.folder)
+  if (a.type === 'undo' || a.type === 'redo') return undoRedo(a.type)
+  if (a.type === 'rememberPlace' || a.type === 'forgetPlace') {
+    places = a.type === 'rememberPlace' ? addRecentPlace(places, a.place) : removeRecentPlace(places, a.place)
+    saveAppState()
+    return
+  }
+  if (a.type === 'setFavorites') {
+    // One Undo step per change (tz.md, пп. 5.3, 6.6).
+    history.recordFavorites(favorites)
+    favorites = a.favorites
+    saveAppState()
+    refreshEditState()
+    return
+  }
+  if (a.type === 'placeMenu') return showPlaceMenu(a.kind, a.x, a.y, { lat: a.lat, lon: a.lon })
+  if (a.type === 'stripThumb') {
+    stripThumb = validStripThumb(a.size)
+    saveAppState()
+    return
+  }
   if (a.type === 'gridThumb') {
     gridThumb = validGridThumb(a.size)
     saveAppState()
@@ -1589,16 +1698,29 @@ function showContextMenu(x: number, y: number): void {
   const menu = buildContextMenu(t, contextItems(photo, picked, saving), (item) => {
     if (item === 'showInExplorer') shell.showItemInFolder(photo.path)
     else if (item === 'openDefault') void openDefault(photo)
-    else if (item === 'openGoogleMaps') void openGoogleMaps(photo)
+    else if (item === 'openGoogleMaps') void openGoogleMaps(photo.coords)
     else win?.webContents.send(IPC.command, { type: item })
   })
   menu.popup({ window: win, x: Math.round(x), y: Math.round(y) })
 }
 
-/** The place of the photo in Google Maps, in the browser (tz.md, 0.36.0): only on this click. */
-async function openGoogleMaps(photo: Photo): Promise<void> {
-  if (!photo.coords) return
-  const { lat, lon } = photo.coords
+/**
+ * The menu of the mark or of a favourite place (tz.md, п. 5.3): Google Maps is opened here, the
+ * other items the window does.
+ */
+function showPlaceMenu(kind: PlaceMenuKind, x: number, y: number, at: LatLon): void {
+  if (!win) return
+  const menu = buildPlaceMenu(t, kind, (item) => {
+    if (item === 'openGoogleMaps') void openGoogleMaps(at)
+    else win?.webContents.send(IPC.command, { type: 'placeCommand', item })
+  })
+  menu.popup({ window: win, x: Math.round(x), y: Math.round(y) })
+}
+
+/** The point in Google Maps, in the browser (tz.md, 0.36.0): only on this click. */
+async function openGoogleMaps(coords: LatLon | null): Promise<void> {
+  if (!coords) return
+  const { lat, lon } = coords
   await shell.openExternal(`https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lon.toFixed(6)}`)
 }
 
@@ -1976,6 +2098,13 @@ void app.whenReady().then(async () => {
   ipcMain.handle(IPC.clipboardWrite, (_e, text: unknown) => {
     if (typeof text === 'string') clipboard.writeText(text)
   })
+  // The name of a point for a new favourite place (tz.md, п. 5.3): its address, or null.
+  ipcMain.handle(IPC.placeName, async (_e, lat: unknown, lon: unknown) => {
+    if (typeof lat !== 'number' || typeof lon !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90) return null
+    const res = await geocoder.reverse({ lat, lon })
+    if (!res.ok) log.warn(`Name of a place: ${res.error}`)
+    return res.ok ? addressName(res.address) : null
+  })
   ipcMain.handle(IPC.search, async (_e, query: unknown) => {
     if (typeof query !== 'string' || !query.trim()) return { ok: true, places: [] }
     const res = await placeSearch.search(query.trim())
@@ -1993,6 +2122,9 @@ void app.whenReady().then(async () => {
   addFolder = saved.addFolder
   stripPosition = saved.stripPosition
   gridThumb = saved.gridThumb
+  stripThumb = saved.stripThumb
+  places = saved.places
+  favorites = saved.favorites
   updateJumpList()
   ui = { ...ui, mapMode: mapState?.thumbnails ? 'thumbs' : 'pins' }
   updateMenu(recentFolders)

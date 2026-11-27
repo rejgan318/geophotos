@@ -55,6 +55,8 @@ export interface GeoPhotosApi {
   /** Addresses still to find (tz.md, п. 5.5). */
   onQueueState(cb: (state: QueueState) => void): void
   searchPlaces(query: string): Promise<SearchResult>
+  /** The name of a point from its address (a favourite made from a mark, tz.md, п. 5.3); null — none. */
+  placeName(lat: number, lon: number): Promise<string | null>
   /** Opens a video in the default program of Windows (photo view, tz.md, п. 4.14). */
   openInPlayer(id: number): Promise<void>
   /** A new version (tz.md, п. 2.5): shown in the status bar; a click applies it. */

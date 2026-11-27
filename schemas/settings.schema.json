@@ -74,21 +74,21 @@
             "color": {
               "type": "string",
               "pattern": "^#[0-9A-Fa-f]{6}$",
-              "default": "#00E676",
-              "description": "Color of markers and groups, #RRGGBB."
+              "default": "#EA4335",
+              "description": "Color of markers and groups, #RRGGBB (the red pin of Google Maps)."
             },
             "selectedColor": {
               "type": "string",
               "pattern": "^#[0-9A-Fa-f]{6}$",
-              "default": "#FF1744",
-              "description": "Color of the marker or group of the selected photo, #RRGGBB."
+              "default": "#1A73E8",
+              "description": "Color of the markers and groups of the selected photos, #RRGGBB (the blue of selection in Google)."
             },
             "size": {
               "type": "integer",
               "minimum": 16,
               "maximum": 96,
-              "default": 40,
-              "description": "Height of a marker pin, px. The selected marker has the same size; groups scale with it."
+              "default": 28,
+              "description": "Height of a marker pin, px. The current photo's pin is a quarter larger; groups are about this size."
             }
           }
         },

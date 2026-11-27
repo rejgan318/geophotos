@@ -14,7 +14,7 @@ export function normalizeCoords(c: LatLon): LatLon {
 }
 
 /** A photo is modified while its coordinates, address or altitude differ from its files (п. 4.3). */
-function isModified(p: FileMeta, file: FileMeta | undefined): boolean {
+export function isModified(p: FileMeta, file: FileMeta | undefined): boolean {
   return (
     !sameCoords(p.coords, file?.coords ?? null) ||
     !sameAddress(p.address, file?.address ?? null) ||

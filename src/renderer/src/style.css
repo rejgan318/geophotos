@@ -10,10 +10,13 @@
   --fg-dim: #999;
   --selected: #fff;
   --error: #e05050;
-  --modified: #ffb300;
+  /* Unsaved (tz.md, п. 4.3): white — a status, not a colour of its own (palette: red photos, blue
+     selection, yellow favourites). */
+  --modified: #fff;
   --no-coords: #9e9e9e;
-  --address: #64b5f6;
-  --altitude: #bcaaa4;
+  /* Information badges (address, altitude, live photo, track): one quiet colour, told apart by
+     shape; colour is left to the states — coordinates (marker colour) and unsaved (amber). */
+  --badge: #cfd3d6;
 }
 
 html,
@@ -195,6 +198,8 @@ body.grid.grid-photo #strip {
 }
 
 .thumb {
+  /* A badge: 16 px, down to 11 px on the smallest strip — the four of the top row always fit. */
+  --b: clamp(11px, calc((var(--thumb-size) - 16px) / 4), 16px);
   position: relative;
   flex: none;
   width: var(--thumb-size);
@@ -223,46 +228,49 @@ body.grid.grid-photo #strip {
   border-color: #666;
 }
 
+/* Selected: the blue of selection, as the selected markers on the map (tz.md, п. 4.8.1). */
 .thumb.selected {
-  border-color: var(--selected);
+  border-color: var(--marker-selected);
   background: #4a4a4a;
 }
 
 /* The current photo of a multiple selection (status bar, map follow it). */
 .thumb.current {
-  box-shadow: 0 0 0 1px var(--selected);
+  box-shadow: 0 0 0 2px var(--marker-selected);
 }
 
-/* Unsaved coordinates (tz.md, п. 4.3): only the pencil badge; the frame is for the selection. */
+/* Unsaved coordinates (tz.md, п. 4.3): the pencil in the bottom left corner, over the picture — a
+   status of the work, not a fact about the photo; the frame is for the selection, the top row for
+   the facts, so nothing crowds at any strip size. */
 .thumb .badge-modified {
   position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 16px;
-  height: 16px;
+  bottom: 4px;
+  left: 4px;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Same look and size as the coordinates badge, in the "modified" color. */
 .thumb .badge-modified svg {
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 12px;
   fill: var(--modified);
 }
 
-/* The top row of badges (tz.md, п. 4.3): "modified" on the left; on the right, each in its own
-   place so that none moves when another is missing: coordinates, address, altitude (п. 5.6) and
-   video (п. 3.3.6). 16px badges, 2px apart. */
+/* The top row of badges (tz.md, п. 4.3): the facts of the photo, on the right, each in its own
+   place so that none moves when another is missing: coordinates, address, altitude (п. 5.6);
+   2px apart; the video (п. 3.3.6) last. */
 .thumb .badge-address {
   position: absolute;
   top: 3px;
-  right: 21px;
-  width: 16px;
-  height: 16px;
+  right: calc(3px + var(--b) + 2px);
+  width: var(--b);
+  height: var(--b);
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.55);
   display: flex;
@@ -271,18 +279,18 @@ body.grid.grid-photo #strip {
 }
 
 .thumb .badge-address svg {
-  width: 11px;
-  height: 11px;
-  fill: var(--address);
+  width: calc(var(--b) * 0.72);
+  height: calc(var(--b) * 0.72);
+  fill: var(--badge);
 }
 
 /* Has an altitude (tz.md, п. 5.6): the next place of the top row. */
 .thumb .badge-altitude {
   position: absolute;
   top: 3px;
-  right: 39px;
-  width: 16px;
-  height: 16px;
+  right: calc(3px + 2 * (var(--b) + 2px));
+  width: var(--b);
+  height: var(--b);
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.55);
   display: flex;
@@ -291,18 +299,18 @@ body.grid.grid-photo #strip {
 }
 
 .thumb .badge-altitude svg {
-  width: 11px;
-  height: 11px;
-  fill: var(--altitude);
+  width: calc(var(--b) * 0.72);
+  height: calc(var(--b) * 0.72);
+  fill: var(--badge);
 }
 
 /* A video (tz.md, пп. 3.3.6, 4.3): the last place of the top row. */
 .thumb .badge-video {
   position: absolute;
   top: 3px;
-  right: 57px;
-  width: 16px;
-  height: 16px;
+  right: calc(3px + 3 * (var(--b) + 2px));
+  width: var(--b);
+  height: var(--b);
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.55);
   display: flex;
@@ -311,18 +319,18 @@ body.grid.grid-photo #strip {
 }
 
 .thumb .badge-video svg {
-  width: 11px;
-  height: 11px;
+  width: calc(var(--b) * 0.72);
+  height: calc(var(--b) * 0.72);
   fill: #e8e8e8;
 }
 
 /* A live photo (tz.md, п. 3.3.7): its badge takes the place of the video one; the video plays
    over the thumbnail, under the badges. */
 .thumb .badge-live svg {
-  fill: #ffd34d;
-  color: #ffd34d;
-  width: 13px;
-  height: 13px;
+  fill: var(--badge);
+  color: var(--badge);
+  width: calc(var(--b) * 0.82);
+  height: calc(var(--b) * 0.82);
 }
 
 .thumb .live-video {
@@ -374,8 +382,8 @@ body.grid.grid-photo #strip {
 
 /* A photo with coordinates under photos dragged within the strip (tz.md, п. 4.5). */
 .thumb.drop-target {
-  border-color: var(--marker-color);
-  box-shadow: 0 0 0 2px var(--marker-color);
+  border-color: var(--selected);
+  box-shadow: 0 0 0 2px var(--selected);
 }
 
 /* Drag image: kept off screen, used by setDragImage. */
@@ -433,8 +441,8 @@ body.grid.grid-photo #strip {
   position: absolute;
   top: 3px;
   right: 3px;
-  width: 16px;
-  height: 16px;
+  width: var(--b);
+  height: var(--b);
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.55);
   display: flex;
@@ -442,14 +450,11 @@ body.grid.grid-photo #strip {
   justify-content: center;
 }
 
+/* Has coordinates: the same quiet colour as the other badges; the selection is the frame. */
 .thumb .badge-coords svg {
-  width: 12px;
-  height: 12px;
-  fill: var(--marker-color);
-}
-
-.thumb.selected .badge-coords svg {
-  fill: var(--marker-selected);
+  width: calc(var(--b) * 0.72);
+  height: calc(var(--b) * 0.72);
+  fill: var(--badge);
 }
 
 .thumb .placeholder {
@@ -536,7 +541,7 @@ body.grid.grid-photo #strip {
   background: none;
   padding: 0 2px;
   font: inherit;
-  color: var(--marker-color);
+  color: var(--fg);
   cursor: pointer;
 }
 
@@ -567,7 +572,7 @@ body.grid.grid-photo #strip {
 }
 
 .filter-btn.coords {
-  --filter-color: var(--marker-color);
+  --filter-color: var(--badge);
 }
 
 .filter-btn.noCoords {
@@ -714,7 +719,93 @@ body.grid.grid-photo #strip {
   background: #e3efff;
 }
 
-/* Mark of a found place: a ring with a dot, not a photo pin. */
+/* The places (tz.md, п. 5.3): the number, the name and the star. */
+.search-history li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 2px;
+}
+
+.search-history .search-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The number of a place (tz.md, п. 5.3): the history (digit + Enter, Alt + digit), the first nine
+   favourites (Ctrl + digit). */
+.search-num {
+  flex: none;
+  width: 12px;
+  color: #888;
+  text-align: right;
+}
+
+/* The star of a place (tz.md, п. 5.3): empty in the history, filled for a favourite. */
+.search-star {
+  flex: none;
+  width: 22px;
+  border: none;
+  background: transparent;
+  color: #999;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.search-star:hover,
+.search-star.on {
+  color: #f9ab00;
+}
+
+/* The line between the history and the favourite places. */
+.search-history li.search-first-favorite {
+  border-top: 1px solid #ccc;
+}
+
+/* The name of a favourite edited in the list. */
+.search-box input.search-rename {
+  flex: 1;
+  padding: 1px 4px;
+  border: 1px solid #1a73e8;
+  border-radius: 2px;
+  background: #fff;
+}
+
+/* A favourite place on the map (п. 5.3): the star disc, with a shadow to stand out on any map. */
+.favorite-mark {
+  background: none;
+  border: none;
+}
+
+.favorite-mark svg {
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+
+/* Its name edited right above it. */
+.favorite-popup {
+  color-scheme: light;
+}
+
+.favorite-popup .leaflet-popup-content {
+  margin: 6px;
+}
+
+.favorite-popup input.favorite-name {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  border: 1px solid #1a73e8;
+  border-radius: 2px;
+  font: 13px 'Segoe UI', sans-serif;
+  color: #222;
+  background: #fff;
+  outline: none;
+}
+
+/* The mark (tz.md, п. 5.3): a ring with a dot in the colour of the markers — not a photo pin. */
 .place-mark {
   background: none;
   border: none;
@@ -725,8 +816,8 @@ body.grid.grid-photo #strip {
   height: 26px;
   box-sizing: border-box;
   border-radius: 50%;
-  border: 4px solid #2979ff;
-  background: radial-gradient(circle, #fff 0 3px, rgba(41, 121, 255, 0.25) 4px);
+  border: 4px solid var(--mark, #ea4335);
+  background: radial-gradient(circle, #fff 0 3px, color-mix(in srgb, var(--mark, #ea4335) 25%, transparent) 4px);
   box-shadow: 0 0 0 2px #fff, 0 1px 6px rgba(0, 0, 0, 0.7);
 }
 
@@ -778,7 +869,7 @@ body.grid.grid-photo #strip {
   z-index: 800;
   box-sizing: border-box;
   border: 2px dashed var(--marker-selected);
-  background: rgba(255, 23, 68, 0.12);
+  background: color-mix(in srgb, var(--marker-selected) 12%, transparent);
   pointer-events: none;
 }
 
@@ -800,11 +891,15 @@ body.grid.grid-photo #strip {
   top: 0;
   box-sizing: border-box;
   border-radius: 50%;
-  border: 3px solid #fff;
+  border: 2px solid #fff;
   background: var(--marker-color);
   color: #fff;
-  font: bold 14px 'Segoe UI', sans-serif;
-  text-align: center;
+  font: bold 12px 'Segoe UI', sans-serif;
+  /* The number in the very middle, whatever the border takes. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
   text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
 }
@@ -1029,8 +1124,8 @@ body.grid.grid-photo #strip {
 
 /* Tracks (tz.md, п. 3.9). In the strip: the badge in the place of the video one. */
 .thumb .badge-track svg {
-  fill: #9be7ff;
-  color: #9be7ff;
+  fill: var(--badge);
+  color: var(--badge);
   width: 12px;
   height: 12px;
 }
@@ -1233,20 +1328,21 @@ body.grid #strip .thumb {
   font-size: 13px;
 }
 
+/* The same quiet grey button as elsewhere in the program (Open in Player). */
 .start-open {
   align-self: center;
-  padding: 10px 28px;
+  padding: 6px 16px;
   font: inherit;
-  font-size: 15px;
-  color: #fff;
-  background: #3d6fb6;
-  border: none;
-  border-radius: 5px;
+  font-size: 13px;
+  color: #eee;
+  background: #3a3a3a;
+  border: 1px solid #888;
+  border-radius: 4px;
   cursor: pointer;
 }
 
 .start-open:hover {
-  background: #4a7fc8;
+  background: #4a4a4a;
 }
 
 .start-title {
@@ -1288,4 +1384,36 @@ body.grid #strip .thumb {
   background: none;
   border: none;
   pointer-events: none;
+}
+
+/* The edge between the map and the strip (tz.md, п. 4.1): drag it to make the strip larger. */
+#strip-edge {
+  flex: none;
+  height: 5px;
+  margin: -2px 0;
+  z-index: 1001;
+  position: relative;
+  cursor: ns-resize;
+}
+
+body.strip-left #strip-edge {
+  width: 5px;
+  height: auto;
+  margin: 0 -2px;
+  cursor: ew-resize;
+}
+
+#strip-edge:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+body.grid #strip-edge {
+  display: none;
+}
+
+/* Groups of photo markers stand above the favourite stars (tz.md, п. 5.3): a group dropped onto a
+   favourite place stays clickable; single pins and thumbnails stay under the star. Leaflet sets the
+   order inline, so this has to be !important. */
+.leaflet-marker-icon.photo-cluster {
+  z-index: 70000 !important;
 }

@@ -54,5 +54,9 @@ export function flagSvg(color: string): string {
 }
 
 /** The place of the current photo on a track (tz.md, п. 3.9.7): a ring. */
+/** A favourite place (tz.md, п. 5.3): a star in a disc, as on the map. */
+export const STAR_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M12 5.6l1.9 3.9 4.3.6-3.1 3 .7 4.3L12 15.4l-3.8 2 .7-4.3-3.1-3 4.3-.6z" fill="#fff"/></svg>'
+
 export const RING_SVG =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="3.5"/></svg>'

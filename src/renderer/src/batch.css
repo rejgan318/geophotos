@@ -4,7 +4,8 @@
   --bg: #2b2b2b;
   --fg: #ddd;
   --fg-dim: #999;
-  --accent: #00e676;
+  /* The blue of selection (markers): the one colour of action in the program. */
+  --accent: #1a73e8;
   --error: #e05050;
 }
 

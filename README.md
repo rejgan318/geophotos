@@ -46,6 +46,8 @@ Two ways, both on the page of the [latest release](https://github.com/rejgan318/
 - **Thumbnail strip:** sorted by shooting date. Marks show photos with coordinates, an address, an altitude, and unsaved changes. Photos of subfolders can be loaded too. The strip is at the bottom or on the left (*View → Strip Position*); G opens it as a grid over the whole window — handy for picking among many photos (G or Esc — back to the map); Ctrl+wheel makes the grid thumbnails larger or smaller.
 - **Shooting direction:** if the phone wrote where the camera looked (iPhone does), the current photo's marker shows a sector that way.
 - **One window:** starting GeoPhotos again brings the open window forward; a folder dropped onto its icon opens there. Right-click the taskbar icon for the recent folders.
+- **Places:** Ctrl+F (or a click into the empty search field) lists the places you went to lately (a digit and Enter) and your favorite places (Ctrl+1…9 from anywhere). A right click on the map puts a mark: drag it, copy its coordinates, open it in Google Maps or add it to favorites. Favorite places stay on the map; drag them, rename them with a right click; Ctrl+Z undoes changes.
+- **Undo:** Ctrl+Z undoes the last change of coordinates, Ctrl+Y redoes it — until you save.
 - **Right click** on a photo (in the strip or on the map) opens its menu: coordinates, *Open in Google Maps* (for Street View and the satellite), *Show in Explorer*, *Open in Another Program*.
 - **Ways to set coordinates:**
   - drag thumbnails from the strip onto the map, or double-click the map for the current photo;
