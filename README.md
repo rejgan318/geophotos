@@ -56,7 +56,7 @@ Two ways, both on the page of the [latest release](https://github.com/rejgan318/
   - Ctrl+V coordinates copied from Google Maps and the like, or Ctrl+C / Ctrl+V between photos (with the address and altitude);
   - Ctrl+Del removes coordinates, address and altitude.
 - **Selection:** click, Ctrl+click, Shift+click, Ctrl+A; Ctrl+drag on the map selects the photos in a rectangle. Arrow keys move through the photos. Dragging the marker of one of several selected photos moves them all to that point.
-- **Filters:** all photos, with coordinates, without coordinates, modified — as buttons in the status bar and in the View menu.
+- **Filters:** all photos, with coordinates, without coordinates, modified — as buttons in the status bar; F (or *View → Filter*) switches to the next one.
 - **Address and altitude** (*Tools → Get Address / Get Altitude*): the address from Nominatim (OpenStreetMap) in the interface language, the altitude from the Open-Meteo Elevation API, for every photo of the folder that has coordinates. Points the service did not answer are asked again in the background.
 - **Photo view (Space):** a large preview in place of the map, with the camera or phone model.
 - **Save:** *Save* writes all modified photos, *Save Selected* only the selected ones. Progress is shown, and a list of files that could not be written appears at the end. You are warned about unsaved changes.

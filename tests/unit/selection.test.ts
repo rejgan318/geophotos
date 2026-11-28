@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LatLon, Photo } from '@shared/photo'
-import { effectiveFilter, matchesFilter, toggleFilter, visibleIds } from '../../src/renderer/src/filter'
+import { effectiveFilter, matchesFilter, nextFilter, toggleFilter, visibleIds } from '../../src/renderer/src/filter'
 import { navigateShown } from '../../src/renderer/src/navigation'
 import {
   clickSelect,
@@ -92,6 +92,21 @@ describe('strip filter by the status bar counter (tz.md, п. 4.13)', () => {
     expect(toggleFilter('coords', 'coords')).toBe('all')
     expect(toggleFilter('coords', 'modified')).toBe('modified')
     expect(toggleFilter('all', 'all')).toBe('all')
+  })
+
+  it('F and View → Filter go to the next filter in turn, skipping the empty ones (п. 4.9)', () => {
+    expect(nextFilter(photos, 'all')).toBe('coords')
+    expect(nextFilter(photos, 'coords')).toBe('noCoords')
+    expect(nextFilter(photos, 'noCoords')).toBe('modified')
+    expect(nextFilter(photos, 'modified')).toBe('all')
+    // Nothing modified: from "without coordinates" straight back to "all".
+    const saved = photos.map((p) => ({ ...p, modified: false }))
+    expect(nextFilter(saved, 'noCoords')).toBe('all')
+    // All placed and saved: only "all" and "with coordinates".
+    const placed = saved.map((p) => ({ ...p, coords: { lat: 1, lon: 2 } }))
+    expect(nextFilter(placed, 'all')).toBe('coords')
+    expect(nextFilter(placed, 'coords')).toBe('all')
+    expect(nextFilter([], 'all')).toBe('all')
   })
 
   it('hidden photos leave the selection; the current one moves to a shown photo', () => {

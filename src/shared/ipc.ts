@@ -293,7 +293,8 @@ export type WindowCommand =
   /** After Undo or Redo (п. 6.6): these photos become selected; the note says what was done. */
   | { type: 'showPhotos'; ids: number[]; note: string }
   | { type: 'setStripPosition'; position: StripPosition }
-  | { type: 'setFilter'; filter: StripFilter }
+  /** View → Filter: … (tz.md, п. 4.9): the next filter, as F does. */
+  | { type: 'nextFilter' }
   | { type: 'copyCoords' }
   | { type: 'pasteCoords' }
   | { type: 'clearCoords' }

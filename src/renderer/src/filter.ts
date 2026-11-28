@@ -25,6 +25,18 @@ export function effectiveFilter(photos: readonly Photo[], f: StripFilter): Strip
   return f !== 'all' && !photos.some((p) => !p.track && matchesFilter(p, f)) ? 'all' : f
 }
 
+const CYCLE: readonly StripFilter[] = ['all', 'coords', 'noCoords', 'modified']
+
+/** F and View → Filter: … (tz.md, п. 4.9): the next filter in turn, skipping the empty ones. */
+export function nextFilter(photos: readonly Photo[], current: StripFilter): StripFilter {
+  const from = CYCLE.indexOf(current)
+  for (let i = 1; i < CYCLE.length; i++) {
+    const f = CYCLE[(from + i) % CYCLE.length]!
+    if (effectiveFilter(photos, f) === f) return f
+  }
+  return current
+}
+
 /** A click on a filter button: the active filter (other than "all") is switched off by a second click. */
 export function toggleFilter(current: StripFilter, clicked: StripFilter): StripFilter {
   return clicked === current ? 'all' : clicked

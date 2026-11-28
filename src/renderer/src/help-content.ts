@@ -30,6 +30,7 @@ export const SECTIONS: Section[] = [
       { keys: ['help.key.space'], text: 'help.photoView' },
       { keys: ['C'], text: 'help.showOnMap' },
       { keys: ['T'], text: 'help.thumbnails' },
+      { keys: ['F'], text: 'help.filter' },
       { keys: ['G'], text: 'help.grid' },
       { keys: ['Ctrl+help.key.wheel', 'Ctrl+±'], text: 'help.gridZoom' },
       { keys: ['Ctrl+A'], text: 'help.selectAll' },

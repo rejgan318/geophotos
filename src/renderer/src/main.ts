@@ -12,7 +12,7 @@ import { PhotoView } from './viewer'
 import { HelpView } from './help'
 import { AboutView } from './about'
 import { EggView } from './eggs'
-import { effectiveFilter, matchesFilter, toggleFilter, visibleIds, type StripFilter } from './filter'
+import { effectiveFilter, matchesFilter, nextFilter, toggleFilter, visibleIds, type StripFilter } from './filter'
 import { PENCIL_SVG, PHOTO_SVG, PIN_OFF_SVG, PIN_SVG } from './icons'
 import { isNavKey, navigateShown } from './navigation'
 import { addSearchBox } from './search'
@@ -704,6 +704,13 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
         if (!e.repeat) showOnMap()
         return
       }
+      // F: the next filter of the strip (tz.md, п. 4.9), by the physical key (also «А» in the Russian layout).
+      if (e.code === 'KeyF' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!e.repeat && folder) setFilter(nextFilter(folder.photos, filter))
+        return
+      }
       // T: markers / thumbnails on the map, by the physical key (also «Е» in the Russian layout).
       if (e.code === 'KeyT' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
         e.preventDefault()
@@ -821,8 +828,8 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
       toggleGrid()
     } else if (cmd.type === 'setStripPosition') {
       setStripPosition(cmd.position)
-    } else if (cmd.type === 'setFilter') {
-      setFilter(cmd.filter)
+    } else if (cmd.type === 'nextFilter') {
+      setFilter(nextFilter(folder?.photos ?? [], filter))
     } else if (cmd.type === 'toggleHelp') {
       about.hide()
       help.toggle()

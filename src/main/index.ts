@@ -989,6 +989,9 @@ async function chooseAddFiles(): Promise<void> {
   await addFiles(files)
 }
 
+/** The filter named in View → Filter: … of the menu now shown. */
+let menuFilter: StripFilter = 'all'
+
 function updateMenu(recent: string[]): void {
   Menu.setApplicationMenu(
     buildMenu(
@@ -1020,15 +1023,17 @@ function updateMenu(recent: string[]): void {
         redo: () => undoRedo('redo'),
         findPlace: () => win?.webContents.send(IPC.command, { type: 'findPlace' }),
         setStripPosition: (position) => setStripPosition(position),
-        setFilter: (filter: StripFilter) => win?.webContents.send(IPC.command, { type: 'setFilter', filter }),
+        nextFilter: () => win?.webContents.send(IPC.command, { type: 'nextFilter' }),
         shortcuts: () => win?.webContents.send(IPC.command, { type: 'toggleHelp' }),
         about: () => win?.webContents.send(IPC.command, { type: 'showAbout' })
       },
       recent,
       dev,
-      { list: languages, current: settings.language }
+      { list: languages, current: settings.language },
+      ui.filter
     )
   )
+  menuFilter = ui.filter
   refreshEditState()
 }
 
@@ -1141,20 +1146,9 @@ function refreshEditState(): void {
   }
   const stripItem = menu?.getMenuItemById(MENU_ID.strip[stripPosition])
   if (stripItem) stripItem.checked = true
+  // Filter: … is available while some filter besides "all" has photos (tz.md, п. 4.9).
   const counts = photoCounts(photos)
-  const available: Record<StripFilter, boolean> = {
-    all: photos.length > 0,
-    coords: counts.withCoords > 0,
-    noCoords: counts.withoutCoords > 0,
-    modified: counts.modified > 0
-  }
-  for (const f of ['all', 'coords', 'noCoords', 'modified'] as const) {
-    const item = menu?.getMenuItemById(MENU_ID.filter[f])
-    if (!item) continue
-    item.enabled = available[f]
-    // A radio item is switched on, never off: Electron then switches the others off.
-    if (ui.filter === f) item.checked = true
-  }
+  enable(MENU_ID.filter, counts.withCoords + counts.withoutCoords + counts.modified > 0)
 }
 
 /** Applies changed photos in main and sends them to the window. */
@@ -2090,7 +2084,9 @@ void app.whenReady().then(async () => {
   ipcMain.on(IPC.uiState, (_e, state: unknown) => {
     ui = validUiState(state) ?? ui
     selection = new Set(ui.ids)
-    refreshEditState()
+    // The item names the filter in force, however it was switched (tz.md, п. 4.9).
+    if (ui.filter !== menuFilter) updateMenu(recentFolders)
+    else refreshEditState()
   })
   ipcMain.on(IPC.viewState, (_e, v: unknown) => {
     viewState = validViewState(v) ?? viewState

@@ -27,7 +27,7 @@ export interface MenuHandlers {
   findPlace(): void
   toggleGrid(): void
   setStripPosition(position: StripPosition): void
-  setFilter(filter: StripFilter): void
+  nextFilter(): void
   toggleAddress(): void
   toggleAltitude(): void
   setLanguage(code: string): void
@@ -54,13 +54,16 @@ export const MENU_ID = {
   strip: { bottom: 'view.strip.bottom', left: 'view.strip.left' },
   address: 'tools.address',
   altitude: 'tools.altitude',
-  filter: {
-    all: 'view.filter.all',
-    coords: 'view.filter.coords',
-    noCoords: 'view.filter.noCoords',
-    modified: 'view.filter.modified'
-  }
+  filter: 'view.filter'
 } as const
+
+/** Names of the filters in View → Filter: … (tz.md, п. 4.9). */
+const FILTER_NAME: Record<StripFilter, string> = {
+  all: 'menu.filterAll',
+  coords: 'menu.filterCoords',
+  noCoords: 'menu.filterNoCoords',
+  modified: 'menu.filterModified'
+}
 
 /** Traditional window menu (tz.md, п. 4.9). Reload and developer tools exist only in development. */
 export function buildMenu(
@@ -68,7 +71,8 @@ export function buildMenu(
   h: MenuHandlers,
   recent: string[],
   dev: boolean,
-  languages: { list: { code: string; name: string }[]; current: string } = { list: [], current: '' }
+  languages: { list: { code: string; name: string }[]; current: string } = { list: [], current: '' },
+  filter: StripFilter = 'all'
 ): Menu {
   const recentItems: MenuItemConstructorOptions[] = recent.length
     ? [
@@ -127,14 +131,7 @@ export function buildMenu(
     ]
   })
   // View: map / photo (Space; the window handles the key, so Space still types in text fields)
-  // and the filters of the status bar counter (tz.md, пп. 4.13, 9.3).
-  const filterItem = (filter: StripFilter, label: string): MenuItemConstructorOptions => ({
-    id: MENU_ID.filter[filter],
-    label: t(label),
-    type: 'radio',
-    checked: filter === 'all',
-    click: () => h.setFilter(filter)
-  })
+  // and the filter of the status bar counter (tz.md, пп. 4.9, 4.13).
   const devItems: MenuItemConstructorOptions[] = dev
     ? [
         { type: 'separator' },
@@ -189,10 +186,15 @@ export function buildMenu(
         click: h.toggleGrid
       },
       { type: 'separator' },
-      filterItem('all', 'menu.filterAll'),
-      filterItem('coords', 'menu.filterCoords'),
-      filterItem('noCoords', 'menu.filterNoCoords'),
-      filterItem('modified', 'menu.filterModified'),
+      // One item named after the filter in force; a click or F switches to the next one. Electron
+      // cannot relabel a built menu on Windows, so the menu is rebuilt when the filter changes.
+      {
+        id: MENU_ID.filter,
+        label: t('menu.filter', { name: t(FILTER_NAME[filter]) }),
+        accelerator: 'F',
+        registerAccelerator: false,
+        click: h.nextFilter
+      },
       ...devItems
     ]
   })
