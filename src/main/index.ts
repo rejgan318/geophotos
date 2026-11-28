@@ -8,7 +8,7 @@ import { isBatch, parseBatchArgs } from '@shared/batch-args'
 import { isSupported, SUPPORTED_EXTENSIONS } from '@shared/formats'
 import { isTrackFile, TRACK_EXTENSIONS, trackPreviewSvg, withTrackColors } from '@shared/track'
 import { EXIFTOOL_DOWNLOAD_URL, exiftoolCandidates } from '@shared/exiftool-places'
-import { assignAddress, assignAltitude, assignCoords, pastePhotoData, photoCounts, photosAt, photosToSave, isModified } from '@shared/edits'
+import { assignAddress, assignAltitude, assignCoords, assignDirection, pastePhotoData, photoCounts, photosAt, photosToSave, isModified } from '@shared/edits'
 import { checkedAltitude, ELEVATION_BATCH, needsAltitude, pointsWithoutAltitude } from '@shared/elevation'
 import { formatDuration } from '@shared/duration'
 import { pointKey, pointsWithoutAddress } from '@shared/geocode'
@@ -20,6 +20,7 @@ import {
   THUMB_SCHEME,
   validRemovePhotos,
   validSetCoords,
+  validSetDirection,
   type FolderData,
   type InitData,
   type PhotosChanged,
@@ -64,7 +65,7 @@ import { log, setupLog } from './logger'
 import { buildContextMenu, buildMenu, buildPlaceMenu, MENU_ID } from './menu'
 import { savePhotos, type SaveFailure } from './save'
 import { PlaceSearch } from './search'
-import { DefaultSettingsError, ensureUserSettingsFile, formatProblem, loadSettings, setUserSetting } from './settings'
+import { addUserSetting, DefaultSettingsError, ensureUserSettingsFile, formatProblem, loadSettings, setUserSetting } from './settings'
 import { readState, writeState, type AppState, type ToolsState } from './state'
 import { runBatch, type BatchOptions } from './batch'
 import { ElevationService } from './elevation'
@@ -116,11 +117,21 @@ function entriesOf(folder: OpenFolder | null): Entry[] {
   return folder.data.photos.map((photo, id) => ({ photo, source: folder.sources[id]!, fileMeta: folder.fileMeta[id]! }))
 }
 
+/** What the files of a photo hold, as just read (tz.md, п. 4.3). */
+function fileMetaOf(photo: Photo): FileMeta {
+  return {
+    coords: photo.coords,
+    address: photo.address,
+    altitude: photo.altitude,
+    ...(photo.direction !== undefined ? { direction: photo.direction } : {})
+  }
+}
+
 function entriesOfScan(scanned: ScannedFolder): Entry[] {
   return scanned.photos.map((photo, id) => ({
     photo,
     source: scanned.sources[id]!,
-    fileMeta: { coords: photo.coords, address: photo.address, altitude: photo.altitude }
+    fileMeta: fileMetaOf(photo)
   }))
 }
 
@@ -214,6 +225,8 @@ let stripThumb: number = GRID_THUMB.normal
 /** The easter eggs (tz.md, п. 9.3) and those found, in the order found; kept in the state file. */
 let eggs: Eggs | null = null
 let foundEggs: FoundEgg[] = []
+/** Settings groups once added to the user settings file (AppState.settingsAdded). */
+let settingsAdded: string[] = []
 /** Started with --batch (tz.md, п. 10): no main window, the batch and the exit code. */
 const batchArgs = isBatch(process.argv.slice(1)) ? parseBatchArgs(process.argv.slice(1), app.getAppPath()) : null
 /** The batch window is running: the program state of the main window is not touched. */
@@ -504,6 +517,7 @@ function initData(): Omit<InitData, 'opening'> {
       initialView: settings.map.initialView,
       markers: settings.map.markers,
       hoverThumbSize: settings.map.hoverThumbSize,
+      directionZoom: settings.map.directionZoom,
       thumbSize: settings.map.thumbnails.size,
       saved: mapState ? { lat: mapState.lat, lon: mapState.lon, zoom: mapState.zoom } : null,
       thumbnails: mapState?.thumbnails ?? false
@@ -537,7 +551,7 @@ function setRecent(update: (list: string[]) => string[]): void {
 
 function saveAppState(): void {
   try {
-    writeState(paths.state, { recentFolders, lastSession, window: windowState, map: mapState, tools, addFolder, stripPosition, gridThumb, stripThumb, places, favorites, eggs: foundEggs })
+    writeState(paths.state, { recentFolders, lastSession, window: windowState, map: mapState, tools, addFolder, stripPosition, gridThumb, stripThumb, places, favorites, eggs: foundEggs, settingsAdded })
   } catch (e) {
     log.warn(`Cannot save state ${paths.state}: ${String(e)}`)
   }
@@ -991,6 +1005,8 @@ async function chooseAddFiles(): Promise<void> {
 
 /** The filter named in View → Filter: … of the menu now shown. */
 let menuFilter: StripFilter = 'all'
+/** Help or About is open in the window: the menu bar is unavailable (tz.md, п. 4.9). */
+let menuLocked = false
 
 function updateMenu(recent: string[]): void {
   Menu.setApplicationMenu(
@@ -1030,7 +1046,8 @@ function updateMenu(recent: string[]): void {
       recent,
       dev,
       { list: languages, current: settings.language },
-      ui.filter
+      ui.filter,
+      menuLocked
     )
   )
   menuFilter = ui.filter
@@ -1070,7 +1087,10 @@ function undoRedo(dir: 'undo' | 'redo'): void {
   if (!current) return
   const restored = step.states.flatMap((s) => {
     const p = photos[s.id]
-    return p ? [{ ...p, ...s, modified: isModified(s, current!.fileMeta[s.id]) }] : []
+    if (!p) return []
+    // The direction comes back too, or goes if the photo had none then (п. 4.21).
+    const { direction: _now, ...base } = p
+    return [{ ...base, ...s, modified: isModified(s, current!.fileMeta[s.id]) }]
   })
   const what = undoWhat(step.kind, restored.length)
   log.verbose(`${dir === 'undo' ? 'Undo' : 'Redo'}: ${step.kind}, ${restored.length} photo(s): ${restored.map((p) => p.name).join(', ')}`)
@@ -1508,12 +1528,13 @@ async function save(only?: ReadonlySet<number>, opts: { askPending?: boolean } =
       exiftool,
       toSave.map((p) => ({ photo: p, source: folder.sources[p.id]!, old: folder.fileMeta[p.id]?.coords ?? null })),
       log,
-      (done, total) => sendSaveState({ phase: 'progress', done, total })
+      (done, total) => sendSaveState({ phase: 'progress', done, total }),
+      { xmpOnly: settings.save.xmpOnly }
     )
     failed = outcome.failed
     for (const s of outcome.saved) {
       folder.sources[s.id] = s.source
-      folder.fileMeta[s.id] = { coords: s.photo.coords, address: s.photo.address, altitude: s.photo.altitude }
+      folder.fileMeta[s.id] = fileMetaOf(s.photo)
     }
     saving = false
     if (current === folder) applyPhotos(outcome.saved.map((s) => s.photo))
@@ -1592,6 +1613,16 @@ function setCoords(req: unknown): void {
     `Coordinates set (not saved): ${changed.length} photo(s) → ${to}: ` +
       changed.map((p) => p.name).join(', ')
   )
+  applyPhotos(changed)
+}
+
+/** Alt+drag on the map (tz.md, п. 4.21): the selected photos with coordinates get a direction. */
+function setDirection(req: unknown): void {
+  if (!current || saving || !validSetDirection(req)) return
+  const changed = assignDirection(current.data.photos, current.fileMeta, req.ids, req.direction)
+  if (!changed.length) return
+  history.record('direction', changed.map((p) => current!.data.photos[p.id]!))
+  log.verbose(`Direction set (not saved): ${changed[0]!.direction}° for ${changed.length} photo(s): ${changed.map((p) => p.name).join(', ')}`)
   applyPhotos(changed)
 }
 
@@ -1975,7 +2006,8 @@ async function runBatchWindow(paths: string[], opts: BatchOptions): Promise<numb
       reverse: (c) => geocoder.reverse(c),
       elevations: (points) => elevation.get(points),
       log,
-      addressIntervalMs: geocoder.intervalMs
+      addressIntervalMs: geocoder.intervalMs,
+      xmpOnly: settings.save.xmpOnly
     },
     (p) => {
       if (w.isDestroyed()) return
@@ -2081,12 +2113,19 @@ void app.whenReady().then(async () => {
     return track ? { data: track.data, zone: track.zone } : null
   })
   ipcMain.handle(IPC.setCoords, (_e, req: unknown) => setCoords(req))
+  ipcMain.handle(IPC.setDirection, (_e, req: unknown) => setDirection(req))
   ipcMain.on(IPC.uiState, (_e, state: unknown) => {
     ui = validUiState(state) ?? ui
     selection = new Set(ui.ids)
     // The item names the filter in force, however it was switched (tz.md, п. 4.9).
     if (ui.filter !== menuFilter) updateMenu(recentFolders)
     else refreshEditState()
+  })
+  ipcMain.on(IPC.modal, (_e, open: unknown) => {
+    const locked = open === true
+    if (locked === menuLocked) return
+    menuLocked = locked
+    updateMenu(recentFolders)
   })
   ipcMain.on(IPC.viewState, (_e, v: unknown) => {
     viewState = validViewState(v) ?? viewState
@@ -2142,6 +2181,19 @@ void app.whenReady().then(async () => {
   places = saved.places
   favorites = saved.favorites
   foundEggs = saved.eggs
+  settingsAdded = saved.settingsAdded
+  // Settings that came with a newer version go into an existing user file once, with their
+  // comments, so they can be found there (tz.md, пп. 4.20, 6.4).
+  for (const name of ['save', 'map.directionZoom']) {
+    if (settingsAdded.includes(name)) continue
+    try {
+      if (addUserSetting(paths.user, paths.schema, paths.defaults, name.split('.'))) log.info(`Setting added to ${paths.user}: ${name}`)
+      settingsAdded = [...settingsAdded, name]
+      saveAppState()
+    } catch (e) {
+      log.warn(`Cannot add setting ${name} to ${paths.user}: ${String(e)}`)
+    }
+  }
   eggs = new Eggs(paths.eggs)
   updateJumpList()
   ui = { ...ui, mapMode: mapState?.thumbnails ? 'thumbs' : 'pins' }

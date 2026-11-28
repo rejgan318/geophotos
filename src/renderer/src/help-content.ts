@@ -64,6 +64,7 @@ export const SECTIONS: Section[] = [
       { action: 'help.action.dropOnTrack', text: 'help.dropOnTrack' },
       { action: 'help.action.dragMarker', text: 'help.dragMarker' },
       { keys: ['Ctrl+help.key.drag'], text: 'help.boxSelect' },
+      { keys: ['Alt+help.key.drag'], text: 'help.direction' },
       { action: 'help.action.rightClickMap', text: 'help.rightClickMap' },
       { action: 'help.action.dropOnMark', text: 'help.dropOnMark' },
       { action: 'help.action.dropFromExplorer', text: 'help.dropFromExplorer' }

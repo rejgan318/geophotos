@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { assignAddress, assignAltitude, assignCoords, dropOnPhoto, normalizeCoords, pastePhotoData, photoCounts, photosAt, photosToSave } from '@shared/edits'
-import { validSetCoords } from '@shared/ipc'
-import type { Address, LatLon, Photo } from '@shared/photo'
+import { assignAddress, assignAltitude, assignCoords, assignDirection, DIRECTION_KEEP_METERS, dropOnPhoto, isModified, normalizeCoords, pastePhotoData, photoCounts, photosAt, photosToSave } from '@shared/edits'
+import { validSetCoords, validSetDirection } from '@shared/ipc'
+import type { Address, FileMeta, LatLon, Photo } from '@shared/photo'
 
 function photo(id: number, coords: LatLon | null, modified = false): Photo {
   return {
@@ -158,5 +158,49 @@ describe('requests from the window are checked', () => {
     expect(validSetCoords({ ids: [0], coords: { lat: NaN, lon: 0 } })).toBe(false)
     expect(validSetCoords({ ids: 'x', coords: A })).toBe(false)
     expect(validSetCoords(null)).toBe(false)
+  })
+})
+
+describe('the shooting direction (tz.md, п. 4.21)', () => {
+  const withDir = (id: number, coords: LatLon | null, direction?: number): Photo => ({ ...photo(id, coords), ...(direction !== undefined ? { direction } : {}) })
+  const fileOf = (ps: Photo[]): FileMeta[] => ps.map((p) => ({ coords: p.coords, address: null, altitude: null, ...(p.direction !== undefined ? { direction: p.direction } : {}) }))
+
+  it('Alt+drag gives the direction to the photos with coordinates, whole degrees 0–359', () => {
+    const photos = [withDir(0, A), withDir(1, null), withDir(2, A, 90)]
+    const changed = assignDirection(photos, fileOf(photos), [0, 1, 2], 359.6)
+    expect(changed.map((p) => [p.id, p.direction, p.modified])).toEqual([[0, 0, true], [2, 0, true]])
+    // The same direction again: nothing changes.
+    expect(assignDirection(photos, fileOf(photos), [2], 90.2)).toEqual([])
+    expect(assignDirection(photos, fileOf(photos), [0], -90)[0]!.direction).toBe(270)
+  })
+
+  it('a move of up to 30 m keeps the direction, a longer one removes it', () => {
+    const photos = [withDir(0, A, 45), withDir(1, A, 45), withDir(2, null)]
+    const file = fileOf(photos)
+    // 0.0002° of latitude is about 22 m; 0.0003° about 33 m.
+    const [near] = assignCoords(photos, file, [0], { lat: A.lat + 0.0002, lon: A.lon })
+    expect(near!.direction).toBe(45)
+    const [far] = assignCoords(photos, file, [1], { lat: A.lat + 0.0003, lon: A.lon })
+    expect('direction' in far!).toBe(false)
+    expect(far!.modified).toBe(true)
+    // Ctrl+Del removes it with the coordinates.
+    expect('direction' in assignCoords(photos, file, [0], null)[0]!).toBe(false)
+    expect(DIRECTION_KEEP_METERS).toBe(30)
+  })
+
+  it('a new direction is a change; back to the one in the file — not', () => {
+    const photos = [withDir(0, A, 45)]
+    const file = fileOf(photos)
+    const [turned] = assignDirection(photos, file, [0], 100)
+    expect(turned!.modified).toBe(true)
+    expect(assignDirection([turned!], file, [0], 45)[0]!.modified).toBe(false)
+    expect(isModified({ coords: A, address: null, altitude: null }, { coords: A, address: null, altitude: null, direction: 10 })).toBe(true)
+  })
+
+  it('the request from the window is checked', () => {
+    expect(validSetDirection({ ids: [0, 3], direction: 271 })).toBe(true)
+    expect(validSetDirection({ ids: [0], direction: Infinity })).toBe(false)
+    expect(validSetDirection({ ids: [-1], direction: 5 })).toBe(false)
+    expect(validSetDirection({ ids: [0] })).toBe(false)
   })
 })

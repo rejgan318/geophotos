@@ -9,6 +9,7 @@ import {
   embeddedPreviewTag,
   firstTrackPoint,
   pickCoords,
+  pickDirection,
   type TrackPoint,
   tagValue,
   toPhoto,
@@ -67,6 +68,9 @@ const COORD_TAGS = [
   '-QuickTime:GPSCoordinates'
 ]
 
+/** Where the camera looked (tz.md, пп. 4.20, 4.21). */
+const DIRECTION_TAGS = ['-EXIF:GPSImgDirection', '-XMP:GPSImgDirection']
+
 const TAGS = [
   // Not to the end of a JPEG (tz.md, п. 3.10): 2.6 times faster on phone photos. What is lost is the
   // video of a Motion Photo at the end of the file: such a photo is known by its XMP mark instead
@@ -114,6 +118,7 @@ const SIDECAR_TAGS = [
   '-XMP:GPSLongitude',
   '-XMP:GPSAltitude',
   '-XMP:GPSAltitudeRef',
+  '-XMP:GPSImgDirection',
   ...ADDRESS_READ_ARGS
 ]
 
@@ -288,8 +293,13 @@ async function scanPhotos(
 
   // Who owns an XMP is decided by the whole folder (п. 3.7: a RAW of the name wins over a video).
   const own = sidecarOwners(supported)
-  // Existing sidecars by base name, with their actual file names.
+  // Existing sidecars by base name, with their actual file names. "IMG_0001.JPG.xmp" has the base
+  // name "IMG_0001.JPG": the sidecar of that whole file name (п. 3.7), found by the file's own name.
   const sidecarFiles = new Map(sidecarNames.map((n) => [baseNameOf(n).toLowerCase(), n]))
+  const fullSidecar = (name: string): { file: string | undefined; rec: ExifRecord | undefined } => {
+    const file = sidecarFiles.get(name.toLowerCase())
+    return { file, rec: file ? sidecars.get(file.toLowerCase()) : undefined }
+  }
 
   const records = await readRecords(exiftool, folder, photoNames, TAGS)
   const sidecars = sidecarNames.length
@@ -307,7 +317,7 @@ async function scanPhotos(
   const deep = photoNames.filter((name) => {
     if (!formatOf(name)!.track || pairedVideos.has(name)) return false
     const rec = records.get(name.toLowerCase())
-    const side = own.has(name) ? sidecars.get(sidecarFiles.get(baseNameOf(name).toLowerCase())?.toLowerCase() ?? '') : undefined
+    const side = fullSidecar(name).rec ?? (own.has(name) ? sidecars.get(sidecarFiles.get(baseNameOf(name).toLowerCase())?.toLowerCase() ?? '') : undefined)
     return !!rec && !rec['ExifTool:Error'] && pickCoords(rec, side).coords === null
   })
   const tracks = await readTracks(exiftool, folder, deep)
@@ -323,7 +333,14 @@ async function scanPhotos(
       ? {
           kind: 'pair',
           // Written with the photo; the sidecar of the name, if any, is the photo's.
-          video: { path: join(folder, pairName), write: formatOf(pairName)!.write, video: true, xmpCoords: !!pairRec && xmpCoords(pairRec) !== null, sidecar: null }
+          video: {
+            path: join(folder, pairName),
+            write: formatOf(pairName)!.write,
+            video: true,
+            xmpCoords: !!pairRec && xmpCoords(pairRec) !== null,
+            sidecar: null,
+            fullSidecar: fullSidecarInfo(folder, pairName, fullSidecar(pairName))
+          }
         }
       : embedded
         ? { kind: 'embedded', tag: embedded }
@@ -331,12 +348,17 @@ async function scanPhotos(
     const owns = own.has(name)
     const sidecarFile = owns ? sidecarFiles.get(baseNameOf(name).toLowerCase()) : undefined
     const sidecarRec = sidecarFile ? sidecars.get(sidecarFile.toLowerCase()) : undefined
+    // The sidecar of the whole file name is read first (п. 3.7).
+    const full = fullSidecar(name)
+    const side = full.rec ?? sidecarRec
     const orientation = Number(tagValue(rec ?? {}, 'Orientation', 'EXIF') ?? 1)
     const source: PhotoSource = {
       path,
       write: format.write,
       video: format.video,
       xmpCoords: !!rec && xmpCoords(rec) !== null,
+      innerCoords: !!rec && pickCoords(rec, undefined).coords !== null,
+      fullSidecar: fullSidecarInfo(folder, name, full),
       sidecar: owns
         ? {
             path: join(folder, sidecarFile ?? sidecarNameOf(name)),
@@ -350,9 +372,18 @@ async function scanPhotos(
       live
     }
     const track = tracks.get(name.toLowerCase()) ?? null
-    const photo = toPhoto(displayName(root, path), path, rec, sidecarRec, { video: format.video, track })
+    const photo = toPhoto(displayName(root, path), path, rec, side, { video: format.video, track })
     return { photo: live ? { ...photo, live: true as const } : photo, source }
   })
+}
+
+/** The sidecar of the whole file name of a file (п. 6.4): where it is or would be, and what it holds. */
+function fullSidecarInfo(folder: string, name: string, found: { file: string | undefined; rec: ExifRecord | undefined }): NonNullable<WriteInfo['fullSidecar']> {
+  return {
+    path: join(folder, found.file ?? `${name}.xmp`),
+    exists: !!found.file,
+    coords: !!found.rec && xmpCoords(found.rec) !== null
+  }
 }
 
 /** The first point of the GPS track of each video, by lower-case file name (п. 3.3.6). */
@@ -377,9 +408,14 @@ export interface RereadCoords {
   coordSource: CoordSource | null
   address: Address | null
   altitude: number | null
+  /** Absent — none. */
+  direction?: number
   xmpCoords: boolean
+  innerCoords: boolean
   sidecarExists: boolean
   sidecarCoords: boolean
+  fullSidecarExists: boolean
+  fullSidecarCoords: boolean
 }
 
 /**
@@ -388,23 +424,32 @@ export interface RereadCoords {
  */
 export async function rereadCoords(exiftool: ExifTool, sources: readonly PhotoSource[]): Promise<RereadCoords[]> {
   if (!sources.length) return []
-  const files = await recordsByPath(exiftool, sources.map((s) => s.path), ['-File:FileName', ...COORD_TAGS, ...ADDRESS_READ_ARGS])
-  const sidecarPaths = sources.flatMap((s) => (s.sidecar ? [s.sidecar.path] : []))
+  const files = await recordsByPath(exiftool, sources.map((s) => s.path), ['-File:FileName', ...COORD_TAGS, ...DIRECTION_TAGS, ...ADDRESS_READ_ARGS])
+  const fullPath = (s: PhotoSource): string => s.fullSidecar?.path ?? `${s.path}.xmp`
+  // Both sidecars of each file: the one of its base name it owns and the one of its whole name (п. 3.7).
+  const sidecarPaths = sources.flatMap((s) => [...(s.sidecar ? [s.sidecar.path] : []), ...(s.track === undefined ? [fullPath(s)] : [])])
   const sidecars = sidecarPaths.length
     ? await recordsByPath(exiftool, sidecarPaths, SIDECAR_TAGS)
     : new Map<string, ExifRecord>()
   return sources.map((s) => {
     const rec = files.get(s.path.toLowerCase()) ?? {}
-    const side = s.sidecar ? sidecars.get(s.sidecar.path.toLowerCase()) : undefined
+    const base = s.sidecar ? sidecars.get(s.sidecar.path.toLowerCase()) : undefined
+    const full = sidecars.get(fullPath(s).toLowerCase())
+    const side = full ?? base
     const { coords, source } = pickCoords(rec, side)
+    const direction = pickDirection(rec, side)
     return {
       coords,
       coordSource: source,
       address: pickAddress(rec, side),
       altitude: pickAltitude(rec, side),
+      ...(direction !== null ? { direction } : {}),
       xmpCoords: xmpCoords(rec) !== null,
-      sidecarExists: !!side,
-      sidecarCoords: !!side && xmpCoords(side) !== null
+      innerCoords: pickCoords(rec, undefined).coords !== null,
+      sidecarExists: !!base,
+      sidecarCoords: !!base && xmpCoords(base) !== null,
+      fullSidecarExists: !!full,
+      fullSidecarCoords: !!full && xmpCoords(full) !== null
     }
   })
 }

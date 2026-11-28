@@ -22,10 +22,13 @@ export const IPC = {
   trackData: 'track:data',
   /** invoke, window → main: give photos new coordinates (not saved yet). */
   setCoords: 'photos:setCoords',
+  setDirection: 'photos:setDirection',
   /** event, main → window: some photos changed (coordinates, unsaved mark). */
   photosChanged: 'photos:changed',
   /** send, window → main: selection, filter and view mode (Save Selected, View menu, last session). */
   uiState: 'ui:state',
+  /** Help or About is open in the window (true) or closed: the menu bar waits (tz.md, п. 4.9). */
+  modal: 'ui:modal',
   /** send, window → main: place of the map, tile source, strip scroll (kept for the next run). */
   viewState: 'ui:viewState',
   /** event, main → window: a command from the menu (View). */
@@ -78,6 +81,8 @@ export interface InitData {
     initialView: { lat: number; lon: number; zoom: number }
     markers: MarkerStyle
     hoverThumbSize: number
+    /** Zoom from which the shooting direction is shown (tz.md, п. 4.20). */
+    directionZoom: number
     /** Longer side of a thumbnail on the map, px (tz.md, п. 4.8.3). */
     thumbSize: number
     /** Place and zoom of the map at the end of the last run; null — the settings' initial view. */
@@ -176,6 +181,25 @@ export interface SetCoordsRequest {
   copied?: { address: Address | null; altitude: number | null }
   /** Photos dropped onto a track come one by one: the same group is one Undo step (п. 6.6). */
   group?: number
+}
+
+/** Alt+drag on the map (tz.md, п. 4.21): degrees from true north for the selected photos. */
+export interface SetDirectionRequest {
+  ids: number[]
+  direction: number
+}
+
+export function validSetDirection(v: unknown): v is SetDirectionRequest {
+  if (!v || typeof v !== 'object') return false
+  const r = v as Record<string, unknown>
+  const ids = r['ids']
+  const d = r['direction']
+  return (
+    Array.isArray(ids) &&
+    ids.every((id) => Number.isInteger(id) && (id as number) >= 0) &&
+    typeof d === 'number' &&
+    Number.isFinite(d)
+  )
 }
 
 const ADDRESS_KEYS = ['country', 'countryCode', 'state', 'city', 'location'] as const

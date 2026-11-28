@@ -10,6 +10,7 @@
     "defaultSource": "osm",
     "markers": { "color": "#EA4335", "selectedColor": "#1A73E8", "size": 28 },
     "hoverThumbSize": 80,
+    "directionZoom": 15,
     "thumbnails": { "size": 64 },
     "tileSources": {
       "osm": {
@@ -59,6 +60,9 @@
   },
   "folders": {
     "subfolders": "ask"
+  },
+  "save": {
+    "xmpOnly": false
   },
   "search": {
     "url": "https://nominatim.openstreetmap.org"

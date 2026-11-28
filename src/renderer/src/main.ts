@@ -512,7 +512,8 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
   const map = new MapView(byId('map'), init.map, {
     onMarkerContextMenu: (id, x, y) => openContextMenu(id, x, y),
     onMarkerClick: (id, mods) =>
-      select(mods.ctrl ? clickSelect(sel, id, { ctrl: true, shift: false }, order) : single(id)),
+      // Shift adds or takes away like Ctrl: no range on the map (tz.md, п. 4.5).
+      select(mods.ctrl || mods.shift ? clickSelect(sel, id, { ctrl: true, shift: false }, order) : single(id)),
     // All photos at the marker's point move with it (tz.md, п. 4.7); with a filter on, only
     // the shown ones: hidden photos have no marker (п. 4.13).
     onMarkerMoved: async (id, to) => {
@@ -552,8 +553,24 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     },
     // The mark and the favourite places (tz.md, п. 5.3): the search box keeps them.
     onPlaceMenu: (kind, x, y, at, index) => places.menu(kind, x, y, at, index),
-    onFavoriteMoved: (index, to) => places.favoriteMoved(index, to)
+    onFavoriteMoved: (index, to) => places.favoriteMoved(index, to),
+    // Alt+drag (tz.md, п. 4.21): the selected photos with coordinates get the direction (main picks them).
+    onDirection: (deg) => void window.geophotos.setDirection({ ids: [...sel.ids], direction: deg }),
+    // The marker's photo becomes current; a selection it is in stays (as a drag, п. 4.21).
+    onAimPhoto: (id) => select(dragSelection(sel, id), false)
   })
+  // Alt released after Alt+drag on the map must not open the menu bar (п. 4.21); a new press of
+  // Alt starts afresh.
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Alt' && !e.repeat) map.takeAltRelease()
+  }, true)
+  window.addEventListener(
+    'keyup',
+    (e) => {
+      if (e.key === 'Alt' && map.takeAltRelease()) e.preventDefault()
+    },
+    true
+  )
   const strip = new Strip(byId('strip'), t, {
     onClick: (id, mods) => select(clickSelect(sel, id, mods, order, isTrackId)),
     // Double click: show the photo on the map (from the photo view, back to the map first).
@@ -608,6 +625,17 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
     toMap()
     eggs.goTo(id)
   })
+  // Help and About are modal (tz.md, п. 4.9): main greys the menu bar while one is open, however
+  // it was opened or closed (menu, keys, cross, click outside). False at start: after a reload of
+  // the window main must not keep the menu locked.
+  let modal = false
+  window.geophotos.reportModal(false)
+  new MutationObserver(() => {
+    const open = help.visible || about.visible
+    if (open === modal) return
+    modal = open
+    window.geophotos.reportModal(open)
+  }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['hidden'] })
   new ResizeObserver(() => map.invalidateSize()).observe(byId('map'))
 
   // Keys that work wherever the focus is, except text fields (tz.md, пп. 4.4, 4.4.1):
@@ -639,10 +667,13 @@ ${t(key === 'all' ? 'filter.allHint' : 'filter.hint')}`
           help.hide()
           about.hide()
         }
-        if (e.key !== 'F1') {
-          e.preventDefault()
-          e.stopPropagation()
+        // The menu bar is unavailable meanwhile (tz.md, п. 4.9), so F1 is handled here.
+        if (e.key === 'F1' && !e.repeat) {
+          about.hide()
+          help.toggle()
         }
+        e.preventDefault()
+        e.stopPropagation()
         return
       }
       // Ctrl+1…9: the favourite place with this number (tz.md, п. 5.3), also from a text field.

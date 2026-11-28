@@ -45,6 +45,14 @@ export interface FileMeta {
   coords: LatLon | null
   address: Address | null
   altitude: number | null
+  /** Where the camera looked (tz.md, пп. 4.20, 4.21); absent — none. */
+  direction?: number
+}
+
+/** Directions are the same to a hundredth of a degree (what files keep). */
+export function sameDirection(a: number | undefined, b: number | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b
+  return Math.abs(a - b) < 0.005
 }
 
 /** Altitudes are the same to a centimetre: more is noise of the number format. */
@@ -96,8 +104,9 @@ export interface Photo {
    */
   offset?: string
   /**
-   * Where the camera looked, degrees clockwise from north (GPSImgDirection, phones write it; tz.md,
-   * 0.35.0): shown as a sector at the marker of the current photo. Absent if unknown.
+   * Where the camera looked, degrees clockwise from true north (GPSImgDirection, phones write it;
+   * tz.md, п. 4.20): shown as a sector at the marker of the current photo; set by Alt+drag on the
+   * map (п. 4.21). Absent if unknown.
    */
   direction?: number
   /** Model of the camera or phone, as written in the file (photo view, tz.md, 0.36.0). Absent if not written. */

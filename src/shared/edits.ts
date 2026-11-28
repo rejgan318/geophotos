@@ -1,4 +1,5 @@
-import { sameAddress, sameAltitude, sameCoords, type Address, type FileMeta, type LatLon, type Photo } from './photo'
+import { sameAddress, sameAltitude, sameCoords, sameDirection, type Address, type FileMeta, type LatLon, type Photo } from './photo'
+import { distance } from './track'
 
 /** Coordinates are kept to 7 decimals (about 1 cm): more is noise from the mouse position. */
 export function roundCoords(c: LatLon): LatLon {
@@ -13,14 +14,21 @@ export function normalizeCoords(c: LatLon): LatLon {
   return roundCoords({ lat: Math.max(-90, Math.min(90, c.lat)), lon })
 }
 
-/** A photo is modified while its coordinates, address or altitude differ from its files (п. 4.3). */
+/** A photo is modified while its coordinates, address, altitude or direction differ from its files (п. 4.3). */
 export function isModified(p: FileMeta, file: FileMeta | undefined): boolean {
   return (
     !sameCoords(p.coords, file?.coords ?? null) ||
     !sameAddress(p.address, file?.address ?? null) ||
-    !sameAltitude(p.altitude, file?.altitude ?? null)
+    !sameAltitude(p.altitude, file?.altitude ?? null) ||
+    !sameDirection(p.direction, file?.direction)
   )
 }
+
+/**
+ * A move this short only corrects the place (tz.md, п. 4.21): the direction set at the old point
+ * still points at what was shot. Farther, it is removed.
+ */
+export const DIRECTION_KEEP_METERS = 30
 
 /**
  * Gives the photos new coordinates (tz.md, пп. 4.5, 4.7), or removes them with `null` (Del,
@@ -42,8 +50,32 @@ export function assignCoords(
     const p = photos[id]
     // A track has no coordinates of its own and is never edited (tz.md, п. 3.9).
     if (!p || p.track || sameCoords(p.coords, c)) continue
-    const next = { coords: c, address: null, altitude: null }
-    changed.push({ ...p, ...next, modified: isModified(next, file[id]) })
+    // The direction stays when the place is only corrected (п. 4.21).
+    const keep = p.direction !== undefined && p.coords && c && distance(p.coords, c) <= DIRECTION_KEEP_METERS
+    const next: FileMeta = { coords: c, address: null, altitude: null, ...(keep ? { direction: p.direction } : {}) }
+    const { direction: _old, ...base } = p
+    changed.push({ ...base, ...next, modified: isModified(next, file[id]) })
+  }
+  return changed
+}
+
+/**
+ * Gives the photos with coordinates a direction (Alt+drag, tz.md, п. 4.21), whole degrees from
+ * true north; those without coordinates, tracks and those that already have it are left out.
+ */
+export function assignDirection(
+  photos: readonly Photo[],
+  file: readonly FileMeta[],
+  ids: readonly number[],
+  direction: number
+): Photo[] {
+  const d = ((Math.round(direction) % 360) + 360) % 360
+  const changed: Photo[] = []
+  for (const id of new Set(ids)) {
+    const p = photos[id]
+    if (!p || p.track || !p.coords || sameDirection(p.direction, d)) continue
+    const q = { ...p, direction: d }
+    changed.push({ ...q, modified: isModified(q, file[id]) })
   }
   return changed
 }
@@ -59,8 +91,8 @@ export function assignAddress(
   for (const id of new Set(ids)) {
     const p = photos[id]
     if (!p || sameAddress(p.address, address)) continue
-    const next = { coords: p.coords, address, altitude: p.altitude }
-    changed.push({ ...p, address, modified: isModified(next, file[id]) })
+    const next = { ...p, address }
+    changed.push({ ...next, modified: isModified(next, file[id]) })
   }
   return changed
 }
@@ -76,8 +108,8 @@ export function assignAltitude(
   for (const id of new Set(ids)) {
     const p = photos[id]
     if (!p || sameAltitude(p.altitude, altitude)) continue
-    const next = { coords: p.coords, address: p.address, altitude }
-    changed.push({ ...p, altitude, modified: isModified(next, file[id]) })
+    const next = { ...p, altitude }
+    changed.push({ ...next, modified: isModified(next, file[id]) })
   }
   return changed
 }

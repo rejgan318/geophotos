@@ -33,6 +33,8 @@ export interface BatchDeps {
   addressIntervalMs: number
   /** Pause before asking again the points the service did not answer, ms (default 10 s). */
   retryDelayMs?: number
+  /** save.xmpOnly (tz.md, п. 6.4): no file is changed, only XMP sidecars. */
+  xmpOnly?: boolean
 }
 
 /** Points the service did not answer are asked again this many times, at the end. */
@@ -251,7 +253,7 @@ export async function runBatch(
       break
     }
     const start = Date.now()
-    const outcome = await savePhotos(deps.exiftool, [{ photo: w.photo, source: w.item.source, old: w.item.photo.coords }], deps.log)
+    const outcome = await savePhotos(deps.exiftool, [{ photo: w.photo, source: w.item.source, old: w.item.photo.coords }], deps.log, undefined, { xmpOnly: deps.xmpOnly })
     writeSeconds = (writeSeconds + (Date.now() - start) / 1000) / 2
     // The reason without the path repeated: the path is the name of the entry.
     if (outcome.failed.length) failed.push({ name: w.photo.path, error: outcome.failed[0]!.error.replace(`: ${w.photo.path}`, '') })

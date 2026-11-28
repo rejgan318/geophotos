@@ -99,6 +99,13 @@
           "default": 80,
           "description": "Size of the thumbnail shown over a marker when the mouse is on it (the longer side), px."
         },
+        "directionZoom": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 15,
+          "description": "Zoom from which the shooting direction of the current photo is shown at its marker (farther out the sector would cover kilometres)."
+        },
         "thumbnails": {
           "type": "object",
           "additionalProperties": false,
@@ -222,6 +229,18 @@
           "enum": ["ask", "yes", "no"],
           "default": "ask",
           "description": "Photos from folders inside the opened one (all levels): ask each time, always load them, or never. Set by the program when \"Don't ask again\" is ticked."
+        }
+      }
+    },
+    "save": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Saving (File → Save).",
+      "properties": {
+        "xmpOnly": {
+          "type": "boolean",
+          "default": false,
+          "description": "true: no photo or video file is ever changed — coordinates, address, altitude and direction go to an XMP file next to it, named after the whole file name (IMG_0001.JPG → IMG_0001.JPG.xmp); RAW files keep IMG_0001.xmp, as in Lightroom. Lightroom and Windows Explorer do not read such XMP files of JPEGs. For the paranoid who trust no program with their originals — this one included :)"
         }
       }
     }

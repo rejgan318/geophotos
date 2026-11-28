@@ -134,6 +134,10 @@ export interface MapHandlers {
   onPlaceMenu(kind: 'mark' | 'favorite', x: number, y: number, at: LatLon, index: number): void
   /** A favourite place was dragged to a new point (п. 5.3). */
   onFavoriteMoved(index: number, to: LatLon): void
+  /** Alt+drag from the current photo ended (tz.md, п. 4.21): its direction, whole degrees from true north. */
+  onDirection(deg: number): void
+  /** Alt+press on a photo's marker (п. 4.21): it becomes the current photo; the selection stays if it is in it. */
+  onAimPhoto(id: number): void
 }
 
 /**
@@ -155,6 +159,8 @@ export class MapView {
   /** Generation of the open folder, part of thumbnail URLs. */
   private generation = 0
   private readonly hoverSize: number
+  /** Zoom from which the direction is shown (settings map.directionZoom, tz.md, п. 4.20). */
+  private readonly directionZoom: number
   private readonly thumbSize: number
   /** Thumbnails instead of markers (T, View menu; tz.md, п. 4.8.3). */
   private thumbs = false
@@ -178,6 +184,10 @@ export class MapView {
   private still = false
   /** Where the camera of the current photo looked (tz.md, 0.35.0): a sector at its marker. */
   private direction: L.Marker | null = null
+  /** Alt+drag going on (tz.md, п. 4.21): the direction aimed so far; null — none. */
+  private aim: number | null = null
+  /** An Alt+drag happened while Alt was down: its release must not open the menu bar. */
+  private aimed = false
 
   constructor(
     private readonly el: HTMLElement,
@@ -186,6 +196,7 @@ export class MapView {
   ) {
     this.style = config.markers
     this.hoverSize = config.hoverThumbSize
+    this.directionZoom = config.directionZoom
     this.thumbSize = config.thumbSize
     this.thumbs = config.thumbnails
     this.icon = pinIcon(this.style, false)
@@ -272,6 +283,7 @@ export class MapView {
 
     this.acceptDrops()
     this.boxSelect()
+    this.aimDirection()
     this.favoriteLayer.addTo(this.map)
     // A right click on the empty map puts the mark there with its menu (tz.md, п. 5.3). Markers
     // do not pass their clicks on to the map; a track line does — the mark goes there too.
@@ -596,6 +608,85 @@ export class MapView {
     )
   }
 
+  /**
+   * Alt+drag from a photo's marker (tz.md, п. 4.21): the photo becomes current, a sector from it
+   * follows the mouse; on release the selected photos get its direction. The angle is taken on the screen: the map keeps angles
+   * (Mercator), so it is the bearing from true north.
+   */
+  private aimDirection(): void {
+    const container = this.map.getContainer()
+    let from: L.LatLng | null = null
+    const angle = (e: MouseEvent): number | null => {
+      if (!from) return null
+      const a = this.map.latLngToContainerPoint(from)
+      const b = this.map.mouseEventToContainerPoint(e)
+      // Too close to the photo to point anywhere.
+      if (a.distanceTo(b) < 6) return null
+      return Math.round(((Math.atan2(b.x - a.x, a.y - b.y) * 180) / Math.PI + 360) % 360)
+    }
+    const onMove = (e: MouseEvent): void => {
+      const d = angle(e)
+      if (d === null || d === this.aim) return
+      this.aim = d
+      this.showDirection()
+    }
+    const onUp = (): void => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      this.map.dragging.enable()
+      const d = this.aim
+      from = null
+      this.aim = null
+      this.showDirection()
+      if (d !== null) this.h.onDirection(d)
+    }
+    // Capture: the map must not start panning, nor a marker be dragged or clicked.
+    container.addEventListener(
+      'mousedown',
+      (e) => {
+        if (this.still || e.button !== 0 || !e.altKey || e.ctrlKey || e.shiftKey || e.metaKey) return
+        if ((e.target as HTMLElement).closest('.leaflet-control')) return
+        // Alt+drag does nothing else anywhere on the map: no panning, no marker moved.
+        e.preventDefault()
+        e.stopPropagation()
+        this.aimed = true
+        // Only from a photo's own marker, and only in marker mode (п. 4.21): not the empty map,
+        // not a group, not a thumbnail.
+        if (this.thumbs) return
+        const target = e.target as Node
+        let id: number | null = null
+        for (const [pid, m] of this.markers) {
+          if (m.getElement()?.contains(target)) {
+            id = pid
+            break
+          }
+        }
+        const marker = id === null ? undefined : this.markers.get(id)
+        if (id === null || !marker) return
+        this.h.onAimPhoto(id)
+        this.map.dragging.disable()
+        from = marker.getLatLng()
+        document.addEventListener('mousemove', onMove)
+        document.addEventListener('mouseup', onUp)
+      },
+      true
+    )
+    container.addEventListener(
+      'click',
+      (e) => {
+        if (e.altKey && !e.ctrlKey && !e.shiftKey) e.stopPropagation()
+      },
+      true
+    )
+  }
+
+  /** Alt went up: true if it was used for Alt+drag, so its release must not open the menu bar (п. 4.21). */
+  takeAltRelease(): boolean {
+    const was = this.aimed
+    this.aimed = false
+    return was
+  }
+
   /** Photos from the strip can be dropped anywhere on the map (п. 4.5). */
   private acceptDrops(): void {
     this.el.addEventListener('dragover', (e) => {
@@ -712,22 +803,26 @@ export class MapView {
 
   /**
    * The direction of the current photo (tz.md, п. 4.20): a translucent sector from its marker, only
-   * from the street zoom (DIRECTION_ZOOM: farther out it would cover kilometres and say nothing),
+   * from the street zoom (map.directionZoom, 15: farther out it would cover kilometres and say nothing),
    * while the marker is on the map by itself (not hidden in a group) and the photo has a direction.
    * Follows the selection, zoom and moves (called with the group highlight).
    */
   private showDirection(): void {
     const id = this.current
     const marker = id === null ? undefined : this.markers.get(id)
-    const deg = id === null ? undefined : this.photos[id]?.direction
-    const near = this.map.getZoom() >= DIRECTION_ZOOM
-    const show = !this.still && near && marker && deg !== undefined && this.map.hasLayer(marker) && !this.groupOf(marker)
-    if (!show) {
+    const coords = id === null ? null : (this.photos[id]?.coords ?? null)
+    // Alt+drag (п. 4.21): the sector being aimed, at any zoom, even with the marker in a group.
+    const aiming = this.aim !== null && coords !== null
+    const deg = aiming ? this.aim! : id === null ? undefined : this.photos[id]?.direction
+    const near = this.map.getZoom() >= this.directionZoom
+    // Not with thumbnails: the thumbnail over the point would hide it (п. 4.20).
+    const show = this.thumbs ? false : aiming || (!this.still && near && marker && deg !== undefined && this.map.hasLayer(marker) && !this.groupOf(marker))
+    if (!show || deg === undefined) {
       this.direction?.remove()
       this.direction = null
       return
     }
-    const at = marker.getLatLng()
+    const at = marker?.getLatLng() ?? L.latLng(coords!.lat, coords!.lon)
     const key = `${id}:${deg}`
     if (this.direction && this.direction.options.alt === key) {
       this.direction.setLatLng(at)
@@ -905,9 +1000,6 @@ export class MapView {
     this.map.invalidateSize()
   }
 }
-
-/** From this zoom (blocks and streets) the direction is shown: the sector covers about a hundred metres. */
-const DIRECTION_ZOOM = 15
 
 /** Muted blue of the direction beam: quiet on the map, apart from the marker colours. */
 const BEAM = '#2f6db5'

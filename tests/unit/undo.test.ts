@@ -77,3 +77,15 @@ describe('Undo and Redo of the favourite places (tz.md, пп. 5.3, 6.6)', () => 
     expect(h.next()).toEqual({ undo: null, redo: null })
   })
 })
+
+describe('Undo of the shooting direction (tz.md, пп. 4.21, 6.6)', () => {
+  it('a step keeps the direction a photo had, and that it had none', () => {
+    const before: Photo = { id: 0, name: 'a.jpg', path: 'a.jpg', date: null, dateSource: 'file', coords: { lat: 1, lon: 2 }, coordSource: 'exif', address: null, altitude: null, modified: false }
+    const h = new UndoHistory()
+    h.record('direction', [before, { ...before, id: 1, direction: 30 }])
+    const step = h.undo([{ ...before, direction: 90 }, { ...before, id: 1, direction: 90 }])!
+    expect(step.kind).toBe('direction')
+    expect('direction' in step.states[0]!).toBe(false)
+    expect(step.states[1]!.direction).toBe(30)
+  })
+})

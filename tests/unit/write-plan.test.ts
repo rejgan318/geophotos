@@ -191,3 +191,53 @@ describe('exiftool write result', () => {
     expect(writeResult('', '')).toEqual({ ok: false, error: 'exiftool did not write the file' })
   })
 })
+
+describe('the shooting direction and save.xmpOnly (tz.md, пп. 4.21, 6.4)', () => {
+  const jpg: WriteInfo = { path: 'D:\p\IMG_0001.JPG', write: 'file', xmpCoords: false, sidecar: null }
+  const mov: WriteInfo = { path: 'D:\p\IMG_0002.MOV', write: 'file', video: true, xmpCoords: false, sidecar: null }
+  const cr2: WriteInfo = { path: 'D:\p\IMG_0003.CR2', write: 'xmp', xmpCoords: false, sidecar: { path: 'D:\p\IMG_0003.xmp', exists: false, coords: false } }
+  const at = { lat: 1, lon: 2 }
+
+  it('the direction goes to EXIF of a photo from true north; null removes it; undefined leaves it', () => {
+    const [set] = writePlan(jpg, at, null, null, { direction: 271.456 })
+    expect(set!.args).toEqual(expect.arrayContaining(['-EXIF:GPSImgDirection=271.46', '-EXIF:GPSImgDirectionRef=T']))
+    const [gone] = writePlan(jpg, at, null, null, { direction: null })
+    expect(gone!.args).toEqual(expect.arrayContaining(['-EXIF:GPSImgDirection=', '-EXIF:GPSImgDirectionRef=']))
+    expect(writePlan(jpg, at)[0]!.args.some((a) => a.includes('GPSImgDirection'))).toBe(false)
+  })
+
+  it('a video keeps the direction in its XMP (QuickTime has no place for it); RAW in the sidecar', () => {
+    expect(writePlan(mov, at, null, null, { direction: 90 })[0]!.args).toEqual(expect.arrayContaining(['-XMP-exif:GPSImgDirection=90', '-XMP-exif:GPSImgDirectionRef=T']))
+    expect(writePlan(cr2, at, null, null, { direction: 90 })[0]!.args).toContain('-XMP-exif:GPSImgDirection=90')
+  })
+
+  it('xmpOnly: a photo or a video is not changed — everything goes to the sidecar of its whole name', () => {
+    for (const info of [jpg, mov]) {
+      const steps = writePlan(info, at, null, 100, { xmpOnly: true, direction: 10 })
+      expect(steps).toEqual([expect.objectContaining({ path: `${info.path}.xmp`, kind: 'sidecar', create: true })])
+      expect(steps[0]!.args).toEqual(expect.arrayContaining(['-XMP-exif:GPSLatitude=1', '-XMP-exif:GPSAltitude=100', '-XMP-exif:GPSImgDirection=10']))
+      expect(steps[0]!.args.some((a) => a.startsWith('-EXIF:') || a.startsWith('-Keys:'))).toBe(false)
+    }
+    // An existing one is updated, not created.
+    const known = { ...jpg, fullSidecar: { path: 'D:\p\IMG_0001.JPG.xmp', exists: true, coords: true } }
+    expect(writePlan(known, at, null, null, { xmpOnly: true })[0]!.create).toBe(false)
+    // RAW: as always, the Lightroom sidecar.
+    expect(writePlan(cr2, at, null, null, { xmpOnly: true })).toEqual([expect.objectContaining({ path: 'D:\p\IMG_0003.xmp' })])
+  })
+
+  it('xmpOnly Del: only the sidecars there are; the file is not touched', () => {
+    const known = { ...jpg, fullSidecar: { path: 'D:\p\IMG_0001.JPG.xmp', exists: true, coords: true } }
+    expect(writePlan(known, null, null, null, { xmpOnly: true })).toEqual([
+      expect.objectContaining({ path: 'D:\p\IMG_0001.JPG.xmp', kind: 'sidecar', args: expect.arrayContaining(['-XMP-exif:GPS*=']) })
+    ])
+    expect(writePlan(jpg, null, null, null, { xmpOnly: true })).toEqual([])
+  })
+
+  it('without xmpOnly an existing sidecar of the whole name gets the same values as the file', () => {
+    const known = { ...jpg, fullSidecar: { path: 'D:\p\IMG_0001.JPG.xmp', exists: true, coords: true } }
+    const steps = writePlan(known, at)
+    expect(steps.map((s) => s.path)).toEqual([jpg.path, 'D:\p\IMG_0001.JPG.xmp'])
+    expect(steps[1]!.args).toContain('-XMP-exif:GPSLatitude=1')
+    expect(writePlan(known, null).map((s) => s.path)).toEqual([jpg.path, 'D:\p\IMG_0001.JPG.xmp'])
+  })
+})

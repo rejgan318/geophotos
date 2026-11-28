@@ -18,6 +18,8 @@ export interface Settings {
     markers: MarkerStyle
     /** Longer side of the thumbnail over a hovered marker, px (tz.md, п. 4.8.2). */
     hoverThumbSize: number
+    /** Zoom from which the shooting direction is shown (tz.md, п. 4.20). */
+    directionZoom: number
     /** Thumbnails on the map instead of markers (tz.md, п. 4.8.3). */
     thumbnails: { size: number }
     tileSources: Record<string, TileSource>
@@ -30,6 +32,8 @@ export interface Settings {
   elevation: { url: string }
   /** Photos from subfolders (tz.md, п. 3.2). */
   folders: { subfolders: 'ask' | 'yes' | 'no' }
+  /** Saving: only to XMP files next to the photos, never into the files themselves (tz.md, п. 6.4). */
+  save: { xmpOnly: boolean }
   /** Colours of tracks, in their order in the strip; zoom from which waypoint names show (tz.md, п. 3.9.5). */
   tracks: { colors: string[]; labelZoom: number }
 }

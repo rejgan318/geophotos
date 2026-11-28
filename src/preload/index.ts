@@ -32,10 +32,12 @@ const api: GeoPhotosApi = {
   trackData: (generation, id) => ipcRenderer.invoke(IPC.trackData, generation, id) as Promise<TrackForMap | null>,
   pathForFile: (file) => webUtils.getPathForFile(file),
   setCoords: (req) => ipcRenderer.invoke(IPC.setCoords, req) as Promise<void>,
+  setDirection: (req) => ipcRenderer.invoke(IPC.setDirection, req) as Promise<void>,
   onPhotosChanged: (cb) => {
     ipcRenderer.on(IPC.photosChanged, (_e, data: PhotosChanged) => cb(data))
   },
   reportState: (state) => ipcRenderer.send(IPC.uiState, state),
+  reportModal: (open) => ipcRenderer.send(IPC.modal, open === true),
   reportView: (view) => ipcRenderer.send(IPC.viewState, view),
   action: (a: WindowAction) => ipcRenderer.send(IPC.action, a),
   onIdle: (cb) => {

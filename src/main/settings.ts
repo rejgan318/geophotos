@@ -155,6 +155,58 @@ export function setUserSetting(
   writeFileSync(userPath, applyEdits(text, edits), 'utf8')
 }
 
+/**
+ * Adds a setting of the defaults that an existing user file lacks (one that came with a newer
+ * version: a group like ["save"] or a field like ["map", "directionZoom"]), with the comments from
+ * the schema, after the last field of its group; the rest of the file stays as it is. A field whose
+ * group is missing comes in that group alone (the other fields of the group keep their defaults).
+ * Nothing is done if the file does not exist (it is written whole when opened, tz-config.md,
+ * п. 6.3) or already has the setting. True if added.
+ */
+export function addUserSetting(userPath: string, schemaPath: string, defaultsPath: string, path: string[]): boolean {
+  if (!existsSync(userPath) || !path.length) return false
+  const text = readFileSync(userPath, 'utf8')
+  const root = parseTree(text)
+  if (root?.type !== 'object') return false
+  // The deepest group of the path that the file has; the setting goes into it.
+  let parent = root
+  let depth = 0
+  while (depth < path.length - 1) {
+    const next = parent.children?.find((p) => p.children?.[0]?.value === path[depth])?.children?.[1]
+    if (next?.type !== 'object') break
+    parent = next
+    depth++
+  }
+  const key = path[depth]!
+  if (parent.children?.some((p) => p.children?.[0]?.value === key)) return false
+  const defaults = readJsonc(defaultsPath).value as Record<string, unknown>
+  let value: unknown = defaults
+  for (const k of path) value = value && typeof value === 'object' ? (value as Record<string, unknown>)[k] : undefined
+  if (value === undefined) return false
+  // The setting (in the groups the file lacks) as a whole file would have it, with its comment lines.
+  let tree: unknown = value
+  for (const k of [...path].reverse()) tree = { [k]: tree }
+  const lines = buildUserSettingsText(tree as Record<string, unknown>, readJsonc(schemaPath).value as SchemaNode, '').split('\n')
+  const indent = '  '.repeat(depth + 1)
+  const at = lines.findIndex((l) => l.startsWith(`${indent}"${key}":`))
+  if (at < 0) return false
+  let from = at
+  while (from > 0 && lines[from - 1]!.startsWith(`${indent}//`)) from--
+  // A group or a list ends with its closing line at the same indent.
+  let to = at
+  if (/[{[]$/.test(lines[at]!)) while (to < lines.length - 1 && !/^[}\]]/.test(lines[to]!.slice(indent.length))) to++
+  const eol = text.includes('\r\n') ? '\r\n' : '\n'
+  const block = (depth === 0 ? eol : '') + lines.slice(from, to + 1).join(eol)
+  const last = parent.children?.at(-1)
+  let end = last ? last.offset + last.length : parent.offset + 1
+  // A trailing comma may already follow the last field: the setting goes after it.
+  const trailing = last ? /^\s*,/.exec(text.slice(end)) : null
+  if (trailing) end += trailing[0].length
+  const comma = last && !trailing ? ',' : ''
+  writeFileSync(userPath, text.slice(0, end) + comma + eol + block + text.slice(end), 'utf8')
+  return true
+}
+
 /** The part of JSON Schema used for comments. */
 interface SchemaNode {
   description?: string

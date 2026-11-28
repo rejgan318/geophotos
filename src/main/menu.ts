@@ -72,7 +72,8 @@ export function buildMenu(
   recent: string[],
   dev: boolean,
   languages: { list: { code: string; name: string }[]; current: string } = { list: [], current: '' },
-  filter: StripFilter = 'all'
+  filter: StripFilter = 'all',
+  locked = false
 ): Menu {
   const recentItems: MenuItemConstructorOptions[] = recent.length
     ? [
@@ -229,6 +230,8 @@ export function buildMenu(
       { label: t('menu.about'), click: h.about }
     ]
   })
+  // Help or About open in the window (tz.md, п. 4.9): the menu bar waits, as for a modal window.
+  if (locked) for (const item of template) item.enabled = false
   return Menu.buildFromTemplate(template)
 }
 

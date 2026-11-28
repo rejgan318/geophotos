@@ -13,6 +13,7 @@ import type {
   SaveState,
   SearchResult,
   SetCoordsRequest,
+  SetDirectionRequest,
   TrackForMap,
   UiState,
   ViewState,
@@ -38,9 +39,13 @@ export interface GeoPhotosApi {
   pathForFile(file: File): string
   /** Gives photos new coordinates; the change comes back through onPhotosChanged. */
   setCoords(req: SetCoordsRequest): Promise<void>
+  /** Alt+drag on the map (tz.md, п. 4.21): a direction for the selected photos with coordinates. */
+  setDirection(req: SetDirectionRequest): Promise<void>
   onPhotosChanged(cb: (data: PhotosChanged) => void): void
   /** Tells main the selection, filter and view mode (Save Selected, View menu, last session). */
   reportState(state: UiState): void
+  /** Help or About opened (true) or closed: the menu bar is unavailable meanwhile (tz.md, п. 4.9). */
+  reportModal(open: boolean): void
   /** Tells main the place of the map, tile source and strip scroll (next run). */
   reportView(view: ViewState): void
   /** The context menu, the start screen, the grid size (tz.md, пп. 4.17–4.19). */

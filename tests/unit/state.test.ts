@@ -43,7 +43,7 @@ describe('File → Refresh keeps the selection by path (tz.md, п. 3.8)', () => 
 })
 
 describe('state between runs (tz.md, п. 7.5)', () => {
-  const NONE = { lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: null, stripPosition: 'bottom' as const, gridThumb: 120, stripThumb: 120, places: [], favorites: [], eggs: [] }
+  const NONE = { lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: null, stripPosition: 'bottom' as const, gridThumb: 120, stripThumb: 120, places: [], favorites: [], eggs: [], settingsAdded: [] }
 
   it('recent folders survive a restart, including non-Latin paths', () => {
     const file = stateFile()
@@ -104,8 +104,8 @@ describe('state between runs (tz.md, п. 7.5)', () => {
     const window = { x: -1200, y: 40, width: 1100, height: 700, maximized: true }
     const map = { lat: -33.85, lon: 151.21, zoom: 13, source: 'topo', thumbnails: true }
     const tools = { address: true, altitude: true }
-    writeState(file, { recentFolders: [], lastSession: null, window, map, tools, addFolder: null, stripPosition: 'left', gridThumb: 160, stripThumb: 120, places: [], favorites: [], eggs: [{ id: 3, date: "2026-11-27T10:00:00.000Z" }] })
-    expect(readState(file)).toEqual({ recentFolders: [], lastSession: null, window, map, tools, addFolder: null, stripPosition: 'left', gridThumb: 160, stripThumb: 120, places: [], favorites: [], eggs: [{ id: 3, date: "2026-11-27T10:00:00.000Z" }] })
+    writeState(file, { recentFolders: [], lastSession: null, window, map, tools, addFolder: null, stripPosition: 'left', gridThumb: 160, stripThumb: 120, places: [], favorites: [], eggs: [{ id: 3, date: "2026-11-27T10:00:00.000Z" }], settingsAdded: ["save"] })
+    expect(readState(file)).toEqual({ recentFolders: [], lastSession: null, window, map, tools, addFolder: null, stripPosition: 'left', gridThumb: 160, stripThumb: 120, places: [], favorites: [], eggs: [{ id: 3, date: "2026-11-27T10:00:00.000Z" }], settingsAdded: ["save"] })
   })
 
   it('broken window or map parts are dropped, the rest is kept', () => {
@@ -133,7 +133,7 @@ describe('state: the folder of Add Files (tz.md, п. 3.1)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'geophotos-state-'))
     try {
       const file = join(dir, 'state.json')
-      writeState(file, { recentFolders: [], lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: 'E:\Phone', stripPosition: 'bottom', gridThumb: 120, stripThumb: 120, places: [], favorites: [], eggs: [] })
+      writeState(file, { recentFolders: [], lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: 'E:\Phone', stripPosition: 'bottom', gridThumb: 120, stripThumb: 120, places: [], favorites: [], eggs: [], settingsAdded: [] })
       expect(readState(file).addFolder).toBe('E:\Phone')
       writeFileSync(file, JSON.stringify({ recentFolders: [] }))
       expect(readState(file).addFolder).toBeNull()

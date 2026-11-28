@@ -5,7 +5,7 @@ import { parse, type ParseError } from 'jsonc-parser'
 import { afterEach, describe, expect, it } from 'vitest'
 import { makeTranslate } from '@shared/i18n'
 import { mapSources, mergeSettings, type Settings } from '@shared/settings'
-import { ensureUserSettingsFile, loadSettings, setUserSetting } from '../../src/main/settings'
+import { addUserSetting, ensureUserSettingsFile, loadSettings, setUserSetting } from '../../src/main/settings'
 import { helpTextKeys } from '../../src/renderer/src/help-content'
 
 const root = resolve(import.meta.dirname, '../..')
@@ -123,6 +123,39 @@ describe('config files (tz-config.md)', () => {
     expect(text).not.toMatch(/[^\r]\n/)
     expect(parse(text)).toEqual({ language: 'ru', folders: { subfolders: 'yes' } })
     expect(load(text).settings.folders.subfolders).toBe('yes')
+  })
+
+  it('a setting of a newer version is added to an existing user file with its comment, once', () => {
+    const file = userFile('{\r\n  // my note\r\n  "language": "ru",\r\n  "map": {\r\n    "hoverThumbSize": 100\r\n  },\r\n}\r\n')
+    expect(addUserSetting(file, schemaPath, defaultsPath, ['save'])).toBe(true)
+    expect(addUserSetting(file, schemaPath, defaultsPath, ['map', 'directionZoom'])).toBe(true)
+    // Already there: nothing more.
+    expect(addUserSetting(file, schemaPath, defaultsPath, ['save'])).toBe(false)
+    expect(addUserSetting(file, schemaPath, defaultsPath, ['map', 'directionZoom'])).toBe(false)
+    const text = readFileSync(file, 'utf8')
+    const errors: ParseError[] = []
+    expect(parse(text, errors, { allowTrailingComma: true })).toEqual({
+      language: 'ru',
+      map: { hoverThumbSize: 100, directionZoom: 15 },
+      save: { xmpOnly: false }
+    })
+    expect(errors).toEqual([])
+    expect(text).toContain('// my note')
+    expect(text).not.toMatch(/[^\r]\n/)
+    expect(text).toMatch(/\/\/ Saving[^\n]*\r\n\s*"save": \{\r\n\s*\/\/ true: no photo or video file[\s\S]*:\)\r\n\s*"xmpOnly": false/)
+    expect(text).toMatch(/\/\/ Zoom from which the shooting direction[\s\S]*\r\n\s*"directionZoom": 15/)
+    expect(load(text).settings.save.xmpOnly).toBe(false)
+    // No user file: nothing is added (it is written whole when opened).
+    expect(addUserSetting(userFile(null), schemaPath, defaultsPath, ['save'])).toBe(false)
+  })
+
+  it('a field whose group the user file lacks comes in that group alone, with the comments', () => {
+    const file = userFile('{ "language": "ru" }')
+    expect(addUserSetting(file, schemaPath, defaultsPath, ['map', 'directionZoom'])).toBe(true)
+    const text = readFileSync(file, 'utf8')
+    expect(parse(text)).toEqual({ language: 'ru', map: { directionZoom: 15 } })
+    expect(text).toMatch(/\/\/ Map settings[\s\S]*\/\/ Zoom from which the shooting direction/)
+    expect(load(text).settings.map.hoverThumbSize).toBe(80)
   })
 
   it('setting a field without a user file creates the full file first', () => {

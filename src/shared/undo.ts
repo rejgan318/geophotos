@@ -7,7 +7,7 @@ import type { Place } from './search'
  * track; and (п. 5.3) a change of the favourite places. Only until Save: the history starts again on Save, Refresh and when the strip is read
  * anew. Taking photos off the strip (Del) is not undone.
  */
-export type UndoKind = 'place' | 'paste' | 'clear' | 'track' | 'favorites'
+export type UndoKind = 'place' | 'paste' | 'clear' | 'track' | 'direction' | 'favorites'
 
 /** What a step puts back: the coordinates of a photo with what goes with them. */
 export interface PhotoState {
@@ -16,6 +16,8 @@ export interface PhotoState {
   coordSource: CoordSource | null
   address: Address | null
   altitude: number | null
+  /** Absent — none (п. 4.21). */
+  direction?: number
 }
 
 export interface UndoStep {
@@ -32,7 +34,8 @@ export const stateOf = (p: Photo): PhotoState => ({
   coords: p.coords,
   coordSource: p.coordSource,
   address: p.address,
-  altitude: p.altitude
+  altitude: p.altitude,
+  ...(p.direction !== undefined ? { direction: p.direction } : {})
 })
 
 export class UndoHistory {

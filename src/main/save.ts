@@ -73,7 +73,8 @@ export async function savePhotos(
   exiftool: ExifTool,
   items: readonly SaveItem[],
   log: SaveLog,
-  onProgress?: (done: number, total: number) => void
+  onProgress?: (done: number, total: number) => void,
+  opts: { xmpOnly?: boolean } = {}
 ): Promise<SaveOutcome> {
   const written: SaveItem[] = []
   const failed: SaveFailure[] = []
@@ -93,10 +94,16 @@ export async function savePhotos(
       if (!photo.coords && photo.coordSource === 'track') {
         throw new Error('The coordinates are in the GPS track of the video, which the program does not remove')
       }
+      // save.xmpOnly (п. 6.4): no file is changed, so coordinates inside one stay.
+      if (!photo.coords && opts.xmpOnly && source.write === 'file' && source.innerCoords) {
+        throw new Error('The coordinates are inside the file, which is not changed while save.xmpOnly is on')
+      }
+      // The direction goes with the coordinates (п. 4.21); none removes an old one.
+      const write = { direction: photo.direction ?? null, xmpOnly: !!opts.xmpOnly }
       // The MOV of an iPhone Live Photo gets the same as the photo (tz.md, п. 3.3.7).
       const steps = [
-        ...writePlan(source, photo.coords, photo.address, photo.altitude),
-        ...(source.live?.kind === 'pair' ? writePlan(source.live.video, photo.coords, photo.address, photo.altitude) : [])
+        ...writePlan(source, photo.coords, photo.address, photo.altitude, write),
+        ...(source.live?.kind === 'pair' ? writePlan(source.live.video, photo.coords, photo.address, photo.altitude, write) : [])
       ]
       for (const step of steps) await runStep(exiftool, step)
       written.push(item)
@@ -104,6 +111,7 @@ export async function savePhotos(
         `${photo.coords ? 'Coordinates written' : 'Coordinates removed'}: ${photo.path}; old: ${coordsText(item.old)}; new: ${coordsText(photo.coords)}; ` +
           `address: ${photo.address ? addressText(photo.address) || '(empty)' : 'none'}; ` +
           `altitude: ${photo.altitude === null ? 'none' : `${photo.altitude} m`}; ` +
+          `direction: ${photo.direction === undefined ? 'none' : `${photo.direction}°`}; ` +
           `to: ${steps.map((s) => (s.create ? `${s.path} (created)` : s.path)).join(', ')}`
       )
     } catch (e) {
@@ -120,9 +128,20 @@ export async function savePhotos(
     const source: PhotoSource = {
       ...w.source,
       xmpCoords: r.xmpCoords,
-      sidecar: w.source.sidecar ? { ...w.source.sidecar, exists: r.sidecarExists, coords: r.sidecarCoords } : null
+      innerCoords: r.innerCoords,
+      sidecar: w.source.sidecar ? { ...w.source.sidecar, exists: r.sidecarExists, coords: r.sidecarCoords } : null,
+      fullSidecar: { path: w.source.fullSidecar?.path ?? `${w.source.path}.xmp`, exists: r.fullSidecarExists, coords: r.fullSidecarCoords }
     }
-    const photo: Photo = { ...w.photo, coords: r.coords, coordSource: r.coordSource, address: r.address, altitude: r.altitude, modified: false }
+    const { direction: _was, ...rest } = w.photo
+    const photo: Photo = {
+      ...rest,
+      coords: r.coords,
+      coordSource: r.coordSource,
+      address: r.address,
+      altitude: r.altitude,
+      ...(r.direction !== undefined ? { direction: r.direction } : {}),
+      modified: false
+    }
     return { id: w.photo.id, photo, source }
   })
   return { saved, failed }

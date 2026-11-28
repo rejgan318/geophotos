@@ -44,7 +44,7 @@ Two ways, both on the page of the [latest release](https://github.com/rejgan318/
 - **Map:** OpenStreetMap, Esri satellite, Google satellite and OpenTopoMap. Nearby markers are grouped. Markers or photo thumbnails on the map (key T); hovering a marker shows its thumbnail.
 - **Place search:** by name or address, through Nominatim.
 - **Thumbnail strip:** sorted by shooting date. Marks show photos with coordinates, an address, an altitude, and unsaved changes. Photos of subfolders can be loaded too. The strip is at the bottom or on the left (*View → Strip Position*); G opens it as a grid over the whole window — handy for picking among many photos (G or Esc — back to the map); Ctrl+wheel makes the grid thumbnails larger or smaller.
-- **Shooting direction:** if the phone wrote where the camera looked (iPhone does), the current photo's marker shows a sector that way.
+- **Shooting direction:** if the phone wrote where the camera looked (iPhone does), the current photo's marker shows a sector that way. Alt+drag from a photo marker sets it for the selected photos: towards the mouse (in marker mode; with thumbnails on the map the sector is not shown). Moving a photo more than 30 m removes its direction; a smaller correction keeps it.
 - **One window:** starting GeoPhotos again brings the open window forward; a folder dropped onto its icon opens there. Right-click the taskbar icon for the recent folders.
 - **Places:** Ctrl+F (or a click into the empty search field) lists the places you went to lately (a digit and Enter) and your favorite places (Ctrl+1…9 from anywhere). A right click on the map puts a mark: drag it, copy its coordinates, open it in Google Maps or add it to favorites. Favorite places stay on the map; drag them, rename them with a right click; Ctrl+Z undoes changes.
 - **Undo:** Ctrl+Z undoes the last change of coordinates, Ctrl+Y redoes it — until you save.
@@ -77,7 +77,9 @@ Latitude and longitude, the altitude, and the address (country, country code, st
 
 No `*_original` backup copies are left. Read-only files are reported and skipped.
 
-When coordinates exist in several places, they are read in this order: XMP sidecar, embedded XMP, EXIF.
+When coordinates exist in several places, they are read in this order: XMP sidecar (`IMG_0001.JPG.xmp` first, then `IMG_0001.xmp`), embedded XMP, EXIF.
+
+**Only XMP.** With `"save": { "xmpOnly": true }` in the settings file no photo or video file is ever changed: everything goes to an XMP file next to it named after the whole file name (`IMG_0001.JPG` → `IMG_0001.JPG.xmp`); RAW files keep `IMG_0001.xmp`. Lightroom and Windows Explorer do not read such XMP files of JPEGs.
 
 Videos (MOV, MP4, AVI, MPG, MTS, MKV, WMV and other formats exiftool reads) are shown in the strip with the thumbnail Windows Explorer shows, and on the map when they have coordinates (from the phone's QuickTime metadata, the XMP sidecar, or the first point of a GPS track). Space shows a large frame and an "Open in Player" button. Videos are placed like photos: MOV, MP4 and the rest of the QuickTime family get the coordinates in the file itself (where phones keep them), the other formats in an XMP sidecar; the file time of a video is kept.
 

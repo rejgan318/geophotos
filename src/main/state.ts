@@ -40,6 +40,11 @@ export interface AppState {
   favorites: Place[]
   /** The easter eggs found, in the order found, with the date (п. 9.3). */
   eggs: FoundEgg[]
+  /**
+   * Settings a newer version added to the user settings file ("save", "map.directionZoom"), with
+   * their comments (`addUserSetting`): each is added once, so one the user removed does not come back.
+   */
+  settingsAdded: string[]
 }
 
 export interface Session {
@@ -74,7 +79,7 @@ export interface MapState {
   thumbnails: boolean
 }
 
-const EMPTY: AppState = { recentFolders: [], lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: null, stripPosition: 'bottom', gridThumb: GRID_THUMB.normal, stripThumb: GRID_THUMB.normal, places: [], favorites: [], eggs: [] }
+const EMPTY: AppState = { recentFolders: [], lastSession: null, window: null, map: null, tools: { address: false, altitude: false }, addFolder: null, stripPosition: 'bottom', gridThumb: GRID_THUMB.normal, stripThumb: GRID_THUMB.normal, places: [], favorites: [], eggs: [], settingsAdded: [] }
 
 type Obj = Record<string, unknown>
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -139,7 +144,8 @@ export function readState(file: string): AppState {
       stripThumb: validStripThumb(v['stripThumb']),
       places: (Array.isArray(v['places']) ? v['places'] : []).map(validPlace).filter((p): p is Place => !!p).slice(0, RECENT_PLACES),
       favorites: validFavorites(v['favorites']),
-      eggs: validFoundEggs(v['eggs'])
+      eggs: validFoundEggs(v['eggs']),
+      settingsAdded: (Array.isArray(v['settingsAdded']) ? v['settingsAdded'] : []).filter((s): s is string => typeof s === 'string')
     }
   } catch {
     return { ...EMPTY }

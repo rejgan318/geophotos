@@ -10,8 +10,24 @@ export interface WriteInfo {
   xmpCoords: boolean
   /** The XMP sidecar the photo owns (tz.md, п. 3.7); null if it owns none (JPEG of a RAW+JPEG pair). */
   sidecar: { path: string; exists: boolean; coords: boolean } | null
+  /**
+   * The sidecar of the whole file name, "IMG_0001.JPG.xmp" (tz.md, пп. 3.7, 6.4): only this file's,
+   * read first. Absent — not known to exist (its path is the file's path + ".xmp").
+   */
+  fullSidecar?: { path: string; exists: boolean; coords: boolean }
+  /** The file itself has coordinates (EXIF, its XMP, QuickTime): `save.xmpOnly` cannot remove them. */
+  innerCoords?: boolean
   /** A video (tz.md, п. 3.3.6): written into QuickTime, not EXIF. */
   video?: boolean
+}
+
+/**
+ * What else goes into a write: the direction (tz.md, п. 4.21; undefined — left as it is, null —
+ * removed) and `save.xmpOnly` (п. 6.4: no file is changed, only XMP sidecars).
+ */
+export interface WriteOptions {
+  direction?: number | null
+  xmpOnly?: boolean
 }
 
 /** One exiftool write: the file and the tag arguments. */
@@ -49,6 +65,21 @@ function altitudeArgs(group: 'EXIF' | 'XMP-exif', a: number | null): string[] {
   if (a === null) return [`-${group}:GPSAltitude=`, `-${group}:GPSAltitudeRef=`]
   const v = Math.round(Math.abs(a) * 100) / 100
   return [`-${group}:GPSAltitude=${v}`, `-${group}:GPSAltitudeRef=${a < 0 ? 1 : 0}`]
+}
+
+/**
+ * Where the camera looked (tz.md, п. 4.21): degrees from true north; null removes it, undefined
+ * leaves it alone.
+ */
+function directionArgs(group: 'EXIF' | 'XMP-exif', d: number | null | undefined): string[] {
+  if (d === undefined) return []
+  if (d === null) return [`-${group}:GPSImgDirection=`, `-${group}:GPSImgDirectionRef=`]
+  return [`-${group}:GPSImgDirection=${Math.round(d * 100) / 100}`, `-${group}:GPSImgDirectionRef=T`]
+}
+
+/** The sidecar of the whole file name (п. 6.4), as known or as it would be. */
+function fullSidecarOf(info: WriteInfo): { path: string; exists: boolean; coords: boolean } {
+  return info.fullSidecar ?? { path: `${info.path}.xmp`, exists: false, coords: false }
 }
 
 /**
@@ -94,28 +125,41 @@ export function quickTimeGpsArgs(c: LatLon | null, altitude: number | null = nul
 
 /**
  * Where and how the coordinates and the address are written (tz.md, пп. 6.2–6.4, 5.5).
- * - Ordinary formats and DNG: coordinates in EXIF of the file; the embedded XMP and the sidecar
+ * - Ordinary formats and DNG: coordinates in EXIF of the file; the embedded XMP and the sidecars
  *   get the same values if they already have coordinates, so that reading by п. 3.7 gives the new
- *   ones. The address goes to the XMP of the file and of an existing sidecar (read first, п. 3.7).
+ *   ones. The address goes to the XMP of the file and of existing sidecars (read first, п. 3.7).
  * - Other RAW: only the sidecar; an existing one is updated, a missing one is created.
- * The altitude goes wherever the coordinates go (п. 5.6); none removes an old one.
- * No coordinates: everything is removed (Del, п. 6.6).
+ * - `xmpOnly` (п. 6.4): no file is changed; what would go into it goes to the sidecar of the whole
+ *   file name ("IMG_0001.JPG.xmp"), created if missing. RAW as above.
+ * The altitude and the direction go wherever the coordinates go (пп. 5.6, 4.21); none removes an old
+ * one. No coordinates: everything is removed (Del, п. 6.6).
  */
 export function writePlan(
   info: WriteInfo,
   c: LatLon | null,
   address: Address | null = null,
-  altitude: number | null = null
+  altitude: number | null = null,
+  opts: WriteOptions = {}
 ): WriteStep[] {
-  if (!c) return deletePlan(info)
+  if (!c) return deletePlan(info, opts)
   const addr = xmpAddressArgs(address)
-  const xmpGps = [...xmpArgs(c), ...altitudeArgs('XMP-exif', altitude)]
+  const xmpGps = [...xmpArgs(c), ...altitudeArgs('XMP-exif', altitude), ...directionArgs('XMP-exif', opts.direction)]
   if (info.write === 'xmp') {
     if (!info.sidecar) throw new Error(`No sidecar for ${info.path}`)
     return [{ path: info.sidecar.path, kind: 'sidecar', create: !info.sidecar.exists, args: [...COMMON, ...xmpGps, ...addr] }]
   }
-  if (info.video) return videoPlan(info, c, address, altitude)
-  const steps: WriteStep[] = [
+  const full = fullSidecarOf(info)
+  // Existing sidecars keep the same values (п. 6.3): coordinates where they already are, the address always.
+  const sync = (s: { path: string; exists: boolean; coords: boolean } | null | undefined): WriteStep[] =>
+    s?.exists ? [{ path: s.path, kind: 'sidecar', create: false, args: [...COMMON, ...(s.coords ? xmpGps : []), ...addr] }] : []
+  if (opts.xmpOnly) {
+    return [
+      { path: full.path, kind: 'sidecar', create: !full.exists, args: [...COMMON, ...xmpGps, ...addr] },
+      ...sync(info.sidecar)
+    ]
+  }
+  if (info.video) return [...videoFileStep(info, c, address, altitude, opts.direction), ...sync(full), ...sync(info.sidecar)]
+  return [
     {
       path: info.path,
       kind: 'file',
@@ -124,61 +168,52 @@ export function writePlan(
         ...COMMON,
         ...exifArgs(c),
         ...altitudeArgs('EXIF', altitude),
+        ...directionArgs('EXIF', opts.direction),
         ...(info.xmpCoords ? xmpGps : []),
         ...addr,
         ...iptcAddressDelete()
       ]
-    }
+    },
+    ...sync(full),
+    ...sync(info.sidecar)
   ]
-  if (info.sidecar?.exists) {
-    steps.push({
-      path: info.sidecar.path,
-      kind: 'sidecar',
-      create: false,
-      args: [...COMMON, ...(info.sidecar.coords ? xmpGps : []), ...addr]
-    })
-  }
-  return steps
 }
 
 /**
  * Removing the coordinates (п. 6.6): from the file itself (ordinary formats and DNG) and from the
- * sidecar if there is one. A RAW file is never changed: only its sidecar.
+ * sidecars there are. A RAW file is never changed: only its sidecar; nor, with `xmpOnly`, any file.
  */
-function deletePlan(info: WriteInfo): WriteStep[] {
-  if (info.video && info.write === 'file') return videoPlan(info, null, null, null)
-  const steps: WriteStep[] = []
-  if (info.write !== 'xmp') steps.push({ path: info.path, kind: 'file', create: false, args: [...COMMON, ...FILE_DELETE] })
-  if (info.sidecar?.exists) {
-    steps.push({ path: info.sidecar.path, kind: 'sidecar', create: false, args: [...COMMON, ...XMP_DELETE] })
-  }
-  return steps
+function deletePlan(info: WriteInfo, opts: WriteOptions): WriteStep[] {
+  const sidecars = [fullSidecarOf(info), info.sidecar]
+    .filter((s): s is { path: string; exists: boolean; coords: boolean } => !!s?.exists)
+    .map((s): WriteStep => ({ path: s.path, kind: 'sidecar', create: false, args: [...COMMON, ...XMP_DELETE] }))
+  if (info.write === 'xmp' || opts.xmpOnly) return sidecars
+  const file: WriteStep = info.video
+    ? { path: info.path, kind: 'file', create: false, args: [...VIDEO_COMMON, ...quickTimeGpsArgs(null), ...XMP_DELETE] }
+    : { path: info.path, kind: 'file', create: false, args: [...COMMON, ...FILE_DELETE] }
+  return [file, ...sidecars]
 }
 
 /**
- * A video exiftool writes (the QuickTime family, п. 3.3.6): its QuickTime GPS and XMP, and an
- * existing sidecar the same way as for photos (it is read first, п. 3.7).
+ * A video exiftool writes (the QuickTime family, п. 3.3.6): its QuickTime GPS, and XMP — the GPS
+ * if it is already there, the address, and the direction (QuickTime has no place for it, п. 4.21).
  */
-function videoPlan(info: WriteInfo, c: LatLon | null, address: Address | null, altitude: number | null): WriteStep[] {
-  if (!c) {
-    const steps: WriteStep[] = [{ path: info.path, kind: 'file', create: false, args: [...VIDEO_COMMON, ...quickTimeGpsArgs(null), ...XMP_DELETE] }]
-    if (info.sidecar?.exists) steps.push({ path: info.sidecar.path, kind: 'sidecar', create: false, args: [...COMMON, ...XMP_DELETE] })
-    return steps
-  }
-  const addr = xmpAddressArgs(address)
+function videoFileStep(info: WriteInfo, c: LatLon, address: Address | null, altitude: number | null, direction: number | null | undefined): WriteStep[] {
   const xmpGps = [...xmpArgs(c), ...altitudeArgs('XMP-exif', altitude)]
-  const steps: WriteStep[] = [
+  return [
     {
       path: info.path,
       kind: 'file',
       create: false,
-      args: [...VIDEO_COMMON, ...quickTimeGpsArgs(c, altitude), ...(info.xmpCoords ? xmpGps : []), ...addr]
+      args: [
+        ...VIDEO_COMMON,
+        ...quickTimeGpsArgs(c, altitude),
+        ...(info.xmpCoords ? xmpGps : []),
+        ...directionArgs('XMP-exif', direction),
+        ...xmpAddressArgs(address)
+      ]
     }
   ]
-  if (info.sidecar?.exists) {
-    steps.push({ path: info.sidecar.path, kind: 'sidecar', create: false, args: [...COMMON, ...(info.sidecar.coords ? xmpGps : []), ...addr] })
-  }
-  return steps
 }
 
 /** exiftool's summary of a write: success, or the reason from its messages. */
